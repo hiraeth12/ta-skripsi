@@ -127,14 +127,14 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 24,
-    justifyContent: "center", // Menjaga konten tetap di tengah saat tidak ada keyboard
-    minHeight: "100%", // Memastikan scroll memenuhi layar
+    justifyContent: "center", 
+    minHeight: "100%", 
   },
   image: {
     width: 180,
     height: 59,
     alignSelf: "center",
-    marginBottom: 30, // Mengurangi margin sedikit agar tidak terlalu mepet saat keyboard naik
+    marginBottom: 30, 
   },
   label: {
     fontSize: 18,

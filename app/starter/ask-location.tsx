@@ -14,11 +14,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 
 export default function AskLocation() {
   const [query, setQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("");
+  const router = useRouter();
 
   const allLocations = [
     {
@@ -100,10 +102,10 @@ export default function AskLocation() {
         <Text style={styles.orText}>Atau deteksi otomatis</Text>
 
         <View style={styles.buttonWrapper}>
-          <AuthButton title="Gunakan GPS" onPress={() => {}} />
+          <AuthButton title="Gunakan GPS" onPress={() => {router.push("/main-menu/home")}} />
         </View>
 
-        {/* MODAL GAYA BOTTOM SHEET */}
+        
         <Modal
           animationType="slide"
           transparent={true}
@@ -205,7 +207,7 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: { width: "100%", alignItems: "center" },
 
-  // BOTTOM SHEET STYLES
+  
   bottomSheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
