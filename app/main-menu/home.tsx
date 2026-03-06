@@ -1,6 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useState } from "react";
 import {
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,26 +15,30 @@ import {
 } from "react-native";
 
 export default function Home() {
+  const [shakeMapVisible, setShakeMapVisible] = useState(false);
+  const [infoVisible, setInfoVisible] = useState(false);
+  const user = { name: "Budi" };
+  const shakeMapUrl =
+    "https://bmkg-content-inatews.storage.googleapis.com/20260305205910_rev/intensity_logo.jpg";
+
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* HEADER */}
-        <View style={styles.header}>
-          <Text style={styles.logo}>SeismoTrack</Text>
-
-          <TouchableOpacity style={styles.notification}>
-            <Ionicons name="notifications-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
         {/* GREETING */}
-        <Text style={styles.greeting}>Halo, fasya</Text>
-        <Text style={styles.date}>Thursday, 7 August 2025</Text>
+        <View style={styles.greetingRow}>
+          <View>
+            <Text style={styles.greeting}>Halo, {user.name} !</Text>
+            <Text style={styles.date}>Thursday, 7 August 2025</Text>
+          </View>
+        </View>
 
         {/* LOCATION CARD */}
         <View style={styles.locationCard}>
           <Image
-            source={require("../../assets/images/seismo-track-logo.png")}
+            source={require("../../assets/images/bandung.jpg")}
             style={styles.locationImage}
           />
 
@@ -39,7 +49,7 @@ export default function Home() {
           {/* STATS */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Ionicons name="time-outline" size={20} color="#1E6F9F" />
+              <MaterialIcons name="history" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>GEMPA TERAKHIR</Text>
               <Text style={styles.statValue}>2 Jam Lalu</Text>
             </View>
@@ -58,79 +68,188 @@ export default function Home() {
           </View>
         </View>
 
-        {/* SECTION TITLE */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Gempabumi Terakhir Dirasakan</Text>
-          <Ionicons name="information-circle-outline" size={20} color="#fff" />
-        </View>
-
-        {/* MAP CARD */}
-        <View style={styles.mapCard}>
-          <Image
-            source={require("../../assets/images/navigation-map.png")}
-            style={styles.mapImage}
-          />
-
-          {/* MAP BUTTONS */}
-          <View style={styles.mapButtons}>
-            <TouchableOpacity style={styles.mapButton}>
-              <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.mapButton}>
-              <Text style={styles.mapButtonText}>BAGIKAN</Text>
+        {/* DIFFERENT SECTION */}
+        <View style={styles.bottomSection}>
+          {/* SECTION TITLE */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              Gempabumi Terakhir Dirasakan
+            </Text>
+            <TouchableOpacity onPress={() => setInfoVisible(true)}>
+              <Ionicons
+                name="information-circle-outline"
+                size={20}
+                color="#fff"
+              />
             </TouchableOpacity>
           </View>
 
-          {/* METRICS */}
-          <View style={styles.metricsRow}>
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>4.1</Text>
-              <Text style={styles.metricLabel}>Magnitudo</Text>
+          {/* MAP CARD */}
+          <View style={styles.mapCard}>
+            <View style={styles.mapImageContainer}>
+              <Image
+                source={require("../../assets/images/navigation-map.png")}
+                style={styles.mapImage}
+              />
+
+              {/* MAP BUTTONS */}
+              <View style={styles.mapButtons}>
+                <TouchableOpacity
+                  style={styles.mapButton}
+                  onPress={() => setShakeMapVisible(true)}
+                >
+                  <Feather name="map" size={12} color="white" />
+                  <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.mapButton}>
+                  <Feather name="share" size={12} color="white" />
+                  <Text style={styles.mapButtonText}>BAGIKAN</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>7 KM</Text>
-              <Text style={styles.metricLabel}>Kedalaman</Text>
+            {/* METRICS */}
+            <View style={styles.metricsRow}>
+              <View style={styles.metric}>
+                <MaterialCommunityIcons
+                  name="triangle-wave"
+                  size={20}
+                  color="#1E6F9F"
+                />
+                <Text style={styles.metricValue}>4.1</Text>
+                <Text style={styles.metricLabel}>Magnitudo</Text>
+              </View>
+
+              <View style={styles.metric}>
+                <Feather name="rss" size={20} color="#1E6F9F" />
+                <Text style={styles.metricValue}>7 KM</Text>
+                <Text style={styles.metricLabel}>Kedalaman</Text>
+              </View>
+
+              <View style={styles.metric}>
+                <Feather name="compass" size={20} color="#1E6F9F" />
+                <Text style={styles.metricValue}>7.12</Text>
+                <Text style={styles.metricLabel}>LS</Text>
+              </View>
+
+              <View style={styles.metric}>
+                <Feather name="compass" size={20} color="#1E6F9F" />
+                <Text style={styles.metricValue}>107.45</Text>
+                <Text style={styles.metricLabel}>BT</Text>
+              </View>
             </View>
 
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>7.12</Text>
-              <Text style={styles.metricLabel}>LS</Text>
+            {/* DETAILS */}
+            <View style={styles.details}>
+              <View style={styles.detailItem}>
+                <Ionicons name="location" size={22} color="#1E6F9F" />
+                <View style={styles.detailTexts}>
+                  <Text style={styles.detailLabel}>Lokasi Gempa :</Text>
+                  <Text style={styles.detailValue}>
+                    12 km Timur Laut Kabupaten Bandung, Jawa Barat
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <Ionicons name="alarm-outline" size={22} color="#1E6F9F" />
+                <View style={styles.detailTexts}>
+                  <Text style={styles.detailLabel}>Waktu :</Text>
+                  <Text style={styles.detailValue}>
+                    16 Des 2025, 10:03:11 WIB
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <Ionicons name="alert-circle" size={22} color="#1E6F9F" />
+                <View style={styles.detailTexts}>
+                  <Text style={styles.detailLabel}>
+                    Wilayah Dirasakan (Skala MMI) :
+                  </Text>
+                  <Text style={styles.detailValue}>Tidak dirasakan</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItem}>
+                <MaterialCommunityIcons name="walk" size={22} color="#1E6F9F" />
+                <View style={styles.detailTexts}>
+                  <Text style={styles.detailLabel}>Jarak :</Text>
+                  <Text style={styles.detailValue}>22 KM dari Bandung</Text>
+                </View>
+              </View>
             </View>
-
-            <View style={styles.metric}>
-              <Text style={styles.metricValue}>107.45</Text>
-              <Text style={styles.metricLabel}>BT</Text>
-            </View>
-          </View>
-
-          {/* DETAILS */}
-          <View style={styles.details}>
-            <Text style={styles.detailText}>
-              📍 Lokasi Gempa : 18 km Selatan Kabupaten Bandung, Jawa Barat
-            </Text>
-
-            <Text style={styles.detailText}>
-              🕒 Waktu : 16 Des 2025, 12:41:28 WIB
-            </Text>
-
-            <Text style={styles.detailText}>
-              ⚠ Wilayah Dirasakan (Skala MMI) : III Kabupaten Bandung
-            </Text>
-
-            <Text style={styles.detailText}>📏 Jarak : 65 KM dari Bandung</Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* BOTTOM NAV */}
-      <View style={styles.bottomNav}>
-        <Ionicons name="home-outline" size={24} color="#1E6F9F" />
-        <Ionicons name="pulse-outline" size={24} color="#777" />
-        <Ionicons name="time-outline" size={24} color="#777" />
-        <Ionicons name="person-outline" size={24} color="#777" />
-      </View>
+      {/* INFO MODAL */}
+      <Modal
+        visible={infoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInfoVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setInfoVisible(false)}
+        >
+          <Pressable style={styles.infoCard} onPress={() => {}}>
+            <Ionicons
+              name="information-circle"
+              size={40}
+              color="#1E6F9F"
+              style={{ alignSelf: "center", marginBottom: 12 }}
+            />
+            <Text style={styles.infoTitle}>Gempabumi Terakhir Dirasakan</Text>
+            <Text style={styles.infoDesc}>
+              Gempabumi Terakhir Dirasakan menampilkan kejadian gempa yang
+              getarannya dirasakan oleh manusia dan dilaporkan di wilayah
+              sekitar.
+            </Text>
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => setInfoVisible(false)}
+            >
+              <Text style={styles.infoButtonText}>Mengerti</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* SHAKEMAP MODAL */}
+      <Modal
+        visible={shakeMapVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShakeMapVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShakeMapVisible(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>PETA GUNCANGAN</Text>
+              <TouchableOpacity
+                onPress={() => setShakeMapVisible(false)}
+                style={styles.modalClose}
+              >
+                <Ionicons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Shakemap Image */}
+            <Image
+              source={{ uri: shakeMapUrl }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -138,41 +257,28 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1E5A78",
-    paddingTop: 50,
+    backgroundColor: "#EDEDED",
   },
 
-  header: {
+  greetingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
+    marginBottom: 15,
   },
 
-  logo: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-
-  notification: {
-    backgroundColor: "#1E6F9F",
-    padding: 10,
-    borderRadius: 10,
-  },
 
   greeting: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
-    paddingHorizontal: 20,
-    marginTop: 10,
+    color: "#000000",
   },
 
   date: {
-    color: "#cde4f3",
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    color: "#000000",
+    fontWeight: "bold",
+    fontSize: 14,
   },
 
   locationCard: {
@@ -198,9 +304,15 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    padding: 15,
-  },
+    paddingVertical: 15,
 
+    backgroundColor: "#F5F7FA",
+
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+
+    marginTop: -10,
+  },
   statItem: {
     alignItems: "center",
   },
@@ -223,7 +335,7 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "bold",
   },
 
@@ -234,24 +346,34 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
 
+  mapImageContainer: {
+    position: "relative",
+  },
+
   mapImage: {
     width: "100%",
     height: 180,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
 
   mapButtons: {
+    position: "absolute",
+    top: 10,
+    right: 10,
     flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: -40,
-    marginRight: 10,
+    gap: 6,
   },
 
   mapButton: {
-    backgroundColor: "#1E6F9F",
+    backgroundColor: "#0891B2",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
     marginLeft: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
 
   mapButtonText: {
@@ -266,25 +388,46 @@ const styles = StyleSheet.create({
   },
 
   metric: {
+    marginTop: 8,
     alignItems: "center",
   },
 
   metricValue: {
     fontWeight: "bold",
+    fontSize: 12,
   },
 
   metricLabel: {
     fontSize: 12,
-    color: "#777",
+    color: "#000000",
   },
 
   details: {
     paddingHorizontal: 15,
+    paddingTop: 5,
   },
 
-  detailText: {
-    fontSize: 12,
-    marginBottom: 6,
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+    gap: 10,
+  },
+
+  detailTexts: {
+    flex: 1,
+  },
+
+  detailLabel: {
+    fontSize: 13,
+    color: "#555",
+  },
+
+  detailValue: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#000",
+    marginTop: 1,
   },
 
   bottomNav: {
@@ -292,5 +435,88 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     padding: 15,
     backgroundColor: "#fff",
+  },
+
+  bottomSection: {
+    backgroundColor: "#0C4A6E",
+    marginTop: 15,
+    paddingBottom: 20,
+    flex: 1,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalCard: {
+    backgroundColor: "#0C4A6E",
+    borderRadius: 16,
+    overflow: "hidden",
+    width: "88%",
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    position: "relative",
+  },
+
+  modalTitle: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+    letterSpacing: 1,
+  },
+
+  modalClose: {
+    position: "absolute",
+    right: 12,
+  },
+
+  modalImage: {
+    width: "100%",
+    height: 300,
+  },
+
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    width: "85%",
+    padding: 24,
+  },
+
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#000",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+
+  infoDesc: {
+    fontSize: 14,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+
+  infoButton: {
+    backgroundColor: "#1E6F9F",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+
+  infoButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

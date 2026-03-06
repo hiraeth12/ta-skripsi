@@ -34,13 +34,11 @@ export default function Login() {
           resizeMode="contain"
         />
 
-        <Text style={styles.title}>Welcome Back</Text>
-
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="email@gmail.com"
           keyboardType="email-address"
-          autoCapitalize="none" // Mencegah huruf kapital otomatis agar login tidak error
+          autoCapitalize="none" 
           style={styles.input}
         />
 
