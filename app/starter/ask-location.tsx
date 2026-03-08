@@ -1,5 +1,6 @@
 import AuthButton from "@/components/auth-button";
 import { EvilIcons, Ionicons } from "@expo/vector-icons"; // Tambah Ionicons agar lebih variatif
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   FlatList,
@@ -14,7 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 export default function AskLocation() {
   const [query, setQuery] = useState("");
@@ -102,10 +102,14 @@ export default function AskLocation() {
         <Text style={styles.orText}>Atau deteksi otomatis</Text>
 
         <View style={styles.buttonWrapper}>
-          <AuthButton title="Gunakan GPS" onPress={() => {router.push("/main-menu/home")}} />
+          <AuthButton
+            title="Gunakan GPS"
+            onPress={() => {
+              router.push("/main-menu/home");
+            }}
+          />
         </View>
 
-        
         <Modal
           animationType="slide"
           transparent={true}
@@ -207,7 +211,6 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: { width: "100%", alignItems: "center" },
 
-  
   bottomSheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
