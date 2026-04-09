@@ -157,7 +157,6 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
           return;
         }
         const url = `${API_URL.trim()}${Date.now()}`;
-        console.log("FETCHING TERDETEKSI:", url);
         const res = await fetch(url);
         const data = await res.json();
 

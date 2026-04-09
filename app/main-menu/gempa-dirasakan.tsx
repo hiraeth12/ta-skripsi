@@ -2,17 +2,17 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import MapView, { Marker, UrlTile } from "react-native-maps";
 
@@ -31,9 +31,40 @@ const INITIAL_REGION = {
   longitudeDelta: 5,
 };
 
+const MIN_POLL_MS = 10_000;
+const MAX_POLL_MS = 60_000;
+
+const REFERENCE_LOCATION = {
+  latitude: -6.9175,
+  longitude: 107.6191,
+};
+
+function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const radLat1 = toRad(lat1);
+  const radLat2 = toRad(lat2);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
 type LatestQuake = {
   latitude: number;
   longitude: number;
+  distanceKm: string;
   magnitude: string;
   wilayah: string;
   tanggal: string;
@@ -56,6 +87,10 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const latestEventId = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
+  const isFetching = useRef(false);
+  const pollDelayRef = useRef(MIN_POLL_MS);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -160,45 +195,72 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
   }
 
   useEffect(() => {
-    async function fetchLatestQuake() {
-      onLoadingChange?.(true);
+    async function fetchLatestQuake(silent = true): Promise<boolean> {
+      if (isFetching.current) return false;
+      isFetching.current = true;
+
+      if (!silent) onLoadingChange?.(true);
+
       try {
         if (!API_URL) {
           console.error(
             "GEMPA_DIRASAKAN_API_URL is undefined — restart Metro with --clear",
           );
-          return;
+          return false;
         }
-        const res = await fetch(`${API_URL.trim()}?t=${Date.now()}`);
-        const xml = await res.text();
-        const parser = new XMLParser({ ignoreAttributes: false });
-        const parsed = parser.parse(xml);
+        const res = await fetch(`${API_URL.trim()}${Date.now()}`);
+        const raw = await res.text();
 
-        const infoRaw = parsed?.alert?.info;
-        const latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
-        if (!latest) return;
+        let latest: any = null;
+        let globalIdentifier = "";
+
+        // Primary path: API returns JSON (datagempa.json).
+        try {
+          const parsedJson = JSON.parse(raw);
+          const infoRaw = parsedJson?.info;
+          latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+          globalIdentifier = String(parsedJson?.identifier ?? "");
+        } catch {
+          // Fallback path: keep support for XML payloads.
+          const parser = new XMLParser({ ignoreAttributes: false });
+          const parsedXml = parser.parse(raw);
+          const infoRaw = parsedXml?.alert?.info;
+          latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+          globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
+        }
+
+        if (!latest) return false;
 
         // Skip update if the event hasn't changed
-        const eventId = String(latest.eventid ?? latest.identifier ?? "");
-        if (eventId && eventId === latestEventId.current) return;
+        const eventId = String(
+          latest.eventid ?? latest.identifier ?? globalIdentifier,
+        );
+        if (eventId && eventId === latestEventId.current) return false;
         latestEventId.current = eventId;
 
         const coordStr: string = String(latest?.point?.coordinates ?? "");
         const [lonStr, latStr] = coordStr.split(",");
         const latitude = parseFloat(latStr);
         const longitude = parseFloat(lonStr);
-        if (isNaN(latitude) || isNaN(longitude)) return;
+        if (isNaN(latitude) || isNaN(longitude)) return false;
 
         const absLat = Math.abs(latitude).toFixed(2);
         const absLon = Math.abs(longitude).toFixed(2);
+        const distanceKm = haversineDistanceKm(
+          REFERENCE_LOCATION.latitude,
+          REFERENCE_LOCATION.longitude,
+          latitude,
+          longitude,
+        ).toFixed(1);
 
-        if (latest.shakemap) {
-          setShakeMapUrl(`${SHAKEMAP_BASE}/${latest.shakemap}`);
-        }
+        setShakeMapUrl(
+          latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
+        );
 
         setLatestQuake({
           latitude,
           longitude,
+          distanceKm,
           magnitude: String(latest.magnitude),
           wilayah: latest.area ?? "",
           tanggal: latest.date ?? "",
@@ -209,33 +271,68 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
           lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
         });
 
-        // Only fly to the marker on first load
         if (isFirstLoad.current) {
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
             { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
             800,
           );
+        } else {
+          mapRef.current?.animateToRegion(
+            { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
+            600,
+          );
         }
+
+        return true;
       } catch (e) {
         console.error("Failed to fetch gempa dirasakan:", e);
+        return false;
       } finally {
-        onLoadingChange?.(false);
+        if (!silent) onLoadingChange?.(false);
+        isFetching.current = false;
       }
     }
 
-    fetchLatestQuake();
+    function clearPollTimer() {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    }
 
-    // Re-fetch every 60 seconds
-    const interval = setInterval(fetchLatestQuake, 60_000);
+    function scheduleNextPoll(changed: boolean) {
+      if (!isMountedRef.current) return;
 
-    // Re-fetch when app comes back to foreground
+      pollDelayRef.current = changed
+        ? MIN_POLL_MS
+        : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
+
+      clearPollTimer();
+      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
+    }
+
+    async function runPollingLoop() {
+      if (!isMountedRef.current) return;
+      const changed = await fetchLatestQuake(true);
+      scheduleNextPoll(changed);
+    }
+
+    fetchLatestQuake(false).then((changed) => {
+      scheduleNextPoll(changed);
+    });
+
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") fetchLatestQuake();
+      if (state === "active") {
+        pollDelayRef.current = MIN_POLL_MS;
+        clearPollTimer();
+        runPollingLoop();
+      }
     });
 
     return () => {
-      clearInterval(interval);
+      isMountedRef.current = false;
+      clearPollTimer();
       appStateSub.remove();
     };
   }, []);
@@ -366,6 +463,18 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
               <Text style={styles.infoValue}>
                 {latestQuake.tanggal}, {latestQuake.jam}
               </Text>
+            </View>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons
+              name="walk-outline"
+              size={18}
+              color="#1E6F9F"
+              style={styles.infoIcon}
+            />
+            <View>
+              <Text style={styles.infoLabel}>Jarak :</Text>
+              <Text style={styles.infoValue}>{latestQuake.distanceKm} km</Text>
             </View>
           </View>
           {!!latestQuake.felt && (

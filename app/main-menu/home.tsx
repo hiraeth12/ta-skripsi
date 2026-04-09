@@ -2,8 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState } from "react";
+import { XMLParser } from "fast-xml-parser";
+import { useEffect, useState } from "react";
 import {
+  AppState,
   Dimensions,
   Image,
   Modal,
@@ -19,17 +21,205 @@ import {
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
+const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
+const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
+const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
+const REFERENCE_LOCATION = {
+  latitude: -6.9175,
+  longitude: 107.6191,
+};
+
+function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const radLat1 = toRad(lat1);
+  const radLat2 = toRad(lat2);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
+type DirasakanQuake = {
+  distanceKm: string;
+  magnitude: string;
+  kedalaman: string;
+  latText: string;
+  lonText: string;
+  wilayah: string;
+  tanggal: string;
+  jam: string;
+  felt: string;
+};
+
+type TerdeteksiQuake = {
+  distanceKm: string;
+  magnitude: string;
+  kedalaman: string;
+  latText: string;
+  lonText: string;
+  wilayah: string;
+  tanggal: string;
+  jam: string;
+  fase: string;
+};
+
 export default function Home() {
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
+  const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
+    null,
+  );
+  const [terdeteksiData, setTerdeteksiData] = useState<TerdeteksiQuake | null>(
+    null,
+  );
+  const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
 
   // State untuk melacak halaman carousel (0 atau 1)
   const [activeTab, setActiveTab] = useState(0);
 
   const user = { name: "Budi" };
-  const shakeMapUrl =
-    "https://bmkg-content-inatews.storage.googleapis.com/20260305205910_rev/intensity_logo.jpg";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchDirasakan() {
+      try {
+        if (!DIRASAKAN_API_URL) return;
+
+        const res = await fetch(`${DIRASAKAN_API_URL.trim()}${Date.now()}`);
+        const raw = await res.text();
+
+        let latest: any = null;
+        try {
+          const parsedJson = JSON.parse(raw);
+          const infoRaw = parsedJson?.info;
+          latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+        } catch {
+          const parser = new XMLParser({ ignoreAttributes: false });
+          const parsedXml = parser.parse(raw);
+          const infoRaw = parsedXml?.alert?.info;
+          latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+        }
+
+        if (!latest || !isMounted) return;
+
+        const coordStr: string = String(latest?.point?.coordinates ?? "");
+        const [lonStr, latStr] = coordStr.split(",");
+        const latitude = parseFloat(latStr);
+        const longitude = parseFloat(lonStr);
+        if (isNaN(latitude) || isNaN(longitude)) return;
+
+        const absLat = Math.abs(latitude).toFixed(2);
+        const absLon = Math.abs(longitude).toFixed(2);
+        const distanceKm = haversineDistanceKm(
+          REFERENCE_LOCATION.latitude,
+          REFERENCE_LOCATION.longitude,
+          latitude,
+          longitude,
+        ).toFixed(1);
+
+        setDirasakanData({
+          distanceKm,
+          magnitude: String(latest.magnitude ?? "-"),
+          kedalaman: String(latest.depth ?? "-"),
+          latText: `${absLat}°${latitude < 0 ? "LS" : "LU"}`,
+          lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
+          wilayah: String(latest.area ?? "-"),
+          tanggal: String(latest.date ?? ""),
+          jam: String(latest.time ?? ""),
+          felt: String(latest.felt ?? ""),
+        });
+
+        setShakeMapUrl(
+          latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
+        );
+      } catch (e) {
+        console.error("Failed to fetch home dirasakan:", e);
+      }
+    }
+
+    async function fetchTerdeteksi() {
+      try {
+        if (!TERDETEKSI_API_URL) return;
+
+        const res = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`);
+        const data = await res.json();
+
+        const features = data?.features;
+        if (!Array.isArray(features) || features.length === 0 || !isMounted) {
+          return;
+        }
+
+        const sorted = [...features].sort((a, b) => {
+          const tA = a?.properties?.time ?? "";
+          const tB = b?.properties?.time ?? "";
+          return tB.localeCompare(tA);
+        });
+        const latest = sorted[0];
+        if (!latest) return;
+
+        const props = latest?.properties ?? {};
+        const coords = latest?.geometry?.coordinates;
+        const longitude = parseFloat(coords?.[0] ?? "0");
+        const latitude = parseFloat(coords?.[1] ?? "0");
+        if (isNaN(latitude) || isNaN(longitude)) return;
+
+        const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
+        const jam = (jamRaw ?? "").split(".")[0];
+        const absLat = Math.abs(latitude).toFixed(2);
+        const absLon = Math.abs(longitude).toFixed(2);
+        const distanceKm = haversineDistanceKm(
+          REFERENCE_LOCATION.latitude,
+          REFERENCE_LOCATION.longitude,
+          latitude,
+          longitude,
+        ).toFixed(1);
+
+        setTerdeteksiData({
+          distanceKm,
+          magnitude: parseFloat(props.mag ?? "0").toFixed(1),
+          kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
+          latText: `${absLat}°${latitude < 0 ? "LS" : "LU"}`,
+          lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
+          wilayah: String(props.place ?? "-"),
+          tanggal: tanggal ?? "",
+          jam: jam ?? "",
+          fase: String(props.fase ?? ""),
+        });
+      } catch (e) {
+        console.error("Failed to fetch home terdeteksi:", e);
+      }
+    }
+
+    async function fetchAll() {
+      await Promise.all([fetchDirasakan(), fetchTerdeteksi()]);
+    }
+
+    fetchAll();
+    const interval = setInterval(fetchAll, 60_000);
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") fetchAll();
+    });
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      appStateSub.remove();
+    };
+  }, []);
 
   // Fungsi untuk mendeteksi pergeseran
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -71,7 +261,9 @@ export default function Home() {
             <View style={styles.statItem}>
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>JARAK GEMPA</Text>
-              <Text style={styles.statValue}>65 km</Text>
+              <Text style={styles.statValue}>
+                {dirasakanData ? `${dirasakanData.distanceKm} km` : "-"}
+              </Text>
             </View>
             <View style={styles.statItem}>
               <Ionicons name="alert-circle-outline" size={20} color="#1E6F9F" />
@@ -106,7 +298,11 @@ export default function Home() {
                   />
                 </TouchableOpacity>
               </View>
-              <QuakeCard onShakeMap={() => setShakeMapVisible(true)} />
+              <DirasakanCard
+                data={dirasakanData}
+                onShakeMap={() => setShakeMapVisible(true)}
+                hasShakeMap={!!shakeMapUrl}
+              />
             </View>
 
             {/* ITEM 2: TERDETEKSI */}
@@ -126,7 +322,7 @@ export default function Home() {
                   />
                 </TouchableOpacity>
               </View>
-              <QuakeCard onShakeMap={() => setShakeMapVisible(true)} />
+              <TerdeteksiCard data={terdeteksiData} />
             </View>
           </ScrollView>
 
@@ -186,11 +382,13 @@ export default function Home() {
               </TouchableOpacity>
             </View>
             <ScrollView style={{ flex: 1 }}>
-              <Image
-                source={{ uri: shakeMapUrl }}
-                style={styles.maximizedImage}
-                resizeMode="contain"
-              />
+              {shakeMapUrl && (
+                <Image
+                  source={{ uri: shakeMapUrl }}
+                  style={styles.maximizedImage}
+                  resizeMode="contain"
+                />
+              )}
             </ScrollView>
             <View style={styles.modalFooter}>
               <Text style={styles.scrollHint}>
@@ -205,7 +403,15 @@ export default function Home() {
 }
 
 // KOMPONEN PEMBANTU
-const QuakeCard = ({ onShakeMap }: any) => (
+const DirasakanCard = ({
+  data,
+  onShakeMap,
+  hasShakeMap,
+}: {
+  data: DirasakanQuake | null;
+  onShakeMap: () => void;
+  hasShakeMap: boolean;
+}) => (
   <View style={styles.mapCard}>
     <View style={styles.mapImageContainer}>
       <Image
@@ -213,7 +419,11 @@ const QuakeCard = ({ onShakeMap }: any) => (
         style={styles.mapImage}
       />
       <View style={styles.mapButtons}>
-        <TouchableOpacity style={styles.mapButton} onPress={onShakeMap}>
+        <TouchableOpacity
+          style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
+          onPress={onShakeMap}
+          disabled={!hasShakeMap}
+        >
           <Feather name="map" size={12} color="white" />
           <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
         </TouchableOpacity>
@@ -224,28 +434,81 @@ const QuakeCard = ({ onShakeMap }: any) => (
       </View>
     </View>
     <View style={styles.metricsRow}>
-      <MetricItem icon="triangle-wave" value="4.1" label="Magnitudo" />
-      <MetricItem icon="rss" value="7 KM" label="Kedalaman" />
-      <MetricItem icon="compass" value="7.12" label="LS" />
-      <MetricItem icon="compass" value="107.45" label="BT" />
+      <MetricItem
+        icon="triangle-wave"
+        value={data?.magnitude ?? "-"}
+        label="Magnitudo"
+      />
+      <MetricItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
+      <MetricItem icon="compass" value={data?.latText ?? "-"} label="LS" />
+      <MetricItem icon="compass" value={data?.lonText ?? "-"} label="BT" />
     </View>
     <View style={styles.details}>
       <DetailItem
         icon="location"
         label="Lokasi Gempa :"
-        value="12 km Timur Laut Kab. Bandung"
+        value={data?.wilayah ?? "-"}
       />
       <DetailItem
-        icon="alarm-outline"
+        icon="time-outline"
         label="Waktu :"
-        value="16 Des 2025, 10:03:11 WIB"
+        value={data ? `${data.tanggal}, ${data.jam}` : "-"}
       />
       <DetailItem
-        icon="alert-circle"
-        label="Skala MMI :"
-        value="Tidak dirasakan"
+        icon="walk-outline"
+        label="Jarak :"
+        value={data ? `${data.distanceKm} km` : "-"}
       />
-      <DetailItem icon="walk" label="Jarak :" value="22 KM dari Bandung" />
+      {!!data?.felt && (
+        <DetailItem
+          icon="alert-circle-outline"
+          label="Wilayah Dirasakan (Skala MMI) :"
+          value={data.felt}
+        />
+      )}
+    </View>
+  </View>
+);
+
+const TerdeteksiCard = ({ data }: { data: TerdeteksiQuake | null }) => (
+  <View style={styles.mapCard}>
+    <View style={styles.mapImageContainer}>
+      <Image
+        source={require("../../assets/images/navigation-map.png")}
+        style={styles.mapImage}
+      />
+      <View style={styles.mapButtons}>
+        <TouchableOpacity style={styles.mapButton}>
+          <Feather name="share" size={12} color="white" />
+          <Text style={styles.mapButtonText}>BAGIKAN</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+    <View style={styles.metricsRow}>
+      <MetricItem
+        icon="triangle-wave"
+        value={data?.magnitude ?? "-"}
+        label="Magnitudo"
+      />
+      <MetricItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
+      <MetricItem icon="compass" value={data?.latText ?? "-"} label="LS" />
+      <MetricItem icon="compass" value={data?.lonText ?? "-"} label="BT" />
+    </View>
+    <View style={styles.details}>
+      <DetailItem
+        icon="location"
+        label="Lokasi Gempa :"
+        value={data?.wilayah ?? "-"}
+      />
+      <DetailItem
+        icon="calendar-outline"
+        label="Tanggal :"
+        value={data?.tanggal ?? "-"}
+      />
+      <DetailItem icon="time-outline" label="Jam :" value={data?.jam ?? "-"} />
+      {!!data?.fase && (
+        <DetailItem icon="alert-circle-outline" label="Fase :" value={data.fase} />
+      )}
     </View>
   </View>
 );
@@ -264,11 +527,7 @@ const MetricItem = ({ icon, value, label }: any) => (
 
 const DetailItem = ({ icon, label, value }: any) => (
   <View style={styles.detailItem}>
-    {icon === "walk" ? (
-      <MaterialCommunityIcons name="walk" size={22} color="#1E6F9F" />
-    ) : (
-      <Ionicons name={icon} size={22} color="#1E6F9F" />
-    )}
+    <Ionicons name={icon} size={22} color="#1E6F9F" />
     <View style={styles.detailTexts}>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
@@ -411,6 +670,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
+  mapButtonDisabled: { backgroundColor: "#94a3b8" },
   mapButtonText: { color: "#fff", fontSize: 10 },
   metricsRow: {
     flexDirection: "row",
