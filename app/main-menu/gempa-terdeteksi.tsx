@@ -1,26 +1,18 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import MapView, { Marker, UrlTile } from "react-native-maps";
+import type MapView from "react-native-maps";
 
-const CARTO_TILE_URL =
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+import EarthquakeMap from "../../components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
-
-const INITIAL_REGION = {
-  latitude: -6.2088,
-  longitude: 106.8456,
-  latitudeDelta: 5,
-  longitudeDelta: 5,
-};
 
 type LatestQuake = {
   latitude: number;
@@ -43,7 +35,7 @@ type Props = {
 export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapView | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
@@ -210,32 +202,21 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={INITIAL_REGION}
-        mapType="none"
-        rotateEnabled={false}
-        showsCompass={false}
-        onPress={() => dismissCard()}
-      >
-        <UrlTile
-          urlTemplate={CARTO_TILE_URL}
-          maximumZ={19}
-          flipY={false}
-          tileSize={256}
-        />
-        {latestQuake && (
-          <Marker
-            coordinate={{
-              latitude: latestQuake.latitude,
-              longitude: latestQuake.longitude,
-            }}
-            pinColor="red"
-            onPress={() => openCard()}
-          />
-        )}
-      </MapView>
+      <EarthquakeMap
+        mapRef={mapRef}
+        markerCoordinate={
+          latestQuake
+            ? {
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                magnitude: latestQuake.magnitude,
+                depth: latestQuake.kedalaman,
+              }
+            : null
+        }
+        onMapPress={() => dismissCard()}
+        onMarkerPress={() => openCard()}
+      />
 
       <View style={styles.topControls}>
         {tabBar}
@@ -358,7 +339,6 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { flex: 1 },
   topControls: {
     position: "absolute",
     top: 16,
