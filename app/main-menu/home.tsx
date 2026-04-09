@@ -8,6 +8,7 @@ import {
   AppState,
   Dimensions,
   Image,
+  InteractionManager,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -208,7 +209,11 @@ export default function Home() {
       await Promise.all([fetchDirasakan(), fetchTerdeteksi()]);
     }
 
-    fetchAll();
+    InteractionManager.runAfterInteractions(() => {
+      if (isMounted) {
+        void fetchAll();
+      }
+    });
     const interval = setInterval(fetchAll, 60_000);
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") fetchAll();
