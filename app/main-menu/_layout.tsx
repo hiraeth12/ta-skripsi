@@ -29,7 +29,7 @@ export default function MainLayout() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER - Tetap muncul di atas semua menu utama dan notifikasi */}
+      
       <View style={styles.logoRow}>
         <Image
           source={require("../../assets/images/SeismoTrack_2-removebg-preview.png")}

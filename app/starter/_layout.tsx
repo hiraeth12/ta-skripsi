@@ -6,6 +6,7 @@ export default function StarterLayout() {
       screenOptions={{
         headerShown: false,
         headerTitleAlign: "center",
+        animation: "fade",
       }}
     />
   );

@@ -17,7 +17,7 @@ export default function Account() {
 
   // State untuk Modal Notifikasi
   const [showNotifModal, setShowNotifModal] = useState(false);
-  const [notifStatus, setNotifStatus] = useState(true); // Untuk menentukan isi pesan modal
+  const [notifStatus, setNotifStatus] = useState(true); 
 
   const user = {
     name: "Fasya Burhanis syauqi",
