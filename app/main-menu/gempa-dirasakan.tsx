@@ -14,24 +14,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker, UrlTile } from "react-native-maps";
+import type MapView from "react-native-maps";
+
+import EarthquakeMap from "../../components/earthquake-map";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
-const CARTO_TILE_URL =
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
-
-const INITIAL_REGION = {
-  latitude: -6.2088,
-  longitude: 106.8456,
-  latitudeDelta: 5,
-  longitudeDelta: 5,
-};
-
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
-const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
+const REFERENCE_LOCATION = {
+  latitude: -6.9175,
+  longitude: 107.6191,
+};
 
 function haversineDistanceKm(
   lat1: number,
@@ -84,7 +80,7 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapView | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
@@ -297,32 +293,21 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={INITIAL_REGION}
-        mapType="none"
-        rotateEnabled={false}
-        showsCompass={false}
-        onPress={() => dismissCard()}
-      >
-        <UrlTile
-          urlTemplate={CARTO_TILE_URL}
-          maximumZ={19}
-          flipY={false}
-          tileSize={256}
-        />
-        {latestQuake && (
-          <Marker
-            coordinate={{
-              latitude: latestQuake.latitude,
-              longitude: latestQuake.longitude,
-            }}
-            pinColor="red"
-            onPress={() => openCard()}
-          />
-        )}
-      </MapView>
+      <EarthquakeMap
+        mapRef={mapRef}
+        markerCoordinate={
+          latestQuake
+            ? {
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                magnitude: latestQuake.magnitude,
+                depth: latestQuake.kedalaman,
+              }
+            : null
+        }
+        onMapPress={() => dismissCard()}
+        onMarkerPress={() => openCard()}
+      />
 
       <View style={styles.topControls}>
         {tabBar}
@@ -471,7 +456,6 @@ const DetailItem = ({ icon, label, value }: any) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  map: { flex: 1 },
   topControls: {
     position: "absolute",
     top: 16,

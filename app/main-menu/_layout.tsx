@@ -53,7 +53,7 @@ export default function MainLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            animation: "fade",
+            animation: "none",
           }}
         />
       </View>
