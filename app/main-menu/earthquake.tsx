@@ -1,4 +1,5 @@
-﻿import { useState } from "react";
+﻿import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import GempaDirasakan from "./gempa-dirasakan";
 import GempaTerdeteksi from "./gempa-terdeteksi";
@@ -7,8 +8,20 @@ const TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function Earthquake() {
+  const { tab } = useLocalSearchParams<{ tab?: string | string[] }>();
   const [activeTab, setActiveTab] = useState<Tab>("GEMPA DIRASAKAN");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const rawTab = Array.isArray(tab) ? tab[0] : tab;
+    if (rawTab === "GEMPA TERDETEKSI") {
+      setActiveTab("GEMPA TERDETEKSI");
+      return;
+    }
+    if (rawTab === "GEMPA DIRASAKAN") {
+      setActiveTab("GEMPA DIRASAKAN");
+    }
+  }, [tab]);
 
   const tabBar = (
     <View style={styles.tabBar}>

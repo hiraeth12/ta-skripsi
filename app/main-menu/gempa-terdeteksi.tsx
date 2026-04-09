@@ -1,12 +1,12 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import MapView, { Marker, UrlTile } from "react-native-maps";
 
@@ -152,7 +152,7 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
       try {
         if (!API_URL) {
           console.error(
-            "GEMPA_TERDETEKSI_API_URL is undefined — restart Metro with --clear",
+            "EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL is undefined — restart Metro with --clear",
           );
           return;
         }
@@ -206,7 +206,7 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
     }
 
     fetchLatestQuake();
-  }, []);
+  }, [onLoadingChange]);
 
   return (
     <View style={styles.container}>

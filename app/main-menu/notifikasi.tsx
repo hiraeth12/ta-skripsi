@@ -1,6 +1,7 @@
+import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -10,7 +11,9 @@ import {
 } from "react-native";
 
 const NotifCard = ({ item, onPress }: any) => {
-  const isDirasakan = item.tipe === "Dirasakan";
+  // Sesuai data dari hook: pakai 'item.type'
+  const isDirasakan = item.type === "Dirasakan";
+
   return (
     <TouchableOpacity
       style={styles.notifCard}
@@ -22,11 +25,12 @@ const NotifCard = ({ item, onPress }: any) => {
           <Text style={styles.notifTitle}>
             {isDirasakan ? "Gempa Dirasakan" : "Gempa Terdeteksi"}
           </Text>
+          {/* Mapping properti: magnitude, location, date, time */}
           <Text style={styles.notifSubTitle}>
-            M {item.magnitudo} – {item.lokasi}
+            M {item.magnitude} – {item.location}
           </Text>
           <Text style={styles.notifTime}>
-            {item.tanggal} • {item.jam}
+            {item.date} • {item.time}
           </Text>
         </View>
         <View
@@ -46,32 +50,17 @@ const NotifCard = ({ item, onPress }: any) => {
 
 export default function Notifikasi() {
   const router = useRouter();
-  const [notifications] = useState([
-    {
-      id: "1",
-      tipe: "Dirasakan",
-      magnitudo: "4.8",
-      lokasi: "12 km Barat Daya Bandung",
-      tanggal: "17 Des 2025",
-      jam: "04:21 WIB",
-    },
-    {
-      id: "2",
-      tipe: "Terdeteksi",
-      magnitudo: "2.6",
-      lokasi: "Garut Selatan",
-      tanggal: "17 Des 2025",
-      jam: "03:12 WIB",
-    },
-  ]);
+  const { notifications, markAllAsRead } = useQuakeNotifications();
+
+  useEffect(() => {
+    markAllAsRead();
+  }, [markAllAsRead]);
 
   return (
     <View style={styles.container}>
-      {/* AREA BIRU LANGSUNG DARI ATAS */}
       <View style={styles.menuContainer}>
         <View style={styles.menuContent}>
           <View style={styles.titleRow}>
-            {/* Tambah Tombol Kembali agar user bisa balik ke menu sebelumnya */}
             <TouchableOpacity
               onPress={() => router.back()}
               style={{ marginRight: 15 }}
@@ -87,7 +76,20 @@ export default function Notifikasi() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
-              <NotifCard item={item} onPress={() => {}} />
+              <NotifCard
+                item={item}
+                onPress={() =>
+                  router.push({
+                    pathname: "/main-menu/earthquake",
+                    params: {
+                      tab:
+                        item.type === "Dirasakan"
+                          ? "GEMPA DIRASAKAN"
+                          : "GEMPA TERDETEKSI",
+                    },
+                  })
+                }
+              />
             )}
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>Belum ada notifikasi.</Text>
@@ -100,7 +102,7 @@ export default function Notifikasi() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0C4A6E" }, // Background dasar biru
+  container: { flex: 1, backgroundColor: "#0C4A6E" },
   menuContainer: { flex: 1, backgroundColor: "#0C4A6E" },
   menuContent: { paddingHorizontal: 20, paddingTop: 20, flex: 1 },
   titleRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },

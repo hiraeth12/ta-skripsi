@@ -18,10 +18,8 @@ import MapView, { Marker, UrlTile } from "react-native-maps";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
-
 const CARTO_TILE_URL =
   "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
 
 const INITIAL_REGION = {
@@ -33,11 +31,7 @@ const INITIAL_REGION = {
 
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
-
-const REFERENCE_LOCATION = {
-  latitude: -6.9175,
-  longitude: 107.6191,
-};
+const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
 
 function haversineDistanceKm(
   lat1: number,
@@ -47,18 +41,17 @@ function haversineDistanceKm(
 ) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const earthRadiusKm = 6371;
-
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const radLat1 = toRad(lat1);
   const radLat2 = toRad(lat2);
-
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
+    Math.cos(radLat1) *
+      Math.cos(radLat2) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 type LatestQuake = {
@@ -198,40 +191,26 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
     async function fetchLatestQuake(silent = true): Promise<boolean> {
       if (isFetching.current) return false;
       isFetching.current = true;
-
       if (!silent) onLoadingChange?.(true);
-
       try {
-        if (!API_URL) {
-          console.error(
-            "GEMPA_DIRASAKAN_API_URL is undefined — restart Metro with --clear",
-          );
-          return false;
-        }
+        if (!API_URL) return false;
         const res = await fetch(`${API_URL.trim()}${Date.now()}`);
         const raw = await res.text();
-
         let latest: any = null;
         let globalIdentifier = "";
-
-        // Primary path: API returns JSON (datagempa.json).
         try {
           const parsedJson = JSON.parse(raw);
           const infoRaw = parsedJson?.info;
           latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
           globalIdentifier = String(parsedJson?.identifier ?? "");
         } catch {
-          // Fallback path: keep support for XML payloads.
           const parser = new XMLParser({ ignoreAttributes: false });
           const parsedXml = parser.parse(raw);
           const infoRaw = parsedXml?.alert?.info;
           latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
           globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
         }
-
         if (!latest) return false;
-
-        // Skip update if the event hasn't changed
         const eventId = String(
           latest.eventid ?? latest.identifier ?? globalIdentifier,
         );
@@ -244,49 +223,41 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
         const longitude = parseFloat(lonStr);
         if (isNaN(latitude) || isNaN(longitude)) return false;
 
-        const absLat = Math.abs(latitude).toFixed(2);
-        const absLon = Math.abs(longitude).toFixed(2);
-        const distanceKm = haversineDistanceKm(
-          REFERENCE_LOCATION.latitude,
-          REFERENCE_LOCATION.longitude,
-          latitude,
-          longitude,
-        ).toFixed(1);
-
         setShakeMapUrl(
           latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
         );
-
         setLatestQuake({
           latitude,
           longitude,
-          distanceKm,
+          distanceKm: haversineDistanceKm(
+            REFERENCE_LOCATION.latitude,
+            REFERENCE_LOCATION.longitude,
+            latitude,
+            longitude,
+          ).toFixed(1),
           magnitude: String(latest.magnitude),
           wilayah: latest.area ?? "",
           tanggal: latest.date ?? "",
           jam: latest.time ?? "",
           kedalaman: latest.depth ?? "",
           felt: latest.felt ?? "",
-          latText: `${absLat}°${latitude < 0 ? "LS" : "LU"}`,
-          lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
+          latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
+          lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
         });
 
-        if (isFirstLoad.current) {
-          isFirstLoad.current = false;
-          mapRef.current?.animateToRegion(
-            { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
-            800,
-          );
-        } else {
-          mapRef.current?.animateToRegion(
-            { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
-            600,
-          );
-        }
-
+        const region = {
+          latitude,
+          longitude,
+          latitudeDelta: 2,
+          longitudeDelta: 2,
+        };
+        mapRef.current?.animateToRegion(
+          region,
+          isFirstLoad.current ? 800 : 600,
+        );
+        isFirstLoad.current = false;
         return true;
-      } catch (e) {
-        console.error("Failed to fetch gempa dirasakan:", e);
+      } catch {
         return false;
       } finally {
         if (!silent) onLoadingChange?.(false);
@@ -295,33 +266,21 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
     }
 
     function clearPollTimer() {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     }
-
     function scheduleNextPoll(changed: boolean) {
       if (!isMountedRef.current) return;
-
       pollDelayRef.current = changed
         ? MIN_POLL_MS
         : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
-
       clearPollTimer();
       pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
     }
-
     async function runPollingLoop() {
-      if (!isMountedRef.current) return;
       const changed = await fetchLatestQuake(true);
       scheduleNextPoll(changed);
     }
-
-    fetchLatestQuake(false).then((changed) => {
-      scheduleNextPoll(changed);
-    });
-
+    fetchLatestQuake(false).then(scheduleNextPoll);
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         pollDelayRef.current = MIN_POLL_MS;
@@ -329,13 +288,12 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
         runPollingLoop();
       }
     });
-
     return () => {
       isMountedRef.current = false;
       clearPollTimer();
       appStateSub.remove();
     };
-  }, []);
+  }, [onLoadingChange]);
 
   return (
     <View style={styles.container}>
@@ -398,102 +356,54 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
-
           <View style={styles.statsTopRow}>
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="triangle-wave"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.magnitude}</Text>
-              <Text style={styles.statTopLabel}>Magnitudo</Text>
-            </View>
+            <StatItem
+              icon="triangle-wave"
+              value={latestQuake.magnitude}
+              label="Magnitudo"
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons name="rss" size={20} color="#0369A1" />
-              <Text style={styles.statTopValue}>{latestQuake.kedalaman}</Text>
-              <Text style={styles.statTopLabel}>Kedalaman</Text>
-            </View>
+            <StatItem
+              icon="rss"
+              value={latestQuake.kedalaman}
+              label="Kedalaman"
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.latText}</Text>
-              <Text style={styles.statTopLabel}>LS</Text>
-            </View>
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.latText}
+              label="LS"
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.lonText}</Text>
-              <Text style={styles.statTopLabel}>BT</Text>
-            </View>
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.lonText}
+              label="BT"
+            />
           </View>
-
           <View style={styles.separator} />
-
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="location"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
+          <View style={styles.infoContent}>
+            <DetailItem
+              icon="location"
+              label="Lokasi Gempa :"
+              value={latestQuake.wilayah}
             />
-            <View>
-              <Text style={styles.infoLabel}>Lokasi Gempa :</Text>
-              <Text style={styles.infoValue}>{latestQuake.wilayah}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
+            <DetailItem
+              icon="time-outline"
+              label="Waktu :"
+              value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
             />
-            <View>
-              <Text style={styles.infoLabel}>Waktu :</Text>
-              <Text style={styles.infoValue}>
-                {latestQuake.tanggal}, {latestQuake.jam}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="walk-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
+            <DetailItem
+              icon="walk-outline"
+              label="Jarak :"
+              value={`${latestQuake.distanceKm} km dari lokasi Anda`}
             />
-            <View>
-              <Text style={styles.infoLabel}>Jarak :</Text>
-              <Text style={styles.infoValue}>{latestQuake.distanceKm} km</Text>
-            </View>
+            <DetailItem
+              icon="alert-circle-outline"
+              label="Wilayah Dirasakan :"
+              value={latestQuake.felt || "Tidak dirasakan"}
+            />
           </View>
-          {!!latestQuake.felt && (
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={18}
-                color="#1E6F9F"
-                style={styles.infoIcon}
-              />
-              <View style={styles.infoTextFlex}>
-                <Text style={styles.infoLabel}>
-                  Wilayah Dirasakan (Skala MMI) :
-                </Text>
-                <Text style={styles.infoValue}>{latestQuake.felt}</Text>
-              </View>
-            </View>
-          )}
-
           <TouchableOpacity style={styles.simulasiBtn} activeOpacity={0.8}>
             <Text style={styles.simulasiBtnText}>SIMULASI GUNCANGAN</Text>
           </TouchableOpacity>
@@ -541,6 +451,24 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
   );
 }
 
+const StatItem = ({ icon, value, label }: any) => (
+  <View style={styles.statTopItem}>
+    <MaterialCommunityIcons name={icon} size={20} color="#0369A1" />
+    <Text style={styles.statTopValue}>{value}</Text>
+    <Text style={styles.statTopLabel}>{label}</Text>
+  </View>
+);
+
+const DetailItem = ({ icon, label, value }: any) => (
+  <View style={styles.infoRow}>
+    <Ionicons name={icon} size={18} color="#1E6F9F" style={styles.infoIcon} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
@@ -549,7 +477,6 @@ const styles = StyleSheet.create({
     top: 16,
     left: 10,
     right: 10,
-    flexDirection: "column",
     alignItems: "center",
     gap: 10,
   },
@@ -564,7 +491,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 333,
-    marginLeft: 6,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -586,14 +512,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
+    minHeight: 380, // TINGGI TETAP AGAR TIDAK BERUBAH
   },
-  dragHandleArea: { alignItems: "center", paddingVertical: 8, marginBottom: 8 },
+  dragHandleArea: { alignItems: "center", paddingVertical: 8 },
   dragHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: "#1E6F9F",
-    alignSelf: "center",
   },
   statsTopRow: {
     flexDirection: "row",
@@ -601,23 +527,22 @@ const styles = StyleSheet.create({
     marginBottom: 11,
   },
   statTopItem: { flex: 1, alignItems: "center", gap: 2 },
-  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000000" },
-  statTopLabel: { fontSize: 12, color: "#000000", fontWeight: "500" },
+  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000" },
+  statTopLabel: { fontSize: 12, color: "#000", fontWeight: "500" },
   statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
   separator: { height: 2, backgroundColor: "#0369A1", marginBottom: 11 },
+  infoContent: { height: 180 }, // TINGGI AREA INFO TETAP
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 4,
+    marginBottom: 8,
     gap: 10,
   },
   infoIcon: { marginTop: 2 },
-  infoTextFlex: { flex: 1 },
   infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
   infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
   simulasiBtn: {
-    marginTop: 11,
-    marginBottom: -11,
+    marginTop: 15,
     backgroundColor: "#1E6F9F",
     borderRadius: 30,
     paddingVertical: 14,
