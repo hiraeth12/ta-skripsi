@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import EarthquakeTabBar, {
   type EarthquakeTab,
 } from "../../components/earthquake-tab-bar";
@@ -6,6 +7,7 @@ import GempaDirasakan from "./gempa-dirasakan";
 import GempaTerdeteksi from "./gempa-terdeteksi";
 
 export default function Earthquake() {
+  const { tab } = useLocalSearchParams<{ tab?: string | string[] }>();
   const [activeTab, setActiveTab] = useState<EarthquakeTab>("GEMPA DIRASAKAN");
   const [loading, setLoading] = useState(false);
 
