@@ -2,21 +2,21 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  AppState,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    AppState,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import type MapView from "react-native-maps";
 
-import EarthquakeMap from "../../components/earthquake-map";
+import EarthquakeMap from "@/components/earthquake-map";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
@@ -67,9 +67,14 @@ type LatestQuake = {
 type Props = {
   tabBar: React.ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  isActive?: boolean;
 };
 
-export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
+export default function GempaDirasakan({
+  tabBar,
+  onLoadingChange,
+  isActive = true,
+}: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
@@ -184,6 +189,9 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
   }
 
   useEffect(() => {
+    if (!isActive) return;
+    isMountedRef.current = true;
+
     async function fetchLatestQuake(silent = true): Promise<boolean> {
       if (isFetching.current) return false;
       isFetching.current = true;
@@ -289,7 +297,7 @@ export default function GempaDirasakan({ tabBar, onLoadingChange }: Props) {
       clearPollTimer();
       appStateSub.remove();
     };
-  }, [onLoadingChange]);
+  }, [isActive, onLoadingChange]);
 
   return (
     <View style={styles.container}>

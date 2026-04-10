@@ -1,16 +1,16 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  PanResponder,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    PanResponder,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import type MapView from "react-native-maps";
 
-import EarthquakeMap from "../../components/earthquake-map";
+import EarthquakeMap from "@/components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 
@@ -30,9 +30,14 @@ type LatestQuake = {
 type Props = {
   tabBar: React.ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  isActive?: boolean;
 };
 
-export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
+export default function GempaTerdeteksi({
+  tabBar,
+  onLoadingChange,
+  isActive = true,
+}: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const mapRef = useRef<MapView | null>(null);
@@ -139,6 +144,8 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
   }
 
   useEffect(() => {
+    if (!isActive) return;
+
     async function fetchLatestQuake() {
       onLoadingChange?.(true);
       try {
@@ -198,7 +205,7 @@ export default function GempaTerdeteksi({ tabBar, onLoadingChange }: Props) {
     }
 
     fetchLatestQuake();
-  }, [onLoadingChange]);
+  }, [isActive, onLoadingChange]);
 
   return (
     <View style={styles.container}>
