@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import type MapView from "react-native-maps";
 
-import EarthquakeMap from "../../../components/earthquake-map";
+import EarthquakeMap from "@/components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_HISTORY!;
 const MIN_POLL_MS = 10_000;
@@ -60,6 +60,7 @@ type Props = {
   selectedListEventId?: string | null;
   onListSelectionHandled?: () => void;
   externalSelection?: ExternalSelection | null;
+  isActive?: boolean;
 };
 
 function withCacheBuster(url: string) {
@@ -79,6 +80,7 @@ export function GempaTerdeteksiHistoryContent({
   selectedListEventId,
   onListSelectionHandled,
   externalSelection,
+  isActive = true,
 }: Props) {
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -315,6 +317,9 @@ export function GempaTerdeteksiHistoryContent({
   }, [onListSelectionHandled, openCard, quakes, selectedListEventId]);
 
   useEffect(() => {
+    if (!isActive) return;
+    isMountedRef.current = true;
+
     async function fetchLatestQuake(silent = true): Promise<boolean> {
       if (isFetching.current) return false;
       isFetching.current = true;
@@ -488,7 +493,7 @@ export function GempaTerdeteksiHistoryContent({
       clearPollTimer();
       appStateSub.remove();
     };
-  }, [onLoadingChange]);
+  }, [isActive, onLoadingChange]);
 
   return (
     <View style={styles.container}>

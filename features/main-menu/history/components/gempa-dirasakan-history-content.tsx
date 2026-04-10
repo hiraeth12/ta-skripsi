@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import type MapView from "react-native-maps";
 
-import EarthquakeMap from "../../../components/earthquake-map";
+import EarthquakeMap from "@/components/earthquake-map";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
@@ -108,6 +108,7 @@ type Props = {
 	selectedListEventId?: string | null;
 	onListSelectionHandled?: () => void;
 	externalSelection?: ExternalSelection | null;
+	isActive?: boolean;
 };
 
 export function GempaDirasakanHistoryContent({
@@ -117,6 +118,7 @@ export function GempaDirasakanHistoryContent({
 	selectedListEventId,
 	onListSelectionHandled,
 	externalSelection,
+	isActive = true,
 }: Props) {
 	const [quakes, setQuakes] = useState<QuakeItem[]>([]);
 	const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -359,6 +361,9 @@ export function GempaDirasakanHistoryContent({
 	}, [onListSelectionHandled, openCard, quakes, selectedListEventId]);
 
 	useEffect(() => {
+		if (!isActive) return;
+		isMountedRef.current = true;
+
 		async function fetchLatestQuake(silent = true): Promise<boolean> {
 			if (isFetching.current) return false;
 			isFetching.current = true;
@@ -546,7 +551,7 @@ export function GempaDirasakanHistoryContent({
 			clearPollTimer();
 			appStateSub.remove();
 		};
-	}, [onLoadingChange]);
+	}, [isActive, onLoadingChange]);
 
 	return (
 		<View style={styles.container}>

@@ -2,32 +2,48 @@ import BottomNav from "@/components/ui/navigation";
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, usePathname, useRouter } from "expo-router";
+import { useCallback, useMemo } from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+
+const ROUTE_MAP: Record<string, string> = {
+  HOME: "/main-menu/home",
+  GEMPA: "/main-menu/earthquake",
+  RIWAYAT: "/main-menu/history",
+  AKUN: "/main-menu/account",
+};
 
 export default function MainLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { unreadCount } = useQuakeNotifications();
 
-  const routeMap: Record<string, string> = {
-    HOME: "/main-menu/home",
-    GEMPA: "/main-menu/earthquake",
-    RIWAYAT: "/main-menu/history",
-    AKUN: "/main-menu/account",
-  };
-
   // 1. Cek apakah saat ini sedang berada di halaman notifikasi
   const isNotifPage = pathname === "/main-menu/notifikasi";
 
   // 2. Logic Active Tab: Jika di halaman notifikasi, set ke "NONE" agar garis indikator mati
-  const activeTab = isNotifPage
-    ? "NONE"
-    : (Object.entries(routeMap).find(([, path]) => pathname === path)?.[0] ??
-      "HOME");
+  const activeTab = useMemo(
+    () =>
+      isNotifPage
+        ? "NONE"
+        : (Object.entries(ROUTE_MAP).find(([, path]) => pathname === path)?.[0] ??
+          "HOME"),
+    [isNotifPage, pathname],
+  );
 
-  const handleTabChange = (tab: string) => {
-    router.push(routeMap[tab] as any);
-  };
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      const targetRoute = ROUTE_MAP[tab];
+      if (!targetRoute || targetRoute === pathname) return;
+      // Replace avoids stacking tab routes and keeps transitions lighter.
+      router.replace(targetRoute as any);
+    },
+    [pathname, router],
+  );
+
+  const handleOpenNotifications = useCallback(() => {
+    if (pathname === "/main-menu/notifikasi") return;
+    router.push("/main-menu/notifikasi");
+  }, [pathname, router]);
 
   return (
     <View style={styles.container}>
@@ -40,7 +56,7 @@ export default function MainLayout() {
 
         <TouchableOpacity
           style={styles.notification}
-          onPress={() => router.push("/main-menu/notifikasi")}
+          onPress={handleOpenNotifications}
           activeOpacity={0.7}
         >
           <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -54,6 +70,7 @@ export default function MainLayout() {
           screenOptions={{
             headerShown: false,
             animation: "none",
+            freezeOnBlur: true,
           }}
         />
       </View>
