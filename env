@@ -1,0 +1,2 @@
+EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL = https://bmkg-content-inatews.storage.googleapis.com/datagempa.json?t=
+EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL = https://bmkg-content-inatews.storage.googleapis.com/gempaQL.json?t=

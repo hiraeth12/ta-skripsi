@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useState } from "react";
 import {
@@ -46,10 +47,81 @@ function haversineDistanceKm(
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(radLat1) *
+      Math.cos(radLat2) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c;
+}
+
+// === FUNGSI MENGHITUNG WAKTU REAL-TIME ===
+function calculateTimeAgo(tanggal: string, jam: string) {
+  if (!tanggal || !jam) return "Memuat...";
+  try {
+    const cleanJam = jam.replace(/ WIB| WITA| WIT/gi, "").trim();
+    let dateStr = tanggal;
+
+    // Ubah format bulan ke bahasa Inggris agar terbaca oleh sistem Date
+    const bulanIdKeEn: Record<string, string> = {
+      Jan: "Jan",
+      Feb: "Feb",
+      Mar: "Mar",
+      Apr: "Apr",
+      Mei: "May",
+      Jun: "Jun",
+      Jul: "Jul",
+      Agt: "Aug",
+      Sep: "Sep",
+      Okt: "Oct",
+      Nov: "Nov",
+      Des: "Dec",
+    };
+
+    Object.keys(bulanIdKeEn).forEach((key) => {
+      if (dateStr.includes(key)) {
+        dateStr = dateStr.replace(key, bulanIdKeEn[key]);
+      }
+    });
+
+    let quakeDate: Date;
+
+    if (dateStr.includes("-") && dateStr.split("-").length === 3) {
+      const parts = dateStr.split("-");
+      if (parts[0].length === 4) {
+        quakeDate = new Date(`${dateStr}T${cleanJam}+07:00`);
+      } else {
+        let year = parts[2];
+        if (year.length === 2) year = "20" + year;
+        quakeDate = new Date(
+          `${year}-${parts[1]}-${parts[0]}T${cleanJam}+07:00`,
+        );
+      }
+    } else {
+      quakeDate = new Date(`${dateStr} ${cleanJam} GMT+0700`);
+    }
+
+    const quakeTime = quakeDate.getTime();
+    if (isNaN(quakeTime)) return "-";
+
+    const diffMs = Date.now() - quakeTime;
+    if (diffMs < 0) return "Baru saja";
+
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    // Perbaikan: "1 Jam Lalu" pakai angka agar konsisten
+    if (diffDays > 0)
+      return diffDays === 1 ? "Kemarin" : `${diffDays} Hari Lalu`;
+    if (diffHours > 0) return `${diffHours} Jam Lalu`;
+    if (diffMins > 0) return `${diffMins} Menit Lalu`;
+
+    return "Baru saja";
+  } catch {
+    return "-";
+  }
 }
 
 type DirasakanQuake = {
@@ -77,6 +149,7 @@ type TerdeteksiQuake = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
@@ -88,7 +161,8 @@ export default function Home() {
   );
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
 
-  // State untuk melacak halaman carousel (0 atau 1)
+  const [timeAgo, setTimeAgo] = useState("Memuat...");
+
   const [activeTab, setActiveTab] = useState(0);
 
   const user = { name: "Budi" };
@@ -226,7 +300,21 @@ export default function Home() {
     };
   }, []);
 
-  // Fungsi untuk mendeteksi pergeseran
+  useEffect(() => {
+    function updateTimer() {
+      if (dirasakanData?.tanggal && dirasakanData?.jam) {
+        setTimeAgo(calculateTimeAgo(dirasakanData.tanggal, dirasakanData.jam));
+      } else {
+        setTimeAgo("Memuat...");
+      }
+    }
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 60000);
+
+    return () => clearInterval(timerInterval);
+  }, [dirasakanData]);
+
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const scrollOffset = event.nativeEvent.contentOffset.x;
     const currentIndex = Math.round(scrollOffset / SCREEN_WIDTH);
@@ -241,7 +329,6 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ flexGrow: 1 }}
       >
-        {/* GREETING & LOCATION CARD */}
         <View style={styles.greetingRow}>
           <View>
             <Text style={styles.greeting}>Halo, {user.name} !</Text>
@@ -261,7 +348,7 @@ export default function Home() {
             <View style={styles.statItem}>
               <MaterialIcons name="history" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>GEMPA TERAKHIR</Text>
-              <Text style={styles.statValue}>2 Jam Lalu</Text>
+              <Text style={styles.statValue}>{timeAgo}</Text>
             </View>
             <View style={styles.statItem}>
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
@@ -278,7 +365,6 @@ export default function Home() {
           </View>
         </View>
 
-        {/* BOTTOM SECTION - HORIZONTAL GESER */}
         <View style={styles.bottomSection}>
           <ScrollView
             horizontal
@@ -288,13 +374,11 @@ export default function Home() {
             scrollEventThrottle={16}
             decelerationRate="fast"
           >
-            {/* ITEM 1: DIRASAKAN */}
             <View style={{ width: SCREEN_WIDTH }}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>
                   Gempabumi Terakhir Dirasakan
                 </Text>
-                {/* Tombol Info Balik Lagi */}
                 <TouchableOpacity onPress={() => setInfoVisibleDirasakan(true)}>
                   <Ionicons
                     name="information-circle-outline"
@@ -307,16 +391,20 @@ export default function Home() {
                 data={dirasakanData}
                 onShakeMap={() => setShakeMapVisible(true)}
                 hasShakeMap={!!shakeMapUrl}
+                onCardPress={() =>
+                  router.push({
+                    pathname: "/main-menu/earthquake",
+                    params: { tab: "GEMPA DIRASAKAN" },
+                  })
+                }
               />
             </View>
 
-            {/* ITEM 2: TERDETEKSI */}
             <View style={{ width: SCREEN_WIDTH }}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>
                   Gempabumi Terakhir Terdeteksi
                 </Text>
-                {/* Tombol Info Balik Lagi */}
                 <TouchableOpacity
                   onPress={() => setInfoVisibleTerdeteksi(true)}
                 >
@@ -327,11 +415,18 @@ export default function Home() {
                   />
                 </TouchableOpacity>
               </View>
-              <TerdeteksiCard data={terdeteksiData} />
+              <TerdeteksiCard
+                data={terdeteksiData}
+                onCardPress={() =>
+                  router.push({
+                    pathname: "/main-menu/earthquake",
+                    params: { tab: "GEMPA TERDETEKSI" },
+                  })
+                }
+              />
             </View>
           </ScrollView>
 
-          {/* INDIKATOR TITIK (DOTS) */}
           <View style={styles.paginationContainer}>
             <View
               style={[
@@ -349,15 +444,12 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* MODAL INFO DIRASAKAN (Balik Lagi) */}
       <InfoModal
         visible={infoVisibleDirasakan}
         onClose={() => setInfoVisibleDirasakan(false)}
         title="Gempabumi Terakhir Dirasakan"
         desc="Menampilkan kejadian gempa yang getarannya dirasakan oleh manusia dan dilaporkan di wilayah sekitar."
       />
-
-      {/* MODAL INFO TERDETEKSI (Balik Lagi) */}
       <InfoModal
         visible={infoVisibleTerdeteksi}
         onClose={() => setInfoVisibleTerdeteksi(false)}
@@ -365,7 +457,6 @@ export default function Home() {
         desc="Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia."
       />
 
-      {/* MODAL PETA GUNCANGAN */}
       <Modal visible={shakeMapVisible} transparent animationType="slide">
         <View style={styles.modalOverlayBottom}>
           <View
@@ -407,17 +498,24 @@ export default function Home() {
   );
 }
 
-// KOMPONEN PEMBANTU
+// === KOMPONEN CARD ===
+
 const DirasakanCard = ({
   data,
   onShakeMap,
   hasShakeMap,
+  onCardPress,
 }: {
   data: DirasakanQuake | null;
   onShakeMap: () => void;
   hasShakeMap: boolean;
+  onCardPress: () => void;
 }) => (
-  <View style={styles.mapCard}>
+  <TouchableOpacity
+    style={styles.mapCard}
+    activeOpacity={0.95}
+    onPress={onCardPress}
+  >
     <View style={styles.mapImageContainer}>
       <Image
         source={require("../../assets/images/navigation-map.png")}
@@ -426,29 +524,50 @@ const DirasakanCard = ({
       <View style={styles.mapButtons}>
         <TouchableOpacity
           style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
-          onPress={onShakeMap}
+          onPress={(e) => {
+            e.stopPropagation();
+            onShakeMap();
+          }}
           disabled={!hasShakeMap}
         >
           <Feather name="map" size={12} color="white" />
           <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.mapButton}>
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={(e) => e.stopPropagation()}
+        >
           <Feather name="share" size={12} color="white" />
           <Text style={styles.mapButtonText}>BAGIKAN</Text>
         </TouchableOpacity>
       </View>
     </View>
-    <View style={styles.metricsRow}>
-      <MetricItem
+
+    <View style={styles.statsTopRow}>
+      <StatItem
         icon="triangle-wave"
         value={data?.magnitude ?? "-"}
         label="Magnitudo"
       />
-      <MetricItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
-      <MetricItem icon="compass" value={data?.latText ?? "-"} label="LS" />
-      <MetricItem icon="compass" value={data?.lonText ?? "-"} label="BT" />
+      <View style={styles.statTopDivider} />
+      <StatItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
+      <View style={styles.statTopDivider} />
+      <StatItem
+        icon="compass-outline"
+        value={data?.latText ?? "-"}
+        label="LS"
+      />
+      <View style={styles.statTopDivider} />
+      <StatItem
+        icon="compass-outline"
+        value={data?.lonText ?? "-"}
+        label="BT"
+      />
     </View>
-    <View style={styles.details}>
+
+    <View style={styles.separator} />
+
+    <View style={styles.infoContent}>
       <DetailItem
         icon="location"
         label="Lokasi Gempa :"
@@ -462,85 +581,113 @@ const DirasakanCard = ({
       <DetailItem
         icon="walk-outline"
         label="Jarak :"
-        value={data ? `${data.distanceKm} km` : "-"}
+        value={data ? `${data.distanceKm} km dari lokasi Anda` : "-"}
       />
       {!!data?.felt && (
         <DetailItem
           icon="alert-circle-outline"
-          label="Wilayah Dirasakan (Skala MMI) :"
+          label="Wilayah Dirasakan :"
           value={data.felt}
         />
       )}
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
-const TerdeteksiCard = ({ data }: { data: TerdeteksiQuake | null }) => (
-  <View style={styles.mapCard}>
+const TerdeteksiCard = ({
+  data,
+  onCardPress,
+}: {
+  data: TerdeteksiQuake | null;
+  onCardPress: () => void;
+}) => (
+  <TouchableOpacity
+    style={styles.mapCard}
+    activeOpacity={0.95}
+    onPress={onCardPress}
+  >
     <View style={styles.mapImageContainer}>
       <Image
         source={require("../../assets/images/navigation-map.png")}
         style={styles.mapImage}
       />
       <View style={styles.mapButtons}>
-        <TouchableOpacity style={styles.mapButton}>
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={(e) => e.stopPropagation()}
+        >
           <Feather name="share" size={12} color="white" />
           <Text style={styles.mapButtonText}>BAGIKAN</Text>
         </TouchableOpacity>
       </View>
     </View>
-    <View style={styles.metricsRow}>
-      <MetricItem
+
+    <View style={styles.statsTopRow}>
+      <StatItem
         icon="triangle-wave"
         value={data?.magnitude ?? "-"}
         label="Magnitudo"
       />
-      <MetricItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
-      <MetricItem icon="compass" value={data?.latText ?? "-"} label="LS" />
-      <MetricItem icon="compass" value={data?.lonText ?? "-"} label="BT" />
+      <View style={styles.statTopDivider} />
+      <StatItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
+      <View style={styles.statTopDivider} />
+      <StatItem
+        icon="compass-outline"
+        value={data?.latText ?? "-"}
+        label="LS"
+      />
+      <View style={styles.statTopDivider} />
+      <StatItem
+        icon="compass-outline"
+        value={data?.lonText ?? "-"}
+        label="BT"
+      />
     </View>
-    <View style={styles.details}>
+
+    <View style={styles.separator} />
+
+    <View style={styles.infoContent}>
       <DetailItem
         icon="location"
         label="Lokasi Gempa :"
         value={data?.wilayah ?? "-"}
       />
       <DetailItem
-        icon="calendar-outline"
+        icon="time-outline"
         label="Tanggal :"
         value={data?.tanggal ?? "-"}
       />
       <DetailItem icon="time-outline" label="Jam :" value={data?.jam ?? "-"} />
       {!!data?.fase && (
-        <DetailItem icon="alert-circle-outline" label="Fase :" value={data.fase} />
+        <DetailItem
+          icon="alert-circle-outline"
+          label="Fase :"
+          value={data.fase}
+        />
       )}
     </View>
-  </View>
+  </TouchableOpacity>
 );
 
-const MetricItem = ({ icon, value, label }: any) => (
-  <View style={styles.metric}>
-    {icon === "triangle-wave" ? (
-      <MaterialCommunityIcons name={icon} size={20} color="#1E6F9F" />
-    ) : (
-      <Feather name={icon} size={20} color="#1E6F9F" />
-    )}
-    <Text style={styles.metricValue}>{value}</Text>
-    <Text style={styles.metricLabel}>{label}</Text>
+// === KOMPONEN ITEM ===
+const StatItem = ({ icon, value, label }: any) => (
+  <View style={styles.statTopItem}>
+    <MaterialCommunityIcons name={icon} size={20} color="#0369A1" />
+    <Text style={styles.statTopValue}>{value}</Text>
+    <Text style={styles.statTopLabel}>{label}</Text>
   </View>
 );
 
 const DetailItem = ({ icon, label, value }: any) => (
-  <View style={styles.detailItem}>
-    <Ionicons name={icon} size={22} color="#1E6F9F" />
-    <View style={styles.detailTexts}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+  <View style={styles.infoRow}>
+    <Ionicons name={icon} size={18} color="#1E6F9F" style={styles.infoIcon} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
     </View>
   </View>
 );
 
-// KOMPONEN MODAL INFO (Gampang di-reuse)
 const InfoModal = ({ visible, onClose, title, desc }: any) => (
   <Modal
     visible={visible}
@@ -566,6 +713,7 @@ const InfoModal = ({ visible, onClose, title, desc }: any) => (
   </Modal>
 );
 
+// === STYLES ===
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   greetingRow: {
@@ -613,7 +761,6 @@ const styles = StyleSheet.create({
   statItem: { alignItems: "center" },
   statLabel: { fontSize: 10, color: "#777" },
   statValue: { fontWeight: "bold" },
-
   bottomSection: {
     backgroundColor: "#0C4A6E",
     marginTop: -1,
@@ -628,8 +775,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sectionTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", flex: 1 },
-
-  // PAGINATION DOTS STYLE
   paginationContainer: {
     flexDirection: "row",
     justifyContent: "center",
@@ -650,7 +795,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingBottom: 15,
     marginBottom: 10,
+    height: 490,
+    overflow: "hidden",
   },
+
   mapImageContainer: { position: "relative" },
   mapImage: {
     width: "100%",
@@ -677,31 +825,35 @@ const styles = StyleSheet.create({
   },
   mapButtonDisabled: { backgroundColor: "#94a3b8" },
   mapButtonText: { color: "#fff", fontSize: 10 },
-  metricsRow: {
+
+  statsTopRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginVertical: 15,
+    marginBottom: 11,
+    marginTop: 15,
   },
-  metric: { marginTop: 8, alignItems: "center" },
-  metricValue: { fontWeight: "bold", fontSize: 12 },
-  metricLabel: { fontSize: 12, color: "#000" },
-  details: { paddingHorizontal: 15, paddingTop: 5 },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    gap: 10,
-  },
-  detailTexts: { flex: 1 },
-  detailLabel: { fontSize: 13, color: "#555" },
-  detailValue: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#000",
-    marginTop: 1,
+  statTopItem: { flex: 1, alignItems: "center", gap: 2 },
+  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000" },
+  statTopLabel: { fontSize: 12, color: "#000", fontWeight: "500" },
+  statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
+  separator: {
+    height: 2,
+    backgroundColor: "#0369A1",
+    marginBottom: 11,
+    marginHorizontal: 15,
   },
 
-  // MODAL STYLES (Balik Lagi)
+  infoContent: { paddingHorizontal: 15 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    gap: 10,
+  },
+  infoIcon: { marginTop: 2 },
+  infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
+  infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -735,7 +887,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
   modalOverlayBottom: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.7)",
