@@ -1,5 +1,5 @@
 import EarthquakeTabBar, {
-    type EarthquakeTab,
+  type EarthquakeTab,
 } from "@/components/earthquake-tab-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -7,8 +7,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
-    GempaDirasakanHistoryContent,
-    GempaTerdeteksiHistoryContent,
+  GempaDirasakanHistoryContent,
+  GempaTerdeteksiHistoryContent,
 } from "./components";
 
 export default function History() {
@@ -130,8 +130,12 @@ export default function History() {
   }, [clearSelectionParams]);
 
   const handleListPress = useCallback(() => {
+    router.push("/main-menu/list-gempa");
+  }, [router]);
+
+  const handleFilterPress = useCallback(() => {
     router.push({
-      pathname: "/main-menu/list-gempa",
+      pathname: "/main-menu/filter-gempa-screen",
       params: {
         tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
       },
@@ -175,6 +179,7 @@ export default function History() {
                 styles.sidePillRightContent,
               ]}
               activeOpacity={0.85}
+              onPress={handleFilterPress}
             >
               <Ionicons name="chevron-back" size={17} color="#FFFFFF" />
               <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
@@ -185,7 +190,7 @@ export default function History() {
         </View>
       </View>
     ),
-    [activeTab, handleListPress, handleTabPress, loading],
+    [activeTab, handleListPress, handleTabPress, handleFilterPress, loading],
   );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";

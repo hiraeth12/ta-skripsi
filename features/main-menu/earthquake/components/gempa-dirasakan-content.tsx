@@ -2,17 +2,17 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import type MapView from "react-native-maps";
 

@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
@@ -58,7 +58,10 @@ function haversineDistanceKm(
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(radLat1) *
+      Math.cos(radLat2) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c;
@@ -67,14 +70,15 @@ function haversineDistanceKm(
 export default function ListGempaPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const mode: ListMode = params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const mode: ListMode =
+    params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const title = useMemo(
     () =>
       mode === "dirasakan"
-        ? "Lis Gempa Dirasakan • Jawa Barat"
+        ? "List Gempa Dirasakan • Jawa Barat"
         : "List Gempa Terdeteksi • Jawa Barat",
     [mode],
   );
@@ -107,7 +111,8 @@ export default function ListGempaPage() {
     async function loadItems() {
       setLoading(true);
       try {
-        const apiUrl = mode === "dirasakan" ? DIRASAKAN_API_URL : TERDETEKSI_API_URL;
+        const apiUrl =
+          mode === "dirasakan" ? DIRASAKAN_API_URL : TERDETEKSI_API_URL;
         if (!apiUrl) return;
 
         if (mode === "dirasakan") {
@@ -120,13 +125,21 @@ export default function ListGempaPage() {
           try {
             const parsedJson = JSON.parse(raw);
             const infoRaw = parsedJson?.info;
-            candidates = Array.isArray(infoRaw) ? infoRaw : infoRaw ? [infoRaw] : [];
+            candidates = Array.isArray(infoRaw)
+              ? infoRaw
+              : infoRaw
+                ? [infoRaw]
+                : [];
             globalIdentifier = String(parsedJson?.identifier ?? "");
           } catch {
             const parser = new XMLParser({ ignoreAttributes: false });
             const parsedXml = parser.parse(raw);
             const infoRaw = parsedXml?.alert?.info;
-            candidates = Array.isArray(infoRaw) ? infoRaw : infoRaw ? [infoRaw] : [];
+            candidates = Array.isArray(infoRaw)
+              ? infoRaw
+              : infoRaw
+                ? [infoRaw]
+                : [];
             globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
           }
 
@@ -136,7 +149,8 @@ export default function ListGempaPage() {
               const [lonStr, latStr] = coordStr.split(",");
               const latitude = parseFloat(latStr);
               const longitude = parseFloat(lonStr);
-              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+              if (Number.isNaN(latitude) || Number.isNaN(longitude))
+                return null;
 
               const distanceKm = haversineDistanceKm(
                 -6.9175,
@@ -163,7 +177,9 @@ export default function ListGempaPage() {
                 jam: String(candidate?.time ?? ""),
                 kedalaman: String(candidate?.depth ?? ""),
                 felt: String(candidate?.felt ?? ""),
-                shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
+                shakemap: candidate?.shakemap
+                  ? String(candidate.shakemap)
+                  : null,
               };
             })
             .filter((item): item is ListItem => Boolean(item));
@@ -190,7 +206,8 @@ export default function ListGempaPage() {
               const coords = feature?.geometry?.coordinates;
               const longitude = parseFloat(coords?.[0] ?? "0");
               const latitude = parseFloat(coords?.[1] ?? "0");
-              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+              if (Number.isNaN(latitude) || Number.isNaN(longitude))
+                return null;
 
               const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
               const jam = (jamRaw ?? "").split(".")[0];
@@ -242,6 +259,18 @@ export default function ListGempaPage() {
 
   return (
     <View style={styles.container}>
+      {/* KUNCI PERBAIKAN ANIMASI: 
+        Memaksa animasi selalu "slide_from_left" (masuk dari kiri) 
+        tidak peduli mode apa yang sedang aktif.
+      */}
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          animation: "slide_from_left", // Selalu muncul dari kiri ke kanan
+          presentation: "transparentModal",
+        }}
+      />
+
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>{title}</Text>
         <TouchableOpacity
@@ -249,7 +278,7 @@ export default function ListGempaPage() {
           activeOpacity={0.85}
           onPress={() => router.back()}
         >
-          <Ionicons name="chevron-forward" size={16} color="#0C4A6E" />
+          <Ionicons name="close" size={20} color="#0C4A6E" />
         </TouchableOpacity>
       </View>
 
@@ -272,10 +301,13 @@ export default function ListGempaPage() {
           <View key={item.id} style={styles.itemCard}>
             <View style={styles.magnitudeBubble}>
               <Text style={styles.magnitudeText}>{item.magnitude || "-"}</Text>
+              <Text style={styles.magnitudeLabel}>Mag</Text>
             </View>
 
             <View style={styles.infoColumn}>
-              <Text style={styles.locationText}>{item.lokasi || "-"}</Text>
+              <Text style={styles.locationText} numberOfLines={2}>
+                {item.lokasi || "-"}
+              </Text>
               <Text style={styles.timeText}>{item.waktu || "-"}</Text>
               <Text style={styles.distanceText}>{item.jarak}</Text>
             </View>
@@ -285,7 +317,7 @@ export default function ListGempaPage() {
               activeOpacity={0.85}
               onPress={() => openHistoryForItem(item)}
             >
-              <Ionicons name="chevron-forward" size={17} color="#FFFFFF" />
+              <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         ))}
@@ -324,7 +356,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scrollContent: {
-    gap: 10,
+    gap: 8,
     paddingBottom: 24,
   },
   loadingRow: {
@@ -348,25 +380,30 @@ const styles = StyleSheet.create({
   itemCard: {
     backgroundColor: "#EDEDED",
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   magnitudeBubble: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: "#D97706",
     alignItems: "center",
     justifyContent: "center",
   },
   magnitudeText: {
     color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "700",
-    lineHeight: 38,
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  magnitudeLabel: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "500",
+    marginTop: -2,
   },
   infoColumn: {
     flex: 1,
@@ -374,22 +411,22 @@ const styles = StyleSheet.create({
   },
   locationText: {
     color: "#111827",
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: "700",
   },
   timeText: {
-    color: "#111827",
-    fontSize: 16,
+    color: "#4B5563",
+    fontSize: 12,
     fontWeight: "500",
   },
   distanceText: {
-    color: "#111827",
-    fontSize: 16,
+    color: "#4B5563",
+    fontSize: 12,
     fontWeight: "500",
   },
   itemAction: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderRadius: 6,
     backgroundColor: "#0891B2",
     alignItems: "center",
