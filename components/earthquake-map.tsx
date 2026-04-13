@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import MapView, { Marker, UrlTile } from "react-native-maps";
+import MapView, { Circle, Marker, Polygon, UrlTile } from "react-native-maps";
 
 import { DEFAULT_MAP_REGION } from "../constants/map";
 
@@ -29,6 +29,27 @@ type MarkerCoordinate = {
   depth?: number | string;
 };
 
+type RingCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type HighlightPolygon = {
+  id: string;
+  color: "orange" | "red";
+  rings: RingCoordinate[][];
+};
+
+type WaveOverlay = {
+  id: string;
+  center: {
+    latitude: number;
+    longitude: number;
+  };
+  pWaveRadiusMeters: number;
+  sWaveRadiusMeters: number;
+};
+
 type Props = {
   mapRef: React.RefObject<MapView | null>;
   initialRegion?: MapRegion;
@@ -40,6 +61,8 @@ type Props = {
   onMarkerPressIndex?: (index: number) => void;
   viewportPaddingRatio?: number;
   onViewportBoundsChange?: (bounds: ViewportBounds) => void;
+  highlightPolygons?: HighlightPolygon[];
+  waveOverlays?: WaveOverlay[];
 };
 
 type DotMarkerProps = {
@@ -106,6 +129,72 @@ function areBoundsEqual(a: ViewportBounds, b: ViewportBounds): boolean {
     a.east === b.east &&
     a.west === b.west
   );
+}
+
+function areRingsEqual(a: RingCoordinate[][], b: RingCoordinate[][]): boolean {
+  if (a.length !== b.length) return false;
+  for (let ringIndex = 0; ringIndex < a.length; ringIndex += 1) {
+    const ringA = a[ringIndex];
+    const ringB = b[ringIndex];
+    if (ringA.length !== ringB.length) return false;
+
+    for (let pointIndex = 0; pointIndex < ringA.length; pointIndex += 1) {
+      const pointA = ringA[pointIndex];
+      const pointB = ringB[pointIndex];
+      if (
+        pointA.latitude !== pointB.latitude ||
+        pointA.longitude !== pointB.longitude
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function areHighlightPolygonsEqual(
+  previous?: HighlightPolygon[],
+  next?: HighlightPolygon[],
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return !previous && !next;
+  if (previous.length !== next.length) return false;
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const prevPolygon = previous[index];
+    const nextPolygon = next[index];
+    if (
+      prevPolygon.id !== nextPolygon.id ||
+      prevPolygon.color !== nextPolygon.color ||
+      !areRingsEqual(prevPolygon.rings, nextPolygon.rings)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areWaveOverlaysEqual(previous?: WaveOverlay[], next?: WaveOverlay[]): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return !previous && !next;
+  if (previous.length !== next.length) return false;
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const prevWave = previous[index];
+    const nextWave = next[index];
+    if (
+      prevWave.id !== nextWave.id ||
+      prevWave.center.latitude !== nextWave.center.latitude ||
+      prevWave.center.longitude !== nextWave.center.longitude ||
+      prevWave.pWaveRadiusMeters !== nextWave.pWaveRadiusMeters ||
+      prevWave.sWaveRadiusMeters !== nextWave.sWaveRadiusMeters
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function calculateViewportBounds(
@@ -191,6 +280,8 @@ const EarthquakeMap = memo(function EarthquakeMap({
   onMarkerPressIndex,
   viewportPaddingRatio = 0.1,
   onViewportBoundsChange,
+  highlightPolygons,
+  waveOverlays,
 }: Props) {
   const hasMultipleMarkers = useMemo(
     () => Array.isArray(markerCoordinates) && markerCoordinates.length > 0,
@@ -206,6 +297,33 @@ const EarthquakeMap = memo(function EarthquakeMap({
   const [viewportBounds, setViewportBounds] = useState<ViewportBounds>(() =>
     calculateViewportBounds(resolvedInitialRegion, viewportPaddingRatio),
   );
+  const [innerWaveProgress, setInnerWaveProgress] = useState(0);
+
+  useEffect(() => {
+    if (!waveOverlays || waveOverlays.length === 0) {
+      setInnerWaveProgress(0);
+      return;
+    }
+
+    let frameId = 0;
+    const startedAt = Date.now();
+    const durationMs = 2200;
+
+    const animate = () => {
+      const elapsedMs = Date.now() - startedAt;
+      const phase = (elapsedMs % durationMs) / durationMs;
+      setInnerWaveProgress(phase);
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+
+    return () => {
+      if (frameId) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [waveOverlays]);
 
   useEffect(() => {
     if (!shouldTrackViewport) return;
@@ -317,6 +435,56 @@ const EarthquakeMap = memo(function EarthquakeMap({
     );
   }, [isMarkerVisible, onMarkerPress, temporaryMarkerCoordinate]);
 
+  const waveOverlayNodes = useMemo(() => {
+    if (!waveOverlays || waveOverlays.length === 0) return null;
+
+    return waveOverlays.map((wave) => (
+      <React.Fragment key={`wave-${wave.id}`}>
+        <Circle
+          center={wave.center}
+          radius={wave.pWaveRadiusMeters}
+          fillColor="rgba(255, 0, 0, 0.0)"
+          strokeColor="rgba(255, 0, 0, 0.95)"
+          strokeWidth={3}
+        />
+        {wave.sWaveRadiusMeters > 0 && (
+          <Circle
+            center={wave.center}
+            radius={wave.sWaveRadiusMeters * (0.1 + innerWaveProgress * 0.9)}
+            fillColor={`rgba(255, 96, 120, ${Math.max(0, 0.18 * (1 - innerWaveProgress)).toFixed(3)})`}
+            strokeColor={`rgba(255, 64, 96, ${Math.max(0, 0.95 * (1 - innerWaveProgress)).toFixed(3)})`}
+            strokeWidth={2}
+          />
+        )}
+      </React.Fragment>
+    ));
+  }, [innerWaveProgress, waveOverlays]);
+
+  const highlightPolygonNodes = useMemo(() => {
+    if (!highlightPolygons || highlightPolygons.length === 0) return null;
+
+    return highlightPolygons.flatMap((polygon) => {
+      const fillColor =
+        polygon.color === "red"
+          ? "rgba(220, 38, 38, 0.35)"
+          : "rgba(249, 115, 22, 0.28)";
+      const strokeColor =
+        polygon.color === "red"
+          ? "rgba(185, 28, 28, 0.85)"
+          : "rgba(194, 65, 12, 0.85)";
+
+      return polygon.rings.map((ring, ringIndex) => (
+        <Polygon
+          key={`${polygon.id}-${ringIndex}`}
+          coordinates={ring}
+          fillColor={fillColor}
+          strokeColor={strokeColor}
+          strokeWidth={0.8}
+        />
+      ));
+    });
+  }, [highlightPolygons]);
+
   const handleMapPress = useCallback(() => {
     onMapPress?.();
   }, [onMapPress]);
@@ -341,6 +509,7 @@ const EarthquakeMap = memo(function EarthquakeMap({
       style={styles.map}
       initialRegion={resolvedInitialRegion}
       mapType="none"
+      toolbarEnabled={false}
       rotateEnabled={false}
       showsCompass={false}
       onPress={handleMapPress}
@@ -354,6 +523,8 @@ const EarthquakeMap = memo(function EarthquakeMap({
         flipY={false}
         tileSize={256}
       />
+      {highlightPolygonNodes}
+      {waveOverlayNodes}
       {singleMarkerNode}
       {multipleMarkerNodes}
       {temporaryMarkerNode}
@@ -368,6 +539,12 @@ const EarthquakeMap = memo(function EarthquakeMap({
     return false;
   }
   if (prevProps.onViewportBoundsChange !== nextProps.onViewportBoundsChange) {
+    return false;
+  }
+  if (!areHighlightPolygonsEqual(prevProps.highlightPolygons, nextProps.highlightPolygons)) {
+    return false;
+  }
+  if (!areWaveOverlaysEqual(prevProps.waveOverlays, nextProps.waveOverlays)) {
     return false;
   }
 
