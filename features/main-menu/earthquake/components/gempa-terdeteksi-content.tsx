@@ -1,12 +1,12 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import type MapView from "react-native-maps";
 

@@ -1,13 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    InteractionManager,
-    PanResponder,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  AppState,
+  InteractionManager,
+  PanResponder,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import type MapView from "react-native-maps";
 
@@ -85,7 +85,8 @@ export function GempaTerdeteksiHistoryContent({
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const [temporarySelection, setTemporarySelection] = useState<QuakeItem | null>(null);
+  const [temporarySelection, setTemporarySelection] =
+    useState<QuakeItem | null>(null);
 
   const selectedEventIdRef = useRef<string | null>(null);
   const latestDataSignature = useRef<string | null>(null);
@@ -169,36 +170,42 @@ export function GempaTerdeteksiHistoryContent({
     ]).start();
   }, [opacity, translateY]);
 
-  const dismissCard = useCallback((callback?: () => void) => {
-    if (showCardRef.current) {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowCard(false);
-        temporarySelectionRef.current = null;
-        setTemporarySelection(null);
+  const dismissCard = useCallback(
+    (callback?: () => void) => {
+      if (showCardRef.current) {
+        Animated.parallel([
+          Animated.timing(translateY, {
+            toValue: 600,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowCard(false);
+          temporarySelectionRef.current = null;
+          setTemporarySelection(null);
+          callback?.();
+        });
+      } else {
         callback?.();
-      });
-    } else {
-      callback?.();
-    }
-  }, [opacity, translateY]);
+      }
+    },
+    [opacity, translateY],
+  );
 
-  const onPressMarker = useCallback((index: number) => {
-    if (!quakes[index]) return;
-    selectedEventIdRef.current = quakes[index].eventId;
-    setSelectedIndex(index);
-    openCard();
-  }, [openCard, quakes]);
+  const onPressMarker = useCallback(
+    (index: number) => {
+      if (!quakes[index]) return;
+      selectedEventIdRef.current = quakes[index].eventId;
+      setSelectedIndex(index);
+      openCard();
+    },
+    [openCard, quakes],
+  );
 
   const markerCoordinates = useMemo(
     () =>
@@ -232,7 +239,8 @@ export function GempaTerdeteksiHistoryContent({
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
-    if (lastExternalSelectionIdRef.current === externalSelection.eventId) return;
+    if (lastExternalSelectionIdRef.current === externalSelection.eventId)
+      return;
 
     const targetIndex = quakes.findIndex(
       (quake) => quake.eventId === externalSelection.eventId,
