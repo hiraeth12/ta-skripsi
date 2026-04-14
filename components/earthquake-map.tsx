@@ -1,11 +1,12 @@
+import Mapbox from "@rnmapbox/maps";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import MapView, { Circle, Marker, Polygon, UrlTile } from "react-native-maps";
 
+import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
 
-const CARTO_TILE_URL =
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "";
+Mapbox.setAccessToken(MAPBOX_TOKEN);
 
 type MapRegion = {
   latitude: number;
@@ -51,7 +52,7 @@ type WaveOverlay = {
 };
 
 type Props = {
-  mapRef: React.RefObject<MapView | null>;
+  mapRef: React.MutableRefObject<MapViewType | null>;
   initialRegion?: MapRegion;
   markerCoordinate?: MarkerCoordinate | null;
   markerCoordinates?: MarkerCoordinate[];
@@ -212,6 +213,12 @@ function calculateViewportBounds(
   };
 }
 
+function getZoomLevelFromRegion(region: MapRegion): number {
+  const safeDelta = Math.max(region.latitudeDelta, 0.0001);
+  const rawZoom = Math.log2(360 / safeDelta);
+  return Math.max(2, Math.min(rawZoom, 16));
+}
+
 function isCoordinateInBounds(
   coordinate: MarkerCoordinate,
   bounds: ViewportBounds,
@@ -234,55 +241,50 @@ const DotMarker = memo(function DotMarker({
   dotColor,
   onPress,
 }: DotMarkerProps) {
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-  const hitSize = Math.max(44, dotSize + 18);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => setTracksViewChanges(false), 300);
-    return () => clearTimeout(timeoutId);
-  }, []);
-
   return (
-    <Marker
+    <Mapbox.PointAnnotation
       key={markerKey}
-      coordinate={coordinate}
-      anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={tracksViewChanges}
-      zIndex={10}
-      onPress={onPress}
+      id={markerKey}
+      coordinate={[coordinate.longitude, coordinate.latitude]}
+      onSelected={onPress}
     >
-      <View collapsable={false} style={[styles.quakeHitArea, { width: hitSize, height: hitSize }]}>
-        <View
-          collapsable={false}
-          style={[
-            styles.quakeDot,
-            {
-              width: dotSize,
-              height: dotSize,
-              borderRadius: dotSize / 2,
-              backgroundColor: dotColor,
-            },
-          ]}
-        />
-      </View>
-    </Marker>
+      <View
+        style={[
+          styles.quakeDot,
+          {
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: dotColor,
+          },
+        ]}
+      />
+    </Mapbox.PointAnnotation>
   );
 });
 
-const EarthquakeMap = memo(function EarthquakeMap({
-  mapRef,
-  initialRegion,
-  markerCoordinate,
-  markerCoordinates,
-  temporaryMarkerCoordinate,
-  onMapPress,
-  onMarkerPress,
-  onMarkerPressIndex,
-  viewportPaddingRatio = 0.1,
-  onViewportBoundsChange,
-  highlightPolygons,
-  waveOverlays,
-}: Props) {
+const EarthquakeMap = memo(
+  function EarthquakeMap({
+    mapRef,
+    initialRegion,
+    markerCoordinate,
+    markerCoordinates,
+    temporaryMarkerCoordinate,
+    onMapPress,
+    onMarkerPress,
+    onMarkerPressIndex,
+    viewportPaddingRatio = 0.1,
+    onViewportBoundsChange,
+    highlightPolygons,
+    waveOverlays,
+  }: Props) {
+  const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
+  const cameraRef = React.useRef<Mapbox.Camera | null>(null);
+  const pendingCameraMoveRef = React.useRef<{
+    region: MapRegion;
+    duration: number;
+  } | null>(null);
+
   const hasMultipleMarkers = useMemo(
     () => Array.isArray(markerCoordinates) && markerCoordinates.length > 0,
     [markerCoordinates],
@@ -297,6 +299,7 @@ const EarthquakeMap = memo(function EarthquakeMap({
   const [viewportBounds, setViewportBounds] = useState<ViewportBounds>(() =>
     calculateViewportBounds(resolvedInitialRegion, viewportPaddingRatio),
   );
+  const [hasMeasuredViewport, setHasMeasuredViewport] = useState(false);
   const [innerWaveProgress, setInnerWaveProgress] = useState(0);
 
   useEffect(() => {
@@ -334,7 +337,48 @@ const EarthquakeMap = memo(function EarthquakeMap({
     setViewportBounds((previousBounds) =>
       areBoundsEqual(previousBounds, nextBounds) ? previousBounds : nextBounds,
     );
+    setHasMeasuredViewport(false);
   }, [resolvedInitialRegion, shouldTrackViewport, viewportPaddingRatio]);
+
+  const applyCameraMove = useCallback((region: MapRegion, duration: number) => {
+    if (!cameraRef.current) return false;
+    if (!isFinite(region.latitude) || !isFinite(region.longitude)) return false;
+
+    cameraRef.current.setCamera({
+      centerCoordinate: [region.longitude, region.latitude],
+      zoomLevel: getZoomLevelFromRegion(region),
+      animationDuration: duration,
+      animationMode: "easeTo",
+    });
+    return true;
+  }, []);
+
+  const flushPendingCameraMove = useCallback(() => {
+    const pending = pendingCameraMoveRef.current;
+    if (!pending) return;
+
+    const applied = applyCameraMove(pending.region, pending.duration);
+    if (applied) {
+      pendingCameraMoveRef.current = null;
+    }
+  }, [applyCameraMove]);
+
+  const animateToRegion = useCallback((region: MapRegion, duration = 800) => {
+    const applied = applyCameraMove(region, duration);
+    if (!applied) {
+      pendingCameraMoveRef.current = { region, duration };
+    }
+  }, [applyCameraMove]);
+
+  useEffect(() => {
+    mapRef.current = {
+      animateToRegion,
+    };
+
+    return () => {
+      mapRef.current = null;
+    };
+  }, [animateToRegion, mapRef]);
 
   const indexedMarkerCoordinates = useMemo(
     () =>
@@ -347,20 +391,20 @@ const EarthquakeMap = memo(function EarthquakeMap({
 
   const visibleMarkerEntries = useMemo(
     () => {
-      if (!shouldTrackViewport) return indexedMarkerCoordinates;
+      if (!shouldTrackViewport || !hasMeasuredViewport) return indexedMarkerCoordinates;
       return indexedMarkerCoordinates.filter(({ coordinate }) =>
         isCoordinateInBounds(coordinate, viewportBounds),
       );
     },
-    [indexedMarkerCoordinates, shouldTrackViewport, viewportBounds],
+    [hasMeasuredViewport, indexedMarkerCoordinates, shouldTrackViewport, viewportBounds],
   );
 
   const isMarkerVisible = useCallback(
     (coordinate: MarkerCoordinate) => {
-      if (!shouldTrackViewport) return true;
+      if (!shouldTrackViewport || !hasMeasuredViewport) return true;
       return isCoordinateInBounds(coordinate, viewportBounds);
     },
-    [shouldTrackViewport, viewportBounds],
+    [hasMeasuredViewport, shouldTrackViewport, viewportBounds],
   );
 
   const singleMarkerNode = useMemo(() => {
@@ -413,9 +457,6 @@ const EarthquakeMap = memo(function EarthquakeMap({
 
   const temporaryMarkerNode = useMemo(() => {
     if (!temporaryMarkerCoordinate) return null;
-    if (!isMarkerVisible(temporaryMarkerCoordinate)) {
-      return null;
-    }
 
     const depthSource =
       temporaryMarkerCoordinate.depthKm ?? temporaryMarkerCoordinate.depth;
@@ -433,130 +474,154 @@ const EarthquakeMap = memo(function EarthquakeMap({
         onPress={onMarkerPress}
       />
     );
-  }, [isMarkerVisible, onMarkerPress, temporaryMarkerCoordinate]);
+  }, [onMarkerPress, temporaryMarkerCoordinate]);
 
-  const waveOverlayNodes = useMemo(() => {
-    if (!waveOverlays || waveOverlays.length === 0) return null;
+  const highlightPolygonGeometries = useMemo(() => {
+    if (!highlightPolygons || highlightPolygons.length === 0) return [];
 
-    return waveOverlays.map((wave) => (
-      <React.Fragment key={`wave-${wave.id}`}>
-        <Circle
-          center={wave.center}
-          radius={wave.pWaveRadiusMeters}
-          fillColor="rgba(255, 0, 0, 0.0)"
-          strokeColor="rgba(255, 0, 0, 0.95)"
-          strokeWidth={3}
-        />
-        {wave.sWaveRadiusMeters > 0 && (
-          <Circle
-            center={wave.center}
-            radius={wave.sWaveRadiusMeters * (0.1 + innerWaveProgress * 0.9)}
-            fillColor={`rgba(255, 96, 120, ${Math.max(0, 0.18 * (1 - innerWaveProgress)).toFixed(3)})`}
-            strokeColor={`rgba(255, 64, 96, ${Math.max(0, 0.95 * (1 - innerWaveProgress)).toFixed(3)})`}
-            strokeWidth={2}
-          />
-        )}
-      </React.Fragment>
-    ));
-  }, [innerWaveProgress, waveOverlays]);
-
-  const highlightPolygonNodes = useMemo(() => {
-    if (!highlightPolygons || highlightPolygons.length === 0) return null;
-
-    return highlightPolygons.flatMap((polygon) => {
-      const fillColor =
-        polygon.color === "red"
-          ? "rgba(220, 38, 38, 0.35)"
-          : "rgba(249, 115, 22, 0.28)";
-      const strokeColor =
-        polygon.color === "red"
-          ? "rgba(185, 28, 28, 0.85)"
-          : "rgba(194, 65, 12, 0.85)";
-
-      return polygon.rings.map((ring, ringIndex) => (
-        <Polygon
-          key={`${polygon.id}-${ringIndex}`}
-          coordinates={ring}
-          fillColor={fillColor}
-          strokeColor={strokeColor}
-          strokeWidth={0.8}
-        />
-      ));
-    });
+    return highlightPolygons.map((polygon) => ({
+      id: polygon.id,
+      color: polygon.color,
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: polygon.rings.map((ring) =>
+          ring.map((coord) => [coord.longitude, coord.latitude]),
+        ),
+      },
+    }));
   }, [highlightPolygons]);
 
-  const handleMapPress = useCallback(() => {
-    onMapPress?.();
-  }, [onMapPress]);
-
-  const handleRegionChangeComplete = useCallback(
-    (region: MapRegion) => {
-      if (!shouldTrackViewport) return;
-      const nextBounds = calculateViewportBounds(region, viewportPaddingRatio);
-      setViewportBounds((previousBounds) =>
-        areBoundsEqual(previousBounds, nextBounds)
-          ? previousBounds
-          : nextBounds,
-      );
-      onViewportBoundsChange?.(nextBounds);
+  const handleMapPress = useCallback(
+    (feature: any) => {
+      onMapPress?.();
     },
-    [onViewportBoundsChange, shouldTrackViewport, viewportPaddingRatio],
+    [onMapPress],
   );
 
-  return (
-    <MapView
-      ref={mapRef}
-      style={styles.map}
-      initialRegion={resolvedInitialRegion}
-      mapType="none"
-      toolbarEnabled={false}
-      rotateEnabled={false}
-      showsCompass={false}
-      onPress={handleMapPress}
-      onRegionChangeComplete={
-        shouldTrackViewport ? handleRegionChangeComplete : undefined
+  const handleRegionDidChange = useCallback(
+    async (feature: any) => {
+      flushPendingCameraMove();
+
+      if (!shouldTrackViewport) return;
+
+      try {
+        const bounds = await mapViewRef.current?.getVisibleBounds();
+        if (bounds && bounds.length === 2) {
+          const [cornerA, cornerB] = bounds;
+          const minLat = Math.min(cornerA[1], cornerB[1]);
+          const maxLat = Math.max(cornerA[1], cornerB[1]);
+          const minLon = Math.min(cornerA[0], cornerB[0]);
+          const maxLon = Math.max(cornerA[0], cornerB[0]);
+          const nextBounds: ViewportBounds = {
+            south: minLat,
+            west: minLon,
+            north: maxLat,
+            east: maxLon,
+          };
+
+          setHasMeasuredViewport(true);
+          setViewportBounds((previousBounds) =>
+            areBoundsEqual(previousBounds, nextBounds)
+              ? previousBounds
+              : nextBounds,
+          );
+          onViewportBoundsChange?.(nextBounds);
+        }
+      } catch (error) {
+        console.log("Error getting visible bounds:", error);
       }
-    >
-      <UrlTile
-        urlTemplate={CARTO_TILE_URL}
-        maximumZ={19}
-        flipY={false}
-        tileSize={256}
-      />
-      {highlightPolygonNodes}
-      {waveOverlayNodes}
-      {singleMarkerNode}
-      {multipleMarkerNodes}
-      {temporaryMarkerNode}
-    </MapView>
+    },
+    [flushPendingCameraMove, shouldTrackViewport, onViewportBoundsChange],
   );
-}, (prevProps, nextProps) => {
-  if (prevProps.mapRef !== nextProps.mapRef) return false;
-  if (prevProps.onMapPress !== nextProps.onMapPress) return false;
-  if (prevProps.onMarkerPress !== nextProps.onMarkerPress) return false;
-  if (prevProps.onMarkerPressIndex !== nextProps.onMarkerPressIndex) return false;
-  if (prevProps.viewportPaddingRatio !== nextProps.viewportPaddingRatio) {
-    return false;
-  }
-  if (prevProps.onViewportBoundsChange !== nextProps.onViewportBoundsChange) {
-    return false;
-  }
-  if (!areHighlightPolygonsEqual(prevProps.highlightPolygons, nextProps.highlightPolygons)) {
-    return false;
-  }
-  if (!areWaveOverlaysEqual(prevProps.waveOverlays, nextProps.waveOverlays)) {
-    return false;
-  }
 
-  const prevRegion = prevProps.initialRegion ?? DEFAULT_MAP_REGION;
-  const nextRegion = nextProps.initialRegion ?? DEFAULT_MAP_REGION;
-  if (
-    prevRegion.latitude !== nextRegion.latitude ||
-    prevRegion.longitude !== nextRegion.longitude ||
-    prevRegion.latitudeDelta !== nextRegion.latitudeDelta ||
-    prevRegion.longitudeDelta !== nextRegion.longitudeDelta
-  ) {
-    return false;
+  const handleDidFinishLoadingMap = useCallback(() => {
+    flushPendingCameraMove();
+  }, [flushPendingCameraMove]);
+
+    return (
+      <Mapbox.MapView
+        ref={mapViewRef}
+        style={styles.map}
+        styleURL="mapbox://styles/mapbox/streets-v12"
+        onPress={handleMapPress}
+        onDidFinishLoadingMap={handleDidFinishLoadingMap}
+        onMapIdle={handleRegionDidChange}
+      >
+        <Mapbox.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [
+              resolvedInitialRegion.longitude,
+              resolvedInitialRegion.latitude,
+            ],
+            zoomLevel: getZoomLevelFromRegion(resolvedInitialRegion),
+          }}
+        />
+        {singleMarkerNode}
+        {multipleMarkerNodes}
+        {temporaryMarkerNode}
+
+        {highlightPolygonGeometries.map((polygon) => (
+          <Mapbox.ShapeSource
+            key={`source-${polygon.id}`}
+            id={`source-${polygon.id}`}
+            shape={{
+              type: "Feature",
+              properties: {},
+              geometry: polygon.geometry,
+            }}
+          >
+            <Mapbox.FillLayer
+              id={`fill-${polygon.id}`}
+              style={{
+                fillColor:
+                  polygon.color === "red"
+                    ? "rgba(220, 38, 38, 0.35)"
+                    : "rgba(249, 115, 22, 0.28)",
+              }}
+            />
+            <Mapbox.LineLayer
+              id={`stroke-${polygon.id}`}
+              style={{
+                lineColor:
+                  polygon.color === "red"
+                    ? "rgba(185, 28, 28, 0.85)"
+                    : "rgba(194, 65, 12, 0.85)",
+                lineWidth: 2,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        ))}
+      </Mapbox.MapView>
+    );
+  },
+  (prevProps, nextProps) => {
+    if (prevProps.mapRef !== nextProps.mapRef) return false;
+    if (prevProps.onMapPress !== nextProps.onMapPress) return false;
+    if (prevProps.onMarkerPress !== nextProps.onMarkerPress) return false;
+    if (prevProps.onMarkerPressIndex !== nextProps.onMarkerPressIndex) return false;
+    if (prevProps.viewportPaddingRatio !== nextProps.viewportPaddingRatio) {
+      return false;
+    }
+    if (prevProps.onViewportBoundsChange !== nextProps.onViewportBoundsChange) {
+      return false;
+    }
+    if (!areHighlightPolygonsEqual(prevProps.highlightPolygons, nextProps.highlightPolygons)) {
+      return false;
+    }
+    if (!areWaveOverlaysEqual(prevProps.waveOverlays, nextProps.waveOverlays)) {
+      return false;
+    }
+
+    const prevRegion = prevProps.initialRegion ?? DEFAULT_MAP_REGION;
+    const nextRegion = nextProps.initialRegion ?? DEFAULT_MAP_REGION;
+    if (
+      prevRegion.latitude !== nextRegion.latitude ||
+      prevRegion.longitude !== nextRegion.longitude ||
+      prevRegion.latitudeDelta !== nextRegion.latitudeDelta ||
+      prevRegion.longitudeDelta !== nextRegion.longitudeDelta
+    ) {
+      return false;
   }
 
   const prevMarker = prevProps.markerCoordinate;
@@ -583,11 +648,6 @@ export default EarthquakeMap;
 
 const styles = StyleSheet.create({
   map: { flex: 1 },
-  quakeHitArea: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-  },
   quakeDot: {
     borderWidth: 1.5,
     borderColor: "#ffffff",

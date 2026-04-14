@@ -1,17 +1,16 @@
+import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  AppState,
-  InteractionManager,
-  PanResponder,
-  StyleSheet,
-  Text,
-  View,
+    Animated,
+    AppState,
+    InteractionManager,
+    PanResponder,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
-import type MapView from "react-native-maps";
-
-import EarthquakeMap from "@/components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_HISTORY!;
 const MIN_POLL_MS = 10_000;
@@ -98,7 +97,7 @@ export function GempaTerdeteksiHistoryContent({
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
