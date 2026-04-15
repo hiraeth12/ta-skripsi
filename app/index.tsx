@@ -1,15 +1,20 @@
-import { useRouter } from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Image, View } from "react-native";
 
 export default function Loading() {
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
-    setTimeout(() => {
+    if (!rootNavigationState?.key) return;
+
+    const timer = setTimeout(() => {
       router.replace("/starter/sign-in");
     }, 2000);
-  }, []);
+
+    return () => clearTimeout(timer);
+  }, [router, rootNavigationState?.key]);
 
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>

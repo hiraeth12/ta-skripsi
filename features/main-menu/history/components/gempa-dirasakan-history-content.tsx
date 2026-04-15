@@ -4,27 +4,26 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    InteractionManager,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import styles from "./styles/gempa-dirasakan-history-content";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
-const MAX_POINTS = 15;
+const MAX_POINTS = 20;
 const REFERENCE_LOCATION = {
   latitude: -6.9175,
   longitude: 107.6191,
@@ -371,7 +370,6 @@ export function GempaDirasakanHistoryContent({
   }, [onListSelectionHandled, openCard, quakes, selectedListEventId]);
 
   useEffect(() => {
-    if (!isActive) return;
     isMountedRef.current = true;
 
     async function fetchLatestQuake(silent = true): Promise<boolean> {
@@ -551,15 +549,13 @@ export function GempaDirasakanHistoryContent({
       scheduleNextPoll(changed);
     }
 
-    InteractionManager.runAfterInteractions(() => {
+    fetchLatestQuake(!isActive).then((changed) => {
       if (!isMountedRef.current) return;
-      fetchLatestQuake(false).then((changed) => {
-        scheduleNextPoll(changed);
-      });
+      scheduleNextPoll(changed);
     });
 
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
+      if (state === "active" && isActive) {
         pollDelayRef.current = MIN_POLL_MS;
         clearPollTimer();
         runPollingLoop();
@@ -760,123 +756,3 @@ export function GempaDirasakanHistoryContent({
 export default function GempaDirasakanHistoryRoute() {
   return <GempaDirasakanHistoryContent tabBar={null} />;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topControls: {
-    position: "absolute",
-    top: 16,
-    left: 10,
-    right: 10,
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 10,
-  },
-  locationCard: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    paddingTop: 12,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-  },
-  dragHandleArea: { alignItems: "center", paddingVertical: 8, marginBottom: 8 },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#1E6F9F",
-    alignSelf: "center",
-  },
-  statsTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 11,
-  },
-  statTopItem: { flex: 1, alignItems: "center", gap: 2 },
-  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000000" },
-  statTopLabel: { fontSize: 12, color: "#000000", fontWeight: "500" },
-  statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
-  separator: { height: 2, backgroundColor: "#0369A1", marginBottom: 11 },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 4,
-    gap: 10,
-  },
-  infoIcon: { marginTop: 2 },
-  infoTextFlex: { flex: 1 },
-  infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
-  infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
-  simulasiBtn: {
-    marginTop: 11,
-    marginBottom: -11,
-    backgroundColor: "#1E6F9F",
-    borderRadius: 30,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  simulasiBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
-    letterSpacing: 1,
-  },
-  simulasiBtnDisabled: { backgroundColor: "#94a3b8" },
-  modalOverlayBottom: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
-  },
-  modalCardBottom: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    width: "100%",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#ccc",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginTop: 12,
-  },
-  modalHeaderBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  modalTitleBottom: { color: "#0C4A6E", fontWeight: "700", fontSize: 16 },
-  modalSubtitle: { fontSize: 11, color: "#777" },
-  maximizedImage: { width: SCREEN_WIDTH, height: 600, marginTop: 10 },
-  modalFooter: {
-    padding: 15,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    backgroundColor: "#fafafa",
-  },
-  scrollHint: {
-    textAlign: "center",
-    fontSize: 12,
-    color: "#1E6F9F",
-    fontWeight: "500",
-  },
-  modalCloseCircle: {
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-    padding: 4,
-  },
-});

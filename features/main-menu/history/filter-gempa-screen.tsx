@@ -1,14 +1,14 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { Stack, useRouter } from "expo-router"; // <-- Import Router dan Stack
+import { Stack, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // === DATA MOCKUP ===
 const TIME_RANGES = [
@@ -32,49 +32,39 @@ const CITIES = [
 ];
 
 export default function FilterGempaScreen() {
-  const router = useRouter(); // <-- Inisialisasi router
-
-  // State untuk mengontrol akordion mana yang terbuka
+  const router = useRouter(); 
   const [expandedSection, setExpandedSection] = useState<
     "time" | "location" | null
   >("time");
-
-  // State untuk menyimpan nilai filter yang dipilih
   const [selectedTime, setSelectedTime] = useState("1_week");
   const [selectedCity, setSelectedCity] = useState("Semua Wilayah");
-
   const toggleSection = (section: "time" | "location") => {
     if (expandedSection === section) {
-      setExpandedSection(null); // Tutup jika diklik lagi
+      setExpandedSection(null);
     } else {
-      setExpandedSection(section); // Buka yang baru
+      setExpandedSection(section); 
     }
   };
 
   const handleSimpan = () => {
     console.log("Filter Disimpan:", { selectedTime, selectedCity });
-    // Menutup layar dan kembali ke halaman sebelumnya (peta)
     router.back();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Menggunakan transparentModal agar efeknya muncul sebagai overlay cantik di atas peta */}
       <Stack.Screen
         options={{
           headerShown: false,
-          animation: "slide_from_right", // Muncul dari kanan seperti List
+          animation: "slide_from_right",
           presentation: "transparentModal",
         }}
       />
 
       <View style={styles.container}>
-        {/* === CARD UTAMA === */}
         <View style={styles.card}>
-          {/* HEADER CARD */}
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Filter</Text>
-            {/* === TOMBOL CLOSE KEMBALI KE PETA === */}
             <TouchableOpacity
               style={styles.closeIcon}
               activeOpacity={0.7}
@@ -83,8 +73,6 @@ export default function FilterGempaScreen() {
               <Ionicons name="close" size={18} color="#0C4A6E" />
             </TouchableOpacity>
           </View>
-
-          {/* === SECTION 1: RENTANG WAKTU === */}
           <View style={styles.sectionContainer}>
             <TouchableOpacity
               style={[
@@ -117,8 +105,6 @@ export default function FilterGempaScreen() {
                 color={expandedSection === "time" ? "#0C4A6E" : "#fff"}
               />
             </TouchableOpacity>
-
-            {/* KONTEN RENTANG WAKTU */}
             {expandedSection === "time" && (
               <View style={styles.accordionContent}>
                 {TIME_RANGES.map((item, index) => (
