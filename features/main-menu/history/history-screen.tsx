@@ -42,12 +42,8 @@ export default function History() {
 
   const [activeTab, setActiveTab] = useState<EarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
-  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(
-    initialTab === "GEMPA DIRASAKAN",
-  );
-  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(
-    initialTab === "GEMPA TERDETEKSI",
-  );
+  const [hasMountedDirasakan] = useState(true);
+  const [hasMountedTerdeteksi] = useState(true);
 
   const clearSelectionParams = useCallback(() => {
     router.setParams({
@@ -76,14 +72,6 @@ export default function History() {
       setActiveTab("GEMPA DIRASAKAN");
     }
   }, [searchParams.tab]);
-
-  useEffect(() => {
-    if (activeTab === "GEMPA DIRASAKAN") {
-      setHasMountedDirasakan(true);
-      return;
-    }
-    setHasMountedTerdeteksi(true);
-  }, [activeTab]);
 
   const externalSelection = useMemo(() => {
     const eventId = asSingle(searchParams.selectedEventId);
@@ -130,8 +118,13 @@ export default function History() {
   }, [clearSelectionParams]);
 
   const handleListPress = useCallback(() => {
-    router.push("/main-menu/list-gempa");
-  }, [router]);
+    router.push({
+      pathname: "/main-menu/list-gempa",
+      params: {
+        tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
+      },
+    });
+  }, [activeTab, router]);
 
   const handleFilterPress = useCallback(() => {
     router.push({

@@ -1,4 +1,5 @@
 import Mapbox from "@rnmapbox/maps";
+import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -234,6 +235,18 @@ function isCoordinateInBounds(
   return isLatitudeInRange && isLongitudeInRange;
 }
 
+function buildWaveCircleGeometry(
+  center: { latitude: number; longitude: number },
+  radiusMeters: number,
+) {
+  const radiusKm = Math.max(radiusMeters, 1) / 1000;
+  const feature = turfCircle([center.longitude, center.latitude], radiusKm, {
+    steps: 96,
+    units: "kilometers",
+  });
+  return feature.geometry;
+}
+
 const DotMarker = memo(function DotMarker({
   coordinate,
   markerKey,
@@ -241,6 +254,8 @@ const DotMarker = memo(function DotMarker({
   dotColor,
   onPress,
 }: DotMarkerProps) {
+  const tapTargetSize = Math.max(40, dotSize + 20);
+
   return (
     <Mapbox.PointAnnotation
       key={markerKey}
@@ -249,16 +264,28 @@ const DotMarker = memo(function DotMarker({
       onSelected={onPress}
     >
       <View
+        collapsable={false}
         style={[
-          styles.quakeDot,
+          styles.markerTapTarget,
           {
-            width: dotSize,
-            height: dotSize,
-            borderRadius: dotSize / 2,
-            backgroundColor: dotColor,
+            width: tapTargetSize,
+            height: tapTargetSize,
+            borderRadius: tapTargetSize / 2,
           },
         ]}
-      />
+      >
+        <View
+          style={[
+            styles.quakeDot,
+            {
+              width: dotSize,
+              height: dotSize,
+              borderRadius: dotSize / 2,
+              backgroundColor: dotColor,
+            },
+          ]}
+        />
+      </View>
     </Mapbox.PointAnnotation>
   );
 });
@@ -491,6 +518,21 @@ const EarthquakeMap = memo(
     }));
   }, [highlightPolygons]);
 
+  const waveOverlayGeometries = useMemo(() => {
+    if (!waveOverlays || waveOverlays.length === 0) return [];
+
+    const innerPulseFactor = 0.88 + innerWaveProgress * 0.24;
+
+    return waveOverlays.map((wave) => ({
+      id: wave.id,
+      outerGeometry: buildWaveCircleGeometry(wave.center, wave.pWaveRadiusMeters),
+      innerGeometry: buildWaveCircleGeometry(
+        wave.center,
+        wave.sWaveRadiusMeters * innerPulseFactor,
+      ),
+    }));
+  }, [innerWaveProgress, waveOverlays]);
+
   const handleMapPress = useCallback(
     (feature: any) => {
       onMapPress?.();
@@ -543,6 +585,7 @@ const EarthquakeMap = memo(
         ref={mapViewRef}
         style={styles.map}
         styleURL="mapbox://styles/mapbox/streets-v12"
+        scaleBarEnabled={false}
         onPress={handleMapPress}
         onDidFinishLoadingMap={handleDidFinishLoadingMap}
         onMapIdle={handleRegionDidChange}
@@ -591,6 +634,56 @@ const EarthquakeMap = memo(
               }}
             />
           </Mapbox.ShapeSource>
+        ))}
+
+        {waveOverlayGeometries.map((wave) => (
+          <React.Fragment key={`wave-${wave.id}`}>
+            <Mapbox.ShapeSource
+              id={`wave-outer-source-${wave.id}`}
+              shape={{
+                type: "Feature",
+                properties: {},
+                geometry: wave.outerGeometry,
+              }}
+            >
+              <Mapbox.FillLayer
+                id={`wave-outer-fill-${wave.id}`}
+                style={{
+                  fillColor: "rgba(220, 38, 38, 0.14)",
+                }}
+              />
+              <Mapbox.LineLayer
+                id={`wave-outer-stroke-${wave.id}`}
+                style={{
+                  lineColor: "rgba(220, 38, 38, 0.55)",
+                  lineWidth: 1.5,
+                }}
+              />
+            </Mapbox.ShapeSource>
+
+            <Mapbox.ShapeSource
+              id={`wave-inner-source-${wave.id}`}
+              shape={{
+                type: "Feature",
+                properties: {},
+                geometry: wave.innerGeometry,
+              }}
+            >
+              <Mapbox.FillLayer
+                id={`wave-inner-fill-${wave.id}`}
+                style={{
+                  fillColor: "rgba(255, 255, 255, 0.22)",
+                }}
+              />
+              <Mapbox.LineLayer
+                id={`wave-inner-stroke-${wave.id}`}
+                style={{
+                  lineColor: "rgba(255, 255, 255, 0.8)",
+                  lineWidth: 1.2,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          </React.Fragment>
         ))}
       </Mapbox.MapView>
     );
@@ -648,6 +741,11 @@ export default EarthquakeMap;
 
 const styles = StyleSheet.create({
   map: { flex: 1 },
+  markerTapTarget: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
   quakeDot: {
     borderWidth: 1.5,
     borderColor: "#ffffff",

@@ -3,19 +3,18 @@ import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    InteractionManager,
-    PanResponder,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  AppState,
+  PanResponder,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
-const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_HISTORY!;
+const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
-const MAX_POINTS = 15;
+const MAX_POINTS = 20;
 
 type QuakeItem = {
   eventId: string;
@@ -324,7 +323,6 @@ export function GempaTerdeteksiHistoryContent({
   }, [onListSelectionHandled, openCard, quakes, selectedListEventId]);
 
   useEffect(() => {
-    if (!isActive) return;
     isMountedRef.current = true;
 
     async function fetchLatestQuake(silent = true): Promise<boolean> {
@@ -336,7 +334,7 @@ export function GempaTerdeteksiHistoryContent({
       try {
         if (!API_URL) {
           console.error(
-            "GEMPA_TERDETEKSI_HISTORY is undefined - restart Metro with --clear",
+            "GEMPA_TERDETEKSI_API_URL is undefined - restart Metro with --clear",
           );
           return false;
         }
@@ -347,7 +345,7 @@ export function GempaTerdeteksiHistoryContent({
         const features = data?.features;
         if (!Array.isArray(features) || features.length === 0) return false;
 
-        const sorted = [...features].sort((a, b) => {
+        const sorted = [...features].sort((a: any, b: any) => {
           const tA = String(a?.properties?.time ?? "");
           const tB = String(b?.properties?.time ?? "");
           return tB.localeCompare(tA);
@@ -480,15 +478,13 @@ export function GempaTerdeteksiHistoryContent({
       scheduleNextPoll(changed);
     }
 
-    InteractionManager.runAfterInteractions(() => {
+    fetchLatestQuake(!isActive).then((changed) => {
       if (!isMountedRef.current) return;
-      fetchLatestQuake(false).then((changed) => {
-        scheduleNextPoll(changed);
-      });
+      scheduleNextPoll(changed);
     });
 
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
+      if (state === "active" && isActive) {
         pollDelayRef.current = MIN_POLL_MS;
         clearPollTimer();
         runPollingLoop();
