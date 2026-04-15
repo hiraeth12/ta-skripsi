@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
     AppState,
@@ -14,9 +14,9 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import type MapView from "react-native-maps";
 
 import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
@@ -50,7 +50,33 @@ function haversineDistanceKm(
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function getMagnitudeScaleFactor(magnitude: number): number {
+  const deltaMagnitude = magnitude - 5;
+  const scale = Math.pow(10, 0.5 * deltaMagnitude);
+  return Math.max(0.05, Math.min(scale, 3.5));
+}
+
+function getDepthAttenuationFactor(depthKm: number): number {
+  // Deeper quakes generally have weaker surface impact.
+  const attenuation = 1 / (1 + depthKm / 200);
+  return Math.max(0.35, Math.min(attenuation, 1));
+}
+
+function getStaticWaveRadiiMeters(magnitude: number, depthKm: number) {
+  const scale = getMagnitudeScaleFactor(magnitude);
+  const depthFactor = getDepthAttenuationFactor(depthKm);
+  // Keep visual similar to reference image while still scaling by magnitude.
+  const outerRadiusMeters = (100000 + 240000 * scale) * depthFactor;
+  const innerRadiusMeters = (35000 + 80000 * scale) * depthFactor;
+
+  return {
+    outerRadiusMeters,
+    innerRadiusMeters,
+  };
+}
+
 type LatestQuake = {
+  id: string;
   latitude: number;
   longitude: number;
   distanceKm: string;
@@ -85,10 +111,31 @@ export default function GempaDirasakan({
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
+
+  const waveOverlays = useMemo(() => {
+    if (!latestQuake) return [];
+
+    const magnitude = parseFloat(String(latestQuake.magnitude).replace("M", "")) || 0;
+    const depthKm =
+      parseFloat(String(latestQuake.kedalaman).replace(/[^\d.-]/g, "")) || 0;
+    const radii = getStaticWaveRadiiMeters(magnitude, depthKm);
+
+    return [
+      {
+        id: latestQuake.id,
+        center: {
+          latitude: latestQuake.latitude,
+          longitude: latestQuake.longitude,
+        },
+        pWaveRadiusMeters: radii.outerRadiusMeters,
+        sWaveRadiusMeters: radii.innerRadiusMeters,
+      },
+    ];
+  }, [latestQuake]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -231,6 +278,7 @@ export default function GempaDirasakan({
           latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
         );
         setLatestQuake({
+          id: eventId || `${latitude}-${longitude}-${Date.now()}`,
           latitude,
           longitude,
           distanceKm: haversineDistanceKm(
@@ -248,7 +296,6 @@ export default function GempaDirasakan({
           latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
           lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
         });
-
         const region = {
           latitude,
           longitude,
@@ -303,6 +350,8 @@ export default function GempaDirasakan({
     <View style={styles.container}>
       <EarthquakeMap
         mapRef={mapRef}
+        highlightPolygons={[]}
+        waveOverlays={waveOverlays}
         markerCoordinate={
           latestQuake
             ? {
@@ -321,16 +370,6 @@ export default function GempaDirasakan({
         {tabBar}
         {showCard && (
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
-            <TouchableOpacity
-              style={[
-                styles.mapButton,
-                !shakeMapUrl && styles.mapButtonDisabled,
-              ]}
-              onPress={() => shakeMapUrl && setShakeMapVisible(true)}
-            >
-              <Feather name="map" size={12} color="white" />
-              <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.mapButton}>
               <Feather name="share" size={12} color="white" />
               <Text style={styles.mapButtonText}>BAGIKAN</Text>
@@ -375,30 +414,36 @@ export default function GempaDirasakan({
             />
           </View>
           <View style={styles.separator} />
-          <View style={styles.infoContent}>
-            <DetailItem
-              icon="location"
-              label="Lokasi Gempa :"
-              value={latestQuake.wilayah}
-            />
-            <DetailItem
-              icon="time-outline"
-              label="Waktu :"
-              value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
-            />
-            <DetailItem
-              icon="walk-outline"
-              label="Jarak :"
-              value={`${latestQuake.distanceKm} km dari lokasi Anda`}
-            />
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={latestQuake.wilayah}
+          />
+          <DetailItem
+            icon="time-outline"
+            label="Waktu :"
+            value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
+          />
+          <DetailItem
+            icon="walk-outline"
+            label="Jarak :"
+            value={`${latestQuake.distanceKm} km`}
+          />
+          {!!latestQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Wilayah Dirasakan :"
-              value={latestQuake.felt || "Tidak dirasakan"}
+              label="Wilayah Dirasakan (Skala MMI) :"
+              value={latestQuake.felt}
             />
-          </View>
-          <TouchableOpacity style={styles.simulasiBtn} activeOpacity={0.8}>
-            <Text style={styles.simulasiBtnText}>SIMULASI GUNCANGAN</Text>
+          )}
+
+          <TouchableOpacity
+            style={[styles.simulasiBtn, !shakeMapUrl && styles.simulasiBtnDisabled]}
+            activeOpacity={0.8}
+            onPress={() => shakeMapUrl && setShakeMapVisible(true)}
+            disabled={!shakeMapUrl}
+          >
+            <Text style={styles.simulasiBtnText}>PETA GUNCANGAN</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -504,9 +549,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
-    minHeight: 380, // TINGGI TETAP AGAR TIDAK BERUBAH
   },
-  dragHandleArea: { alignItems: "center", paddingVertical: 8 },
+  dragHandleArea: { alignItems: "center", paddingVertical: 8, marginBottom: 8 },
   dragHandle: {
     width: 40,
     height: 4,
@@ -523,18 +567,17 @@ const styles = StyleSheet.create({
   statTopLabel: { fontSize: 12, color: "#000", fontWeight: "500" },
   statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
   separator: { height: 2, backgroundColor: "#0369A1", marginBottom: 11 },
-  infoContent: { height: 180 }, // TINGGI AREA INFO TETAP
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 4,
     gap: 10,
   },
   infoIcon: { marginTop: 2 },
   infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
   infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
   simulasiBtn: {
-    marginTop: 15,
+    marginTop: 10,
     backgroundColor: "#1E6F9F",
     borderRadius: 30,
     paddingVertical: 14,
@@ -546,7 +589,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 1,
   },
-  mapButtonDisabled: { backgroundColor: "#94a3b8" },
+  simulasiBtnDisabled: {
+    backgroundColor: "#94a3b8",
+  },
   modalOverlayBottom: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.7)",

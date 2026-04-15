@@ -1,3 +1,5 @@
+import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -9,9 +11,6 @@ import {
     Text,
     View,
 } from "react-native";
-import type MapView from "react-native-maps";
-
-import EarthquakeMap from "@/components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_HISTORY!;
 const MIN_POLL_MS = 10_000;
@@ -85,7 +84,8 @@ export function GempaTerdeteksiHistoryContent({
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const [temporarySelection, setTemporarySelection] = useState<QuakeItem | null>(null);
+  const [temporarySelection, setTemporarySelection] =
+    useState<QuakeItem | null>(null);
 
   const selectedEventIdRef = useRef<string | null>(null);
   const latestDataSignature = useRef<string | null>(null);
@@ -97,7 +97,7 @@ export function GempaTerdeteksiHistoryContent({
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -169,36 +169,42 @@ export function GempaTerdeteksiHistoryContent({
     ]).start();
   }, [opacity, translateY]);
 
-  const dismissCard = useCallback((callback?: () => void) => {
-    if (showCardRef.current) {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowCard(false);
-        temporarySelectionRef.current = null;
-        setTemporarySelection(null);
+  const dismissCard = useCallback(
+    (callback?: () => void) => {
+      if (showCardRef.current) {
+        Animated.parallel([
+          Animated.timing(translateY, {
+            toValue: 600,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowCard(false);
+          temporarySelectionRef.current = null;
+          setTemporarySelection(null);
+          callback?.();
+        });
+      } else {
         callback?.();
-      });
-    } else {
-      callback?.();
-    }
-  }, [opacity, translateY]);
+      }
+    },
+    [opacity, translateY],
+  );
 
-  const onPressMarker = useCallback((index: number) => {
-    if (!quakes[index]) return;
-    selectedEventIdRef.current = quakes[index].eventId;
-    setSelectedIndex(index);
-    openCard();
-  }, [openCard, quakes]);
+  const onPressMarker = useCallback(
+    (index: number) => {
+      if (!quakes[index]) return;
+      selectedEventIdRef.current = quakes[index].eventId;
+      setSelectedIndex(index);
+      openCard();
+    },
+    [openCard, quakes],
+  );
 
   const markerCoordinates = useMemo(
     () =>
@@ -232,7 +238,8 @@ export function GempaTerdeteksiHistoryContent({
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
-    if (lastExternalSelectionIdRef.current === externalSelection.eventId) return;
+    if (lastExternalSelectionIdRef.current === externalSelection.eventId)
+      return;
 
     const targetIndex = quakes.findIndex(
       (quake) => quake.eventId === externalSelection.eventId,
