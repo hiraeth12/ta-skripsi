@@ -135,7 +135,7 @@ async function syncLatestOnce() {
   }
 
   const lastEventRes = await fetch(
-    `${dbUrl}/gempa_dirasakan_latest/lastEventId.json`,
+    `${dbUrl}/gempa_dirasakan/lastEventId.json`,
   );
 
   if (!lastEventRes.ok) {
@@ -155,30 +155,53 @@ async function syncLatestOnce() {
     };
   }
 
-  const payload = {
-    sourceUrl: apiUrl,
-    sourceIdentifier: globalIdentifier,
-    syncedAt: new Date().toISOString(),
-    lastEventId: latest.eventid,
-    item: latest,
+  // New event detected! Fetch current items and append the new one
+  let currentItems = [];
+  
+  try {
+    const itemsRes = await fetch(`${dbUrl}/gempa_dirasakan/items.json`);
+    if (itemsRes.ok) {
+      const existingData = await itemsRes.json();
+      if (Array.isArray(existingData)) {
+        currentItems = existingData;
+      }
+    }
+  } catch (e) {
+    console.warn("[Sync] Warning: Could not fetch current items, starting fresh");
+  }
+
+  // Append new event to the end (ascending order: oldest first, newest last)
+  const updatedItems = [...currentItems, latest];
+
+  // Write updated items and metadata
+  const updates = {
+    [`${dbUrl}/gempa_dirasakan/sourceUrl.json`]: apiUrl,
+    [`${dbUrl}/gempa_dirasakan/sourceIdentifier.json`]: globalIdentifier,
+    [`${dbUrl}/gempa_dirasakan/syncedAt.json`]: new Date().toISOString(),
+    [`${dbUrl}/gempa_dirasakan/lastEventId.json`]: latest.eventid,
+    [`${dbUrl}/gempa_dirasakan/totalItems.json`]: updatedItems.length,
+    [`${dbUrl}/gempa_dirasakan/items.json`]: updatedItems,
   };
 
-  const writeRes = await fetch(`${dbUrl}/gempa_dirasakan_latest.json`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  for (const [path, value] of Object.entries(updates)) {
+    const writeRes = await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(value),
+    });
 
-  if (!writeRes.ok) {
-    const errText = await writeRes.text();
-    throw new Error(`Failed to write latest data: ${writeRes.status} ${errText}`);
+    if (!writeRes.ok) {
+      const errText = await writeRes.text();
+      throw new Error(`Failed to write ${path}: ${writeRes.status} ${errText}`);
+    }
   }
 
   return {
     ok: true,
     skipped: false,
     writtenEventId: latest.eventid,
-    writePath: "/gempa_dirasakan_latest",
+    writePath: "/gempa_dirasakan",
+    totalItemsAfterUpdate: updatedItems.length,
   };
 }
 

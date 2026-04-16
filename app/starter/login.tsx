@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,10 +15,33 @@ import {
 } from "react-native";
 
 import AuthButton from "@/components/auth-button";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth, signInWithEmailAndPassword } from "@react-native-firebase/auth";
 
 export default function Login() {
   const router = useRouter();
   const [secure, setSecure] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async () => {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      Alert.alert("Input belum lengkap", "Email dan kata sandi wajib diisi.");
+      return;
+    }
+
+    try {
+      const app = getApp();
+      const authInstance = getAuth(app);
+      await signInWithEmailAndPassword(authInstance, trimmedEmail, trimmedPassword);
+      router.push("/starter/ask-location");
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -37,8 +61,10 @@ export default function Login() {
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="email@gmail.com"
+          value={email}
+          onChangeText={setEmail}
           keyboardType="email-address"
-          autoCapitalize="none" 
+          autoCapitalize="none"
           style={styles.input}
         />
 
@@ -46,7 +72,8 @@ export default function Login() {
         <View style={styles.passwordContainer}>
           <TextInput
             placeholder="********"
-            placeholderTextColor="#999"
+            value={password}
+            onChangeText={setPassword}
             secureTextEntry={secure}
             style={styles.passwordInput}
           />
@@ -67,7 +94,7 @@ export default function Login() {
 
         <AuthButton
           title="Login"
-          onPress={() => router.push("/starter/ask-location")}
+          onPress={handleLogin}
         />
 
         <Text style={styles.signUpText}>Belum Punya Akun?</Text>
