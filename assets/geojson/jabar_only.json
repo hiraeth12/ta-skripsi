@@ -1,0 +1,218 @@
+[
+  {
+    "id": "3201",
+    "province_id": "32",
+    "name": "KABUPATEN BOGOR",
+    "alt_name": "KABUPATEN BOGOR",
+    "latitude": -6.58333,
+    "longitude": 106.71667
+  },
+  {
+    "id": "3202",
+    "province_id": "32",
+    "name": "KABUPATEN SUKABUMI",
+    "alt_name": "KABUPATEN SUKABUMI",
+    "latitude": -7.06667,
+    "longitude": 106.7
+  },
+  {
+    "id": "3203",
+    "province_id": "32",
+    "name": "KABUPATEN CIANJUR",
+    "alt_name": "KABUPATEN CIANJUR",
+    "latitude": -6.7725,
+    "longitude": 107.08306
+  },
+  {
+    "id": "3204",
+    "province_id": "32",
+    "name": "KABUPATEN BANDUNG",
+    "alt_name": "KABUPATEN BANDUNG",
+    "latitude": -7.1,
+    "longitude": 107.6
+  },
+  {
+    "id": "3205",
+    "province_id": "32",
+    "name": "KABUPATEN GARUT",
+    "alt_name": "KABUPATEN GARUT",
+    "latitude": -7.38333,
+    "longitude": 107.76667
+  },
+  {
+    "id": "3206",
+    "province_id": "32",
+    "name": "KABUPATEN TASIKMALAYA",
+    "alt_name": "KABUPATEN TASIKMALAYA",
+    "latitude": -7.5,
+    "longitude": 108.13333
+  },
+  {
+    "id": "3207",
+    "province_id": "32",
+    "name": "KABUPATEN CIAMIS",
+    "alt_name": "KABUPATEN CIAMIS",
+    "latitude": -7.28333,
+    "longitude": 108.41667
+  },
+  {
+    "id": "3208",
+    "province_id": "32",
+    "name": "KABUPATEN KUNINGAN",
+    "alt_name": "KABUPATEN KUNINGAN",
+    "latitude": -7,
+    "longitude": 108.55
+  },
+  {
+    "id": "3209",
+    "province_id": "32",
+    "name": "KABUPATEN CIREBON",
+    "alt_name": "KABUPATEN CIREBON",
+    "latitude": -6.8,
+    "longitude": 108.56667
+  },
+  {
+    "id": "3210",
+    "province_id": "32",
+    "name": "KABUPATEN MAJALENGKA",
+    "alt_name": "KABUPATEN MAJALENGKA",
+    "latitude": -6.81667,
+    "longitude": 108.28333
+  },
+  {
+    "id": "3211",
+    "province_id": "32",
+    "name": "KABUPATEN SUMEDANG",
+    "alt_name": "KABUPATEN SUMEDANG",
+    "latitude": -6.81667,
+    "longitude": 107.98333
+  },
+  {
+    "id": "3212",
+    "province_id": "32",
+    "name": "KABUPATEN INDRAMAYU",
+    "alt_name": "KABUPATEN INDRAMAYU",
+    "latitude": -6.45,
+    "longitude": 108.16667
+  },
+  {
+    "id": "3213",
+    "province_id": "32",
+    "name": "KABUPATEN SUBANG",
+    "alt_name": "KABUPATEN SUBANG",
+    "latitude": -6.50833,
+    "longitude": 107.7025
+  },
+  {
+    "id": "3214",
+    "province_id": "32",
+    "name": "KABUPATEN PURWAKARTA",
+    "alt_name": "KABUPATEN PURWAKARTA",
+    "latitude": -6.58333,
+    "longitude": 107.45
+  },
+  {
+    "id": "3215",
+    "province_id": "32",
+    "name": "KABUPATEN KARAWANG",
+    "alt_name": "KABUPATEN KARAWANG",
+    "latitude": -6.26667,
+    "longitude": 107.41667
+  },
+  {
+    "id": "3216",
+    "province_id": "32",
+    "name": "KABUPATEN BEKASI",
+    "alt_name": "KABUPATEN BEKASI",
+    "latitude": -6.24667,
+    "longitude": 107.10833
+  },
+  {
+    "id": "3217",
+    "province_id": "32",
+    "name": "KABUPATEN BANDUNG BARAT",
+    "alt_name": "KABUPATEN BANDUNG BARAT",
+    "latitude": -6.83333,
+    "longitude": 107.48333
+  },
+  {
+    "id": "3218",
+    "province_id": "32",
+    "name": "KABUPATEN PANGANDARAN",
+    "alt_name": "KABUPATEN PANGANDARAN",
+    "latitude": -7.6673,
+    "longitude": 108.64037
+  },
+  {
+    "id": "3271",
+    "province_id": "32",
+    "name": "KOTA BOGOR",
+    "alt_name": "KOTA BOGOR",
+    "latitude": -6.59167,
+    "longitude": 106.8
+  },
+  {
+    "id": "3272",
+    "province_id": "32",
+    "name": "KOTA SUKABUMI",
+    "alt_name": "KOTA SUKABUMI",
+    "latitude": -6.95,
+    "longitude": 106.93333
+  },
+  {
+    "id": "3273",
+    "province_id": "32",
+    "name": "KOTA BANDUNG",
+    "alt_name": "KOTA BANDUNG",
+    "latitude": -6.9175,
+    "longitude": 107.62444
+  },
+  {
+    "id": "3274",
+    "province_id": "32",
+    "name": "KOTA CIREBON",
+    "alt_name": "KOTA CIREBON",
+    "latitude": -6.75,
+    "longitude": 108.55
+  },
+  {
+    "id": "3275",
+    "province_id": "32",
+    "name": "KOTA BEKASI",
+    "alt_name": "KOTA BEKASI",
+    "latitude": -6.28333,
+    "longitude": 106.98333
+  },
+  {
+    "id": "3276",
+    "province_id": "32",
+    "name": "KOTA DEPOK",
+    "alt_name": "KOTA DEPOK",
+    "latitude": -6.4,
+    "longitude": 106.81667
+  },
+  {
+    "id": "3277",
+    "province_id": "32",
+    "name": "KOTA CIMAHI",
+    "alt_name": "KOTA CIMAHI",
+    "latitude": -6.89167,
+    "longitude": 107.55
+  },
+  {
+    "id": "3278",
+    "province_id": "32",
+    "name": "KOTA TASIKMALAYA",
+    "alt_name": "KOTA TASIKMALAYA",
+    "latitude": -7.35,
+    "longitude": 108.21667
+  },
+  {
+    "id": "3279",
+    "province_id": "32",
+    "name": "KOTA BANJAR",
+    "alt_name": "KOTA BANJAR",
+    "latitude": -7.36996,
+    "longitude": 108.53209
+  }
+]

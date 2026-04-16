@@ -404,7 +404,7 @@ const EarthquakeMap = memo(
 
     let frameId = 0;
     const startedAt = Date.now();
-    const durationMs = 2200;
+    const durationMs = 3000;
 
     const animate = () => {
       const elapsedMs = Date.now() - startedAt;
@@ -619,15 +619,20 @@ const EarthquakeMap = memo(
   const waveOverlayGeometries = useMemo(() => {
     if (!waveOverlays || waveOverlays.length === 0) return [];
 
-    const innerPulseFactor = 0.88 + innerWaveProgress * 0.24;
+    // Inner wave spreads from center and fades out
+    // Opacity: starts at 1, ends at 0
+    const innerWaveOpacity = Math.max(0, 1 - innerWaveProgress);
+    // Radius: spreads from 0 to full sWaveRadiusMeters
+    const innerWaveFactor = innerWaveProgress;
 
     return waveOverlays.map((wave) => ({
       id: wave.id,
       outerGeometry: buildWaveCircleGeometry(wave.center, wave.pWaveRadiusMeters),
       innerGeometry: buildWaveCircleGeometry(
         wave.center,
-        wave.sWaveRadiusMeters * innerPulseFactor,
+        wave.sWaveRadiusMeters * innerWaveFactor,
       ),
+      innerWaveOpacity,
     }));
   }, [innerWaveProgress, waveOverlays]);
 
@@ -816,14 +821,14 @@ const EarthquakeMap = memo(
               <Mapbox.FillLayer
                 id={`wave-inner-fill-${wave.id}`}
                 style={{
-                  fillColor: "rgba(255, 255, 255, 0.22)",
+                  fillColor: `rgba(255, 255, 255, ${0.28 * wave.innerWaveOpacity})`,
                 }}
               />
               <Mapbox.LineLayer
                 id={`wave-inner-stroke-${wave.id}`}
                 style={{
-                  lineColor: "rgba(255, 255, 255, 0.8)",
-                  lineWidth: 1.2,
+                  lineColor: `rgba(255, 255, 255, ${0.9 * wave.innerWaveOpacity})`,
+                  lineWidth: 1.5,
                 }}
               />
             </Mapbox.ShapeSource>
