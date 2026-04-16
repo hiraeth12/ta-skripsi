@@ -1,16 +1,15 @@
+import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  PanResponder,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    PanResponder,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import type MapView from "react-native-maps";
-
-import EarthquakeMap from "@/components/earthquake-map";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 
@@ -40,7 +39,7 @@ export default function GempaTerdeteksi({
 }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;

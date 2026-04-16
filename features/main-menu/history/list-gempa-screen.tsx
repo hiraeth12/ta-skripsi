@@ -3,16 +3,16 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
-const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_HISTORY!;
+const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 
 type ListMode = "dirasakan" | "terdeteksi";
 
@@ -40,6 +40,11 @@ function withCacheBuster(url: string) {
       : "&"
     : "?";
   return `${base}${separator}t=${Date.now()}`;
+}
+
+function getDetectedHistoryNodeUrl() {
+  const base = String(DATABASE_URL ?? "").trim().replace(/\/+$/, "");
+  return `${base}/gempa_terdeteksi_history.json`;
 }
 
 function haversineDistanceKm(
@@ -111,8 +116,7 @@ export default function ListGempaPage() {
     async function loadItems() {
       setLoading(true);
       try {
-        const apiUrl =
-          mode === "dirasakan" ? DIRASAKAN_API_URL : TERDETEKSI_API_URL;
+        const apiUrl = mode === "dirasakan" ? DIRASAKAN_API_URL : DATABASE_URL;
         if (!apiUrl) return;
 
         if (mode === "dirasakan") {
@@ -186,31 +190,42 @@ export default function ListGempaPage() {
 
           if (isMounted) setItems(normalized);
         } else {
-          const res = await fetch(withCacheBuster(apiUrl));
+          const res = await fetch(withCacheBuster(getDetectedHistoryNodeUrl()));
           const data = await res.json();
-          const features = data?.features;
-          if (!Array.isArray(features) || features.length === 0) {
+
+          const nodeItems = data?.items;
+          const nodeArray =
+            nodeItems && typeof nodeItems === "object"
+              ? Object.values(nodeItems)
+              : [];
+
+          if (!Array.isArray(nodeArray) || nodeArray.length === 0) {
             if (isMounted) setItems([]);
             return;
           }
 
-          const sorted = [...features].sort((a, b) => {
-            const tA = String(a?.properties?.time ?? "");
-            const tB = String(b?.properties?.time ?? "");
+          const sorted = [...nodeArray].sort((a: any, b: any) => {
+            const tA = String(a?.time ?? "");
+            const tB = String(b?.time ?? "");
             return tB.localeCompare(tA);
           });
 
           const normalized = sorted
-            .map((feature, index): ListItem | null => {
-              const props = feature?.properties ?? {};
-              const coords = feature?.geometry?.coordinates;
-              const longitude = parseFloat(coords?.[0] ?? "0");
-              const latitude = parseFloat(coords?.[1] ?? "0");
+            .map((item: any, index): ListItem | null => {
+              const coords = item?.coordinates;
+              const longitude = parseFloat(
+                String(coords?.longitude ?? coords?.[0] ?? "0"),
+              );
+              const latitude = parseFloat(
+                String(coords?.latitude ?? coords?.[1] ?? "0"),
+              );
               if (Number.isNaN(latitude) || Number.isNaN(longitude))
                 return null;
 
-              const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
-              const jam = (jamRaw ?? "").split(".")[0];
+              const [tanggalFromTime, jamRaw] = String(item?.time ?? "").split(
+                " ",
+              );
+              const jamFromTime = (jamRaw ?? "").split(".")[0];
               const distanceKm = haversineDistanceKm(
                 -6.9175,
                 107.6191,
@@ -218,24 +233,23 @@ export default function ListGempaPage() {
                 longitude,
               ).toFixed(1);
               const eventId = String(
-                props.eventid ??
-                  props.identifier ??
-                  `${props.time ?? ""}-${latitude}-${longitude}-${index}`,
+                item?.eventid ??
+                  `${item?.time ?? ""}-${latitude}-${longitude}-${index}`,
               );
 
               return {
                 id: eventId,
                 latitude,
                 longitude,
-                magnitude: parseFloat(props.mag ?? "0").toFixed(1),
-                lokasi: String(props.place ?? ""),
-                waktu: `${jam} • ${tanggal}`,
+                magnitude: String(item?.magnitude ?? "0.0"),
+                lokasi: String(item?.lokasi ?? ""),
+                waktu: `${String(item?.jam ?? jamFromTime ?? "")} • ${String(item?.tanggal ?? tanggalFromTime ?? "")}`,
                 jarak: `${distanceKm} km dari Bandung`,
                 distanceKm,
-                tanggal: tanggal ?? "",
-                jam: jam ?? "",
-                kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
-                felt: String(props.fase ?? ""),
+                tanggal: String(item?.tanggal ?? tanggalFromTime ?? ""),
+                jam: String(item?.jam ?? jamFromTime ?? ""),
+                kedalaman: String(item?.kedalaman ?? ""),
+                felt: String(item?.felt ?? ""),
               };
             })
             .filter((item): item is ListItem => Boolean(item))
