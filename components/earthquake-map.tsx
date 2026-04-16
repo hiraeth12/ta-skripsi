@@ -1,12 +1,14 @@
 import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import patahanGeoJson from "../assets/geojson/patahan.geojson";
 
 import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "";
+const SENSOR_SEISMIC_URL = process.env.EXPO_PUBLIC_SENSOR_SEISMIC_URL || "";
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
 type MapRegion = {
@@ -247,6 +249,64 @@ function buildWaveCircleGeometry(
   return feature.geometry;
 }
 
+function toCoordinateNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeSeismicSensorsFeatureCollection(
+  data: unknown,
+): GeoJSON.FeatureCollection | null {
+  if (!data || typeof data !== "object") return null;
+
+  const candidate = data as {
+    type?: string;
+    features?: Array<{
+      type?: string;
+      properties?: Record<string, unknown>;
+      geometry?: {
+        type?: string;
+        coordinates?: unknown[];
+      };
+    }>;
+  };
+
+  if (candidate.type !== "FeatureCollection" || !Array.isArray(candidate.features)) {
+    return null;
+  }
+
+  const normalizedFeatures: GeoJSON.Feature[] = [];
+
+  for (const feature of candidate.features) {
+    if (!feature || feature.type !== "Feature") continue;
+    if (!feature.geometry || feature.geometry.type !== "Point") continue;
+    if (!Array.isArray(feature.geometry.coordinates)) continue;
+
+    const [rawLon, rawLat] = feature.geometry.coordinates;
+    const longitude = toCoordinateNumber(rawLon);
+    const latitude = toCoordinateNumber(rawLat);
+    if (longitude === null || latitude === null) continue;
+
+    normalizedFeatures.push({
+      type: "Feature",
+      properties: feature.properties ?? {},
+      geometry: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      },
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    features: normalizedFeatures,
+  };
+}
+
 const DotMarker = memo(function DotMarker({
   coordinate,
   markerKey,
@@ -328,6 +388,13 @@ const EarthquakeMap = memo(
   );
   const [hasMeasuredViewport, setHasMeasuredViewport] = useState(false);
   const [innerWaveProgress, setInnerWaveProgress] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showFaultLines, setShowFaultLines] = useState(true);
+  const [showSeismicSensors, setShowSeismicSensors] = useState(false);
+  const [seismicSensorsGeoJson, setSeismicSensorsGeoJson] =
+    useState<GeoJSON.FeatureCollection | null>(null);
+
+  const hasSeismicSensorsUrl = SENSOR_SEISMIC_URL.trim().length > 0;
 
   useEffect(() => {
     if (!waveOverlays || waveOverlays.length === 0) {
@@ -354,6 +421,37 @@ const EarthquakeMap = memo(
       }
     };
   }, [waveOverlays]);
+
+  useEffect(() => {
+    if (!showSeismicSensors) return;
+    if (seismicSensorsGeoJson) return;
+    if (!hasSeismicSensorsUrl) return;
+
+    let isMounted = true;
+
+    const loadSeismicSensors = async () => {
+      try {
+        const response = await fetch(SENSOR_SEISMIC_URL);
+        if (!response.ok) {
+          throw new Error(`Failed to load seismic sensors: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const normalized = normalizeSeismicSensorsFeatureCollection(payload);
+        if (isMounted && normalized) {
+          setSeismicSensorsGeoJson(normalized);
+        }
+      } catch (error) {
+        console.log("Error loading seismic sensors:", error);
+      }
+    };
+
+    loadSeismicSensors();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasSeismicSensorsUrl, seismicSensorsGeoJson, showSeismicSensors]);
 
   useEffect(() => {
     if (!shouldTrackViewport) return;
@@ -535,9 +633,12 @@ const EarthquakeMap = memo(
 
   const handleMapPress = useCallback(
     (feature: any) => {
+      if (isMenuOpen) {
+        setIsMenuOpen(false);
+      }
       onMapPress?.();
     },
-    [onMapPress],
+    [isMenuOpen, onMapPress],
   );
 
   const handleRegionDidChange = useCallback(
@@ -580,7 +681,20 @@ const EarthquakeMap = memo(
     flushPendingCameraMove();
   }, [flushPendingCameraMove]);
 
+  const toggleMenu = useCallback(() => {
+    setIsMenuOpen((previous) => !previous);
+  }, []);
+
+  const handleToggleFaultLines = useCallback((value: boolean) => {
+    setShowFaultLines(value);
+  }, []);
+
+  const handleToggleSeismicSensors = useCallback((value: boolean) => {
+    setShowSeismicSensors(value);
+  }, []);
+
     return (
+      <View style={styles.container}>
       <Mapbox.MapView
         ref={mapViewRef}
         style={styles.map}
@@ -600,6 +714,36 @@ const EarthquakeMap = memo(
             zoomLevel: getZoomLevelFromRegion(resolvedInitialRegion),
           }}
         />
+        {showFaultLines ? (
+          <Mapbox.ShapeSource id="fault-lines-source" shape={patahanGeoJson}>
+            <Mapbox.LineLayer
+              id="fault-lines-layer"
+              style={{
+                lineColor: "rgba(175, 66, 16, 0.85)",
+                lineWidth: ["interpolate", ["linear"], ["zoom"], 3, 0.8, 9, 2.2],
+                lineOpacity: 0.9,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        ) : null}
+        {showSeismicSensors && seismicSensorsGeoJson ? (
+          <Mapbox.ShapeSource
+            id="seismic-sensors-source"
+            shape={seismicSensorsGeoJson}
+          >
+            <Mapbox.SymbolLayer
+              id="seismic-sensors-layer"
+              style={{
+                textField: "▲",
+                textSize: ["interpolate", ["linear"], ["zoom"], 3, 10, 9, 16],
+                textColor: "rgba(37, 99, 235, 0.95)",
+                textHaloColor: "rgba(255, 255, 255, 0.92)",
+                textHaloWidth: 1,
+                textAllowOverlap: true,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        ) : null}
         {singleMarkerNode}
         {multipleMarkerNodes}
         {temporaryMarkerNode}
@@ -686,6 +830,45 @@ const EarthquakeMap = memo(
           </React.Fragment>
         ))}
       </Mapbox.MapView>
+      <View pointerEvents="box-none" style={styles.menuOverlay}>
+        {isMenuOpen ? (
+          <View style={styles.menuPanel}>
+            <View style={styles.menuRow}>
+              <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+              <Switch
+                value={showFaultLines}
+                onValueChange={handleToggleFaultLines}
+                trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            <View style={styles.menuRow}>
+              <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+              <Switch
+                value={showSeismicSensors}
+                onValueChange={handleToggleSeismicSensors}
+                trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
+                thumbColor="#ffffff"
+              />
+            </View>
+          </View>
+        ) : null}
+
+        <Pressable
+          style={styles.menuButton}
+          onPress={toggleMenu}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Buka menu peta"
+        >
+          <View style={styles.menuIcon}>
+            <View style={styles.menuBar} />
+            <View style={styles.menuBar} />
+            <View style={styles.menuBar} />
+          </View>
+        </Pressable>
+      </View>
+      </View>
     );
   },
   (prevProps, nextProps) => {
@@ -740,6 +923,7 @@ const EarthquakeMap = memo(
 export default EarthquakeMap;
 
 const styles = StyleSheet.create({
+  container: { flex: 1 },
   map: { flex: 1 },
   markerTapTarget: {
     alignItems: "center",
@@ -753,5 +937,60 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.25,
     shadowRadius: 2,
+  },
+  menuOverlay: {
+    position: "absolute",
+    bottom: 16,
+    right: 12,
+    alignItems: "flex-end",
+    zIndex: 20,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuIcon: {
+    width: 18,
+    gap: 3,
+  },
+  menuBar: {
+    width: 18,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: "#1f2937",
+  },
+  menuPanel: {
+    marginBottom: 8,
+    minWidth: 200,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.35)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  menuLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  menuHint: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#475569",
   },
 });

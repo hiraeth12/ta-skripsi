@@ -9,14 +9,19 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "sync:gempa-dirasakan:full": "node api/database/db-gempa-dirasakan-history-cli.js",
     "sync:gempa-dirasakan:latest": "node api/database/sync-latest-gempa-dirasakan-history.js",
     "sync:gempa-dirasakan:latest:watch": "node api/database/sync-latest-gempa-dirasakan-history.js 60000",
     "sync:gempa-terdeteksi:history": "node api/database/db-gempa-terdeteksi-history.js",
-    "sync:gempa-terdeteksi:history:watch": "node api/database/db-gempa-terdeteksi-history.js 15000"
+    "sync:gempa-terdeteksi:history:watch": "node api/database/db-gempa-terdeteksi-history.js 15000",
+    "sync:scheduler": "node api/database/scheduler.js",
+    "sync:verify": "node api/database/verify-sync.js",
+    "sync:check-order": "node api/database/check-order.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-firebase/app": "^24.0.0",
+    "@react-native-firebase/auth": "^24.0.0",
     "@react-native-firebase/database": "^24.0.0",
     "@react-native-firebase/messaging": "^24.0.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
