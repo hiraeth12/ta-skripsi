@@ -1,8 +1,14 @@
 import AuthButton from "@/components/auth-button";
 import { Ionicons } from "@expo/vector-icons";
+import { getApp } from "@react-native-firebase/app";
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+} from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -20,8 +26,41 @@ export default function Register() {
   const [secureConfirm, setSecureConfirm] = useState(true);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   const passwordsMatch = confirmPassword === "" || password === confirmPassword;
+
+  const handleRegister = async () => {
+    if (password !== confirmPassword) return;
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
+      Alert.alert("Input belum lengkap", "Email dan kata sandi wajib diisi.");
+      return;
+    }
+
+    try {
+      const app = getApp();
+      const authInstance = getAuth(app);
+      const userCredential = await createUserWithEmailAndPassword(
+        authInstance,
+        trimmedEmail,
+        trimmedPassword,
+      );
+
+      const uid = userCredential.user.uid;
+
+      // simpan data tambahan ke database nanti (step berikutnya)
+
+      console.log("Register success:", uid);
+      router.push("/starter/login");
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -40,17 +79,29 @@ export default function Register() {
         />
 
         <Text style={styles.label}>Nama Depan</Text>
-        <TextInput placeholder="Jane" style={styles.input} />
+        <TextInput
+          placeholder="Jane"
+          style={styles.input}
+          value={firstName}
+          onChangeText={setFirstName}
+        />
 
         <Text style={styles.label}>Nama Belakang</Text>
-        <TextInput placeholder="Doe" style={styles.input} />
+        <TextInput
+          placeholder="Doe"
+          style={styles.input}
+          value={lastName}
+          onChangeText={setLastName}
+        />
 
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="email@gmail.com"
           keyboardType="email-address"
-          autoCapitalize="none" // Mencegah huruf kapital otomatis di email
+          autoCapitalize="none"
           style={styles.input}
+          value={email}
+          onChangeText={setEmail}
         />
 
         <Text style={styles.label}>Kata Sandi</Text>
@@ -102,7 +153,7 @@ export default function Register() {
           <AuthButton
             title="Daftar"
             onPress={() => {
-              console.log("Register pressed");
+              handleRegister();
             }}
           />
         </View>
@@ -127,14 +178,14 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 24,
-    justifyContent: "center", // Menjaga konten tetap di tengah saat tidak ada keyboard
-    minHeight: "100%", // Memastikan scroll memenuhi layar
+    justifyContent: "center",
+    minHeight: "100%",
   },
   image: {
     width: 180,
     height: 59,
     alignSelf: "center",
-    marginBottom: 30, // Mengurangi margin sedikit agar tidak terlalu mepet saat keyboard naik
+    marginBottom: 30,
   },
   label: {
     fontSize: 18,

@@ -1,3 +1,9 @@
+/**
+ * Full sync untuk gempa dirasakan
+ * Menulis semua 30 data dari API ke database
+ * Run: npm run sync:gempa-dirasakan:full
+ */
+
 const fs = require("fs");
 const path = require("path");
 const { XMLParser } = require("fast-xml-parser");
@@ -91,7 +97,22 @@ function normalizeQuakeItem(candidate, index, globalIdentifier) {
   };
 }
 
-async function run() {
+function getLatestItem(items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  return [...items].sort((a, b) =>
+    String(b?.eventid ?? "").localeCompare(String(a?.eventid ?? "")),
+  )[0];
+}
+
+function sortItemsDescending(items) {
+  // Sort by eventid ASCENDING (oldest first at index 0, newest last)
+  return [...items].sort((a, b) =>
+    String(a?.eventid ?? "").localeCompare(String(b?.eventid ?? "")),
+  );
+}
+
+async function syncFullGempaDirasakan() {
   const envPath = path.resolve(process.cwd(), ".env");
   const env = readEnvFile(envPath);
 
@@ -106,6 +127,7 @@ async function run() {
     throw new Error("EXPO_PUBLIC_FIREBASE_DATABASE_URL is not set in .env");
   }
 
+  console.log("[Sync] Fetching data from API...");
   const response = await fetch(withCacheBuster(apiUrl));
   if (!response.ok) {
     throw new Error(`Failed to fetch API: ${response.status} ${response.statusText}`);
@@ -117,45 +139,61 @@ async function run() {
     .map((candidate, index) => normalizeQuakeItem(candidate, index, globalIdentifier))
     .filter(Boolean);
 
+  if (normalizedItems.length === 0) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "No valid quake items found",
+    };
+  }
+
+  const latest = getLatestItem(normalizedItems);
+
+  console.log(
+    `[Sync] Fetched ${normalizedItems.length} items, writing to database...`
+  );
+
   const payload = {
     sourceUrl: apiUrl,
     sourceIdentifier: globalIdentifier,
     totalItems: normalizedItems.length,
     syncedAt: new Date().toISOString(),
-    items: normalizedItems,
+    lastEventId: latest?.eventid || null,
+    items: sortItemsDescending(normalizedItems),
   };
 
-  const writeResponse = await fetch(`${dbUrl}/gempa_dirasakan_history.json`, {
+  const writeRes = await fetch(`${dbUrl}/gempa_dirasakan.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  if (!writeResponse.ok) {
-    const errText = await writeResponse.text();
-    throw new Error(`Failed to write DB: ${writeResponse.status} ${errText}`);
+  if (!writeRes.ok) {
+    const errText = await writeRes.text();
+    throw new Error(
+      `Failed to write DB: ${writeRes.status} ${errText}`
+    );
   }
 
-  const verifyResponse = await fetch(
-    `${dbUrl}/gempa_dirasakan_history/totalItems.json`,
-  );
-  const verifyTotalItems = await verifyResponse.json();
+  console.log(`[Sync] Successfully wrote to /gempa_dirasakan`);
 
-  console.log(
-    JSON.stringify(
-      {
-        ok: true,
-        writePath: "/gempa_dirasakan_history",
-        writtenItems: normalizedItems.length,
-        verifiedTotalItems: verifyTotalItems,
-      },
-      null,
-      2,
-    ),
-  );
+  return {
+    ok: true,
+    writePath: "/gempa_dirasakan",
+    totalItems: normalizedItems.length,
+    lastEventId: latest?.eventid,
+    sourceUrl: apiUrl,
+  };
 }
 
-run().catch((error) => {
-  console.error(error?.stack || error?.message || String(error));
-  process.exit(1);
-});
+async function run() {
+  try {
+    const result = await syncFullGempaDirasakan();
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    console.error("Error:", error?.message || String(error));
+    process.exit(1);
+  }
+}
+
+run();

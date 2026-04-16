@@ -197,7 +197,7 @@ async function syncOnce() {
   };
 
   const currentMetaRes = await fetch(
-    `${dbUrl}/gempa_terdeteksi_history.json`,
+    `${dbUrl}/gempa_terdeteksi.json`,
   );
   if (!currentMetaRes.ok) {
     throw new Error(
@@ -220,13 +220,13 @@ async function syncOnce() {
       ok: true,
       skipped: true,
       reason: "No new merged data",
-      writePath: "/gempa_terdeteksi_history",
+      writePath: "/gempa_terdeteksi",
       totalItems: payload.totalItems,
       lastEventId: payload.lastEventId,
     };
   }
 
-  const writeResponse = await fetch(`${dbUrl}/gempa_terdeteksi_history.json`, {
+  const writeResponse = await fetch(`${dbUrl}/gempa_terdeteksi.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -238,13 +238,13 @@ async function syncOnce() {
   }
 
   const verifyResponse = await fetch(
-    `${dbUrl}/gempa_terdeteksi_history/totalItems.json`,
+    `${dbUrl}/gempa_terdeteksi/totalItems.json`,
   );
   const verifyTotalItems = await verifyResponse.json();
 
   return {
     ok: true,
-    writePath: "/gempa_terdeteksi_history",
+    writePath: "/gempa_terdeteksi",
     filteredFromYear: 2023,
     mergedFrom: ["histori", "gempaQL"],
     writtenItems: uniqueItems.length,
