@@ -6,7 +6,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView, // Tambahkan ScrollView
+  ScrollView, // Tambahkan ScrollView untuk mengatasi
   StyleSheet,
   Text,
   TextInput,
@@ -127,14 +127,14 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 24,
-    justifyContent: "center", 
-    minHeight: "100%", 
+    justifyContent: "center", // Menjaga konten tetap di tengah saat tidak ada keyboard
+    minHeight: "100%", // Memastikan scroll memenuhi layar
   },
   image: {
     width: 180,
     height: 59,
     alignSelf: "center",
-    marginBottom: 30, 
+    marginBottom: 30, // Mengurangi margin sedikit agar tidak terlalu mepet saat keyboard naik
   },
   label: {
     fontSize: 18,
