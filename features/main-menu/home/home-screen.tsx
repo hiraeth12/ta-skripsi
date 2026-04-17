@@ -1,24 +1,28 @@
+import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { Ionicons } from "@expo/vector-icons";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    AppState,
-    Dimensions,
-    Image,
-    InteractionManager,
-    Modal,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  AppState,
+  Dimensions,
+  Image,
+  InteractionManager,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -26,9 +30,10 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
-const REFERENCE_LOCATION = {
+const DEFAULT_LOCATION = {
   latitude: -6.9175,
   longitude: 107.6191,
+  name: "Bandung",
 };
 
 function haversineDistanceKm(
@@ -150,6 +155,7 @@ type TerdeteksiQuake = {
 
 export default function Home() {
   const router = useRouter();
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
@@ -160,21 +166,83 @@ export default function Home() {
     null,
   );
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
-
   const [timeAgo, setTimeAgo] = useState("Memuat...");
-
   const [activeTab, setActiveTab] = useState(0);
+  const [userLocation, setUserLocation] = useState({
+    latitude: DEFAULT_LOCATION.latitude,
+    longitude: DEFAULT_LOCATION.longitude,
+    name: DEFAULT_LOCATION.name,
+  });
+  const [userName, setUserName] = useState("Pengguna");
+  const [currentDate, setCurrentDate] = useState(new Date());
 
-  const user = { name: "Budi" };
+  const user = { name: userName };
+
+  // Function to fetch user location and profile from database
+  const fetchUserData = useCallback(async () => {
+    try {
+      const app = getApp();
+      const authInstance = getAuth(app);
+      const currentUser = authInstance.currentUser;
+
+      if (!currentUser) return;
+
+      const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+      const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+      const userRef = ref(database, `users/${currentUser.uid}`);
+      const snapshot = await get(userRef);
+      const userData = snapshot.val();
+
+      if (userData) {
+        // Set location data if available
+        if (userData.latitude && userData.longitude) {
+          setUserLocation({
+            latitude: parseFloat(userData.latitude),
+            longitude: parseFloat(userData.longitude),
+            name: userData.locationName || "Lokasi Saya",
+          });
+        }
+        // Set user name from firstName (and lastName if available)
+        if (userData.firstName) {
+          const fullName = userData.lastName 
+            ? `${userData.firstName}` 
+            : userData.firstName;
+          setUserName(fullName);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  }, []);
+
+  // Fetch user data on mount only - do NOT refetch on every focus
+  useEffect(() => {
+    fetchUserData();
+  }, [fetchUserData]);
+
+  // Update current date every minute
+  useEffect(() => {
+    const updateDate = () => {
+      setCurrentDate(new Date());
+    };
+
+    updateDate();
+    const dateInterval = setInterval(updateDate, 60000);
+
+    return () => clearInterval(dateInterval);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
+    abortControllerRef.current = new AbortController();
 
     async function fetchDirasakan() {
       try {
         if (!DIRASAKAN_API_URL) return;
 
-        const res = await fetch(`${DIRASAKAN_API_URL.trim()}${Date.now()}`);
+        const res = await fetch(`${DIRASAKAN_API_URL.trim()}${Date.now()}`, {
+          signal: abortControllerRef.current?.signal,
+        });
         const raw = await res.text();
 
         let latest: any = null;
@@ -200,13 +268,13 @@ export default function Home() {
         const absLat = Math.abs(latitude).toFixed(2);
         const absLon = Math.abs(longitude).toFixed(2);
         const distanceKm = haversineDistanceKm(
-          REFERENCE_LOCATION.latitude,
-          REFERENCE_LOCATION.longitude,
+          userLocation.latitude,
+          userLocation.longitude,
           latitude,
           longitude,
         ).toFixed(1);
 
-        setDirasakanData({
+        const newDirasakanData = {
           distanceKm,
           magnitude: String(latest.magnitude ?? "-"),
           kedalaman: String(latest.depth ?? "-"),
@@ -216,13 +284,20 @@ export default function Home() {
           tanggal: String(latest.date ?? ""),
           jam: String(latest.time ?? ""),
           felt: String(latest.felt ?? ""),
-        });
+        };
 
+        // Cache the data for other screens
+        setCacheData(CACHE_KEYS.DIRASAKAN, newDirasakanData);
+
+        // Batch state updates
+        setDirasakanData(newDirasakanData);
         setShakeMapUrl(
           latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
         );
       } catch (e) {
-        console.error("Failed to fetch home dirasakan:", e);
+        if (e instanceof Error && e.name !== 'AbortError') {
+          console.error("Failed to fetch home dirasakan:", e);
+        }
       }
     }
 
@@ -230,7 +305,9 @@ export default function Home() {
       try {
         if (!TERDETEKSI_API_URL) return;
 
-        const res = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`);
+        const res = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`, {
+          signal: abortControllerRef.current?.signal,
+        });
         const data = await res.json();
 
         const features = data?.features;
@@ -257,13 +334,13 @@ export default function Home() {
         const absLat = Math.abs(latitude).toFixed(2);
         const absLon = Math.abs(longitude).toFixed(2);
         const distanceKm = haversineDistanceKm(
-          REFERENCE_LOCATION.latitude,
-          REFERENCE_LOCATION.longitude,
+          userLocation.latitude,
+          userLocation.longitude,
           latitude,
           longitude,
         ).toFixed(1);
 
-        setTerdeteksiData({
+        const newTerdeteksiData = {
           distanceKm,
           magnitude: parseFloat(props.mag ?? "0").toFixed(1),
           kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
@@ -273,9 +350,17 @@ export default function Home() {
           tanggal: tanggal ?? "",
           jam: jam ?? "",
           fase: String(props.fase ?? ""),
-        });
+        };
+
+        // Cache the data for other screens
+        setCacheData(CACHE_KEYS.TERDETEKSI, newTerdeteksiData);
+        
+        // Single state update
+        setTerdeteksiData(newTerdeteksiData);
       } catch (e) {
-        console.error("Failed to fetch home terdeteksi:", e);
+        if (e instanceof Error && e.name !== 'AbortError') {
+          console.error("Failed to fetch home terdeteksi:", e);
+        }
       }
     }
 
@@ -297,8 +382,10 @@ export default function Home() {
       isMounted = false;
       clearInterval(interval);
       appStateSub.remove();
+      // Cancel pending requests
+      abortControllerRef.current?.abort();
     };
-  }, []);
+  }, [userLocation]);
 
   useEffect(() => {
     function updateTimer() {
@@ -332,7 +419,14 @@ export default function Home() {
         <View style={styles.greetingRow}>
           <View>
             <Text style={styles.greeting}>Halo, {user.name} !</Text>
-            <Text style={styles.date}>Thursday, 7 August 2025</Text>
+            <Text style={styles.date}>
+              {currentDate.toLocaleDateString("id-ID", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
           </View>
         </View>
 
@@ -342,7 +436,7 @@ export default function Home() {
             style={styles.locationImage}
           />
           <Text style={styles.locationText}>
-            <Ionicons name="location-outline" size={16} /> BANDUNG
+            <Ionicons name="location-outline" size={16} /> {userLocation.name}
           </Text>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>

@@ -3,9 +3,14 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { getDatabase, ref, update } from "@react-native-firebase/database";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -16,12 +21,74 @@ import {
   View,
 } from "react-native";
 
+// Helper function to calculate haversine distance
+function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const radLat1 = toRad(lat1);
+  const radLat2 = toRad(lat2);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(radLat1) *
+      Math.cos(radLat2) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
+// Helper function to find nearest location
+function findNearestLocation(
+  gpsLat: number,
+  gpsLon: number,
+  locations: any[],
+) {
+  if (!locations || locations.length === 0) return null;
+
+  let nearest = locations[0];
+  let minDistance = haversineDistanceKm(
+    gpsLat,
+    gpsLon,
+    nearest.latitude,
+    nearest.longitude,
+  );
+
+  for (let i = 1; i < locations.length; i++) {
+    const distance = haversineDistanceKm(
+      gpsLat,
+      gpsLon,
+      locations[i].latitude,
+      locations[i].longitude,
+    );
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = locations[i];
+    }
+  }
+
+  return nearest;
+}
+
 export default function UbahLokasi() {
   const router = useRouter();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
+  const [selectedLocationItem, setSelectedLocationItem] = useState<any>(null);
+  const [allLocations, setAllLocations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   const profile = {
     name: "Fasya Burhanis syauqi",
@@ -31,25 +98,35 @@ export default function UbahLokasi() {
     initials: "FBS",
   };
 
-  const allLocations = [
-    {
-      id: "1",
-      name: "Kemayoran",
-      desc: "Kota Adm. Jakarta Pusat, DKI Jakarta",
-    },
-    { id: "2", name: "Kemayoran", desc: "Kota Surabaya, Jawa Timur" },
-    { id: "3", name: "Kemayoran", desc: "Bangkalan, Jawa Timur" },
-    {
-      id: "4",
-      name: "Utan Panjang",
-      desc: "Kota Adm. Jakarta Pusat, DKI Jakarta",
-    },
-    {
-      id: "5",
-      name: "Sumur Batu",
-      desc: "Kota Adm. Jakarta Pusat, DKI Jakarta",
-    },
-  ];
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        if (!dbUrl) throw new Error("Database URL not configured");
+
+        const response = await fetch(`${dbUrl}/locations.json`);
+        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+
+        const data = await response.json();
+        // Convert object keyed by id to array
+        const locationsArray = Object.entries(data || {}).map(([id, location]: any) => ({
+          id,
+          name: location.name || "",
+          desc: location.alt_name || location.name || "",
+          latitude: location.latitude,
+          longitude: location.longitude,
+        }));
+        setAllLocations(locationsArray);
+      } catch (error) {
+        console.error("Error fetching locations:", error);
+        setAllLocations([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocations();
+  }, []);
 
   const filteredLocations = allLocations.filter(
     (item) =>
@@ -57,13 +134,106 @@ export default function UbahLokasi() {
       item.desc.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleSelect = (item: any) => {
+  const handleSelect = async (item: any) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
+    setSelectedLocationItem(item);
     setLocationModalVisible(false);
     setQuery("");
   };
 
-  const handleSimpan = () => {
+  const handleUseGPS = async () => {
+    setGpsLoading(true);
+    try {
+      // Request location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Ditolak",
+          "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
+        );
+        setGpsLoading(false);
+        return;
+      }
+
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Find nearest location from database
+      const nearestLocation = findNearestLocation(latitude, longitude, allLocations);
+      const locationName = nearestLocation?.name || "Lokasi GPS";
+
+      // Update user location in database with GPS coordinates
+      try {
+        const app = getApp();
+        const authInstance = getAuth(app);
+        const currentUser = authInstance.currentUser;
+
+        if (currentUser) {
+          const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+          const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+
+          await update(ref(database, `users/${currentUser.uid}`), {
+            latitude: latitude.toFixed(6),
+            longitude: longitude.toFixed(6),
+            locationName: locationName,
+            locationUpdatedAt: new Date().toISOString(),
+          });
+          console.log("User location updated (GPS):", { latitude, longitude, locationName });
+          setSelectedLocation(locationName);
+          setSelectedLocationItem({ name: locationName, latitude, longitude });
+        }
+      } catch (dbError) {
+        console.error("Error updating user location:", dbError);
+        Alert.alert("Error", "Gagal menyimpan lokasi ke database");
+      }
+    } catch (error) {
+      console.error("GPS Error:", error);
+      Alert.alert(
+        "Error",
+        "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
+      );
+    } finally {
+      setGpsLoading(false);
+    }
+  };
+
+  const handleSimpan = async () => {
+    if (!selectedLocationItem) {
+      Alert.alert("Error", "Silakan pilih lokasi terlebih dahulu");
+      return;
+    }
+
+    try {
+      const app = getApp();
+      const authInstance = getAuth(app);
+      const currentUser = authInstance.currentUser;
+
+      if (currentUser) {
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+
+        await update(ref(database, `users/${currentUser.uid}`), {
+          latitude: selectedLocationItem.latitude?.toFixed(6) || selectedLocationItem.latitude,
+          longitude: selectedLocationItem.longitude?.toFixed(6) || selectedLocationItem.longitude,
+          locationName: selectedLocationItem.name,
+          locationUpdatedAt: new Date().toISOString(),
+        });
+        console.log("User location updated (manual select):", { 
+          latitude: selectedLocationItem.latitude, 
+          longitude: selectedLocationItem.longitude, 
+          locationName: selectedLocationItem.name 
+        });
+      }
+    } catch (dbError) {
+      console.error("Error updating user location:", dbError);
+      Alert.alert("Error", "Gagal menyimpan lokasi ke database");
+      return;
+    }
+
     setShowSuccessModal(true);
   };
 
@@ -119,8 +289,15 @@ export default function UbahLokasi() {
 
             {/* TOMBOL GPS - SUDAH DISESUAIKAN UKURANNYA */}
             <View style={styles.gpsWrapper}>
-              <TouchableOpacity style={styles.btnGPS} activeOpacity={0.8}>
-                <Text style={styles.btnTextGPS}>Pakai GPS</Text>
+              <TouchableOpacity 
+                style={styles.btnGPS} 
+                activeOpacity={0.8}
+                onPress={handleUseGPS}
+                disabled={gpsLoading}
+              >
+                <Text style={styles.btnTextGPS}>
+                  {gpsLoading ? "Mengambil GPS..." : "Pakai GPS"}
+                </Text>
               </TouchableOpacity>
             </View>
 

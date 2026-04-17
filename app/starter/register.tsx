@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
 } from "@react-native-firebase/auth";
+import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -20,6 +21,9 @@ import {
   View,
 } from "react-native";
 
+const FIREBASE_DATABASE_URL =
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
+
 export default function Register() {
   const router = useRouter();
   const [secure, setSecure] = useState(true);
@@ -33,12 +37,29 @@ export default function Register() {
   const passwordsMatch = confirmPassword === "" || password === confirmPassword;
 
   const handleRegister = async () => {
-    if (password !== confirmPassword) return;
+    if (password !== confirmPassword) {
+      Alert.alert(
+        "Kata sandi tidak cocok",
+        "Pastikan kata sandi dan konfirmasi sama.",
+      );
+      return;
+    }
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
-    if (!trimmedEmail || !trimmedPassword) {
-      Alert.alert("Input belum lengkap", "Email dan kata sandi wajib diisi.");
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+
+    if (
+      !trimmedEmail ||
+      !trimmedPassword ||
+      !trimmedFirstName ||
+      !trimmedLastName
+    ) {
+      Alert.alert(
+        "Input belum lengkap",
+        "Nama, email, dan kata sandi wajib diisi.",
+      );
       return;
     }
 
@@ -53,12 +74,39 @@ export default function Register() {
 
       const uid = userCredential.user.uid;
 
-      // simpan data tambahan ke database nanti (step berikutnya)
+      const database = FIREBASE_DATABASE_URL
+        ? getDatabase(app, FIREBASE_DATABASE_URL)
+        : getDatabase(app);
+      await set(ref(database, `users/${uid}`), {
+        email: trimmedEmail,
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        createdAt: Date.now(),
+      });
 
-      console.log("Register success:", uid);
-      router.push("/starter/login");
+      console.log(
+        "Register success:",
+        uid,
+        "databaseUrl:",
+        FIREBASE_DATABASE_URL || "default",
+      );
+      Alert.alert(
+        "Registrasi Berhasil",
+        "Akun berhasil dibuat. Silakan login.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.push("/starter/login"),
+          },
+        ],
+      );
     } catch (e) {
-      console.log(e);
+      const error = e as { code?: string; message?: string };
+      console.log("Register error:", error?.code, error?.message, e);
+      Alert.alert(
+        "Registrasi Gagal",
+        `${error?.code || "error"}: ${error?.message || "Terjadi kesalahan saat membuat akun."}`,
+      );
     }
   };
 
@@ -81,6 +129,7 @@ export default function Register() {
         <Text style={styles.label}>Nama Depan</Text>
         <TextInput
           placeholder="Jane"
+          placeholderTextColor="#999"
           style={styles.input}
           value={firstName}
           onChangeText={setFirstName}
@@ -89,6 +138,7 @@ export default function Register() {
         <Text style={styles.label}>Nama Belakang</Text>
         <TextInput
           placeholder="Doe"
+          placeholderTextColor="#999"
           style={styles.input}
           value={lastName}
           onChangeText={setLastName}
@@ -97,6 +147,7 @@ export default function Register() {
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="email@gmail.com"
+          placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
@@ -108,6 +159,7 @@ export default function Register() {
         <View style={styles.passwordContainer}>
           <TextInput
             placeholder="********"
+            placeholderTextColor="#999"
             secureTextEntry={secure}
             style={styles.passwordInput}
             onChangeText={setPassword}
@@ -135,6 +187,7 @@ export default function Register() {
             style={styles.passwordInput}
             onChangeText={setConfirmPassword}
             value={confirmPassword}
+            placeholderTextColor="#999"
           />
           <TouchableOpacity onPress={() => setSecureConfirm(!secureConfirm)}>
             <Ionicons
@@ -196,6 +249,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
     paddingVertical: 8,
+    color: "#111",
   },
   passwordContainer: {
     flexDirection: "row",
@@ -206,6 +260,7 @@ const styles = StyleSheet.create({
   passwordInput: {
     flex: 1,
     paddingVertical: 8,
+    color: "#111",
   },
   errorText: {
     color: "red",

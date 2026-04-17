@@ -21,10 +21,13 @@ import { getAuth, signInWithEmailAndPassword } from "@react-native-firebase/auth
 export default function Login() {
   const router = useRouter();
   const [secure, setSecure] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async () => {
+    if (isSubmitting) return;
+
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
@@ -33,13 +36,24 @@ export default function Login() {
       return;
     }
 
+    setIsSubmitting(true);
+    const startedAt = Date.now();
+
     try {
       const app = getApp();
       const authInstance = getAuth(app);
       await signInWithEmailAndPassword(authInstance, trimmedEmail, trimmedPassword);
-      router.push("/starter/ask-location");
+      console.log("Login success in ms:", Date.now() - startedAt);
+      router.replace("/starter/ask-location");
     } catch (e) {
-      console.log(e);
+      const error = e as { code?: string; message?: string };
+      console.log("Login error:", error?.code, error?.message, e);
+      Alert.alert(
+        "Login gagal",
+        "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -61,6 +75,7 @@ export default function Login() {
         <Text style={styles.label}>Email</Text>
         <TextInput
           placeholder="email@gmail.com"
+          placeholderTextColor="#999"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -72,6 +87,7 @@ export default function Login() {
         <View style={styles.passwordContainer}>
           <TextInput
             placeholder="********"
+            placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={secure}
@@ -93,8 +109,9 @@ export default function Login() {
         </TouchableOpacity>
 
         <AuthButton
-          title="Login"
+          title={isSubmitting ? "Memproses..." : "Login"}
           onPress={handleLogin}
+          disabled={isSubmitting}
         />
 
         <Text style={styles.signUpText}>Belum Punya Akun?</Text>
@@ -136,6 +153,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
     paddingVertical: 8,
+    color: "#111",
   },
   passwordContainer: {
     flexDirection: "row",
@@ -146,6 +164,7 @@ const styles = StyleSheet.create({
   passwordInput: {
     flex: 1,
     paddingVertical: 8,
+    color: "#111",
   },
   label: {
     fontSize: 18,
