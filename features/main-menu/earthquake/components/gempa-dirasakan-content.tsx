@@ -1,3 +1,4 @@
+import { useHaversine } from "@/hooks/use-haversine";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,27 +29,6 @@ const REFERENCE_LOCATION = {
   latitude: -6.9175,
   longitude: 107.6191,
 };
-
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function getMagnitudeScaleFactor(magnitude: number): number {
   const deltaMagnitude = magnitude - 5;
@@ -101,6 +81,7 @@ export default function GempaDirasakan({
   onLoadingChange,
   isActive = true,
 }: Props) {
+  const { haversineDistanceKm } = useHaversine();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);

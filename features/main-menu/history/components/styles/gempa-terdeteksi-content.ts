@@ -1,0 +1,61 @@
+import { StyleSheet } from "react-native";
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  topControls: {
+    position: "absolute",
+    top: 16,
+    left: 10,
+    right: 10,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 10,
+  },
+  locationCard: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 12,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  dragHandleArea: { alignItems: "center", paddingVertical: 8, marginBottom: 8 },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#1E6F9F",
+    alignSelf: "center",
+  },
+  statsTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 11,
+  },
+  statTopItem: { flex: 1, alignItems: "center", gap: 2 },
+  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000000" },
+  statTopLabel: { fontSize: 12, color: "#000000", fontWeight: "500" },
+  statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
+  separator: { height: 2, backgroundColor: "#0369A1", marginBottom: 11 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 4,
+    gap: 10,
+  },
+  infoIcon: { marginTop: 2 },
+  infoTextFlex: { flex: 1 },
+  infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
+  infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
+});
+
+export default styles;
