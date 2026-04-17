@@ -42,7 +42,7 @@ export const DirasakanCard = ({
         <TouchableOpacity
           style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
           onPress={(e) => {
-            e.stopPropagation();
+            e.stopPropagation();g
             onShakeMap();
           }}
           disabled={!hasShakeMap}
