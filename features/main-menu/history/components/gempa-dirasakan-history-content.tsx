@@ -1,19 +1,20 @@
 import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
+import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  AppState,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    AppState,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import styles from "./styles/gempa-dirasakan-history-content";
 
@@ -37,31 +38,6 @@ function withCacheBuster(url: string) {
       : "&"
     : "?";
   return `${base}${separator}t=${Date.now()}`;
-}
-
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
 }
 
 type QuakeItem = {
@@ -121,6 +97,7 @@ export function GempaDirasakanHistoryContent({
   externalSelection,
   isActive = true,
 }: Props) {
+  const { haversineDistanceKm } = useHaversine();
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showCard, setShowCard] = useState(false);

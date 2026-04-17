@@ -1,4 +1,5 @@
 import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
+import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
@@ -8,11 +9,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import styles from "./styles/list-gempa-screen";
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
@@ -50,36 +51,12 @@ function getDetectedHistoryNodeUrl() {
   return `${base}/gempa_terdeteksi.json`;
 }
 
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
-
 export default function ListGempaPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const mode: ListMode =
     params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const { haversineDistanceKm } = useHaversine();
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number }>({
@@ -191,8 +168,8 @@ export default function ListGempaPage() {
               ).toFixed(1);
               const eventId = String(
                 candidate?.eventid ??
-                  candidate?.identifier ??
-                  `${globalIdentifier}-${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
+                candidate?.identifier ??
+                `${globalIdentifier}-${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
               );
 
               return {
@@ -222,7 +199,7 @@ export default function ListGempaPage() {
 
           // Handle both direct array and object keyed structure
           let nodeArray: any[] = [];
-          
+
           if (Array.isArray(data)) {
             // If data is already an array
             nodeArray = data;
@@ -277,7 +254,7 @@ export default function ListGempaPage() {
               ).toFixed(1);
               const eventId = String(
                 props?.eventid ??
-                  `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
+                `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
               );
 
               return {
@@ -392,110 +369,3 @@ export default function ListGempaPage() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0C4A6E",
-    paddingHorizontal: 12,
-    paddingTop: 12,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  headerTitle: {
-    flex: 1,
-    marginRight: 12,
-    color: "#E6F4FF",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 7,
-    backgroundColor: "#E6F4FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scrollContent: {
-    gap: 8,
-    paddingBottom: 24,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 16,
-  },
-  loadingText: {
-    color: "#E6F4FF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  emptyText: {
-    color: "#E6F4FF",
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 16,
-  },
-  itemCard: {
-    backgroundColor: "#EDEDED",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  magnitudeBubble: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#D97706",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  magnitudeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  magnitudeLabel: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "500",
-    marginTop: -2,
-  },
-  infoColumn: {
-    flex: 1,
-    gap: 2,
-  },
-  locationText: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  timeText: {
-    color: "#4B5563",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  distanceText: {
-    color: "#4B5563",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  itemAction: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    backgroundColor: "#0891B2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

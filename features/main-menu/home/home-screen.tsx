@@ -1,11 +1,11 @@
-import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
+import { CACHE_KEYS, getCachedData, setCacheData } from "@/hooks/use-earthquake-cache";
+import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
-import Feather from "@expo/vector-icons/Feather";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { get, getDatabase, ref } from "@react-native-firebase/database";
+import { getDownloadURL, getStorage, ref as storageRef } from "@react-native-firebase/storage";
 import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,13 +17,15 @@ import {
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { DirasakanCard } from "./components/dirasakan-card";
+import { InfoModal } from "./components/info-modal";
+import { TerdeteksiCard } from "./components/terdeteksi-card";
+import { styles } from "./styles/homeStyles";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -35,31 +37,6 @@ const DEFAULT_LOCATION = {
   longitude: 107.6191,
   name: "Bandung",
 };
-
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
 
 // === FUNGSI MENGHITUNG WAKTU REAL-TIME ===
 function calculateTimeAgo(tanggal: string, jam: string) {
@@ -155,6 +132,7 @@ type TerdeteksiQuake = {
 
 export default function Home() {
   const router = useRouter();
+  const { haversineDistanceKm } = useHaversine();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
@@ -173,6 +151,8 @@ export default function Home() {
     longitude: DEFAULT_LOCATION.longitude,
     name: DEFAULT_LOCATION.name,
   });
+  const [locationImageUrl, setLocationImageUrl] = useState<string | null>(null);
+  const [locationImageLoading, setLocationImageLoading] = useState(true);
   const [userName, setUserName] = useState("Pengguna");
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -208,6 +188,53 @@ export default function Home() {
             ? `${userData.firstName}` 
             : userData.firstName;
           setUserName(fullName);
+        }
+        // Fetch location image from Firebase Storage via locations collection with caching
+        if (userData.locationName) {
+          try {
+            // Check cache first
+            const cacheKey = `location_image_${userData.locationName}`;
+            const cachedUrl = getCachedData<string>(cacheKey);
+            
+            if (cachedUrl) {
+              // Use cached URL
+              setLocationImageUrl(cachedUrl);
+              setLocationImageLoading(false);
+            } else {
+              // Fetch from Firebase if not cached
+              const locationsRef = ref(database, "locations");
+              const locationsSnapshot = await get(locationsRef);
+              const locationsData = locationsSnapshot.val();
+
+              if (locationsData) {
+                // Find the location matching the user's locationName
+                const locationEntry = Object.values(locationsData).find(
+                  (loc: any) => loc?.name === userData.locationName
+                ) as any;
+
+                if (locationEntry?.image) {
+                  const storage = getStorage(app);
+                  const imageRef = storageRef(storage, locationEntry.image);
+                  const url = await getDownloadURL(imageRef);
+                  
+                  // Cache the URL for future use (1 hour TTL)
+                  setCacheData(cacheKey, url, 3600_000);
+                  setLocationImageUrl(url);
+                  setLocationImageLoading(false);
+                } else {
+                  setLocationImageLoading(false);
+                }
+              } else {
+                setLocationImageLoading(false);
+              }
+            }
+          } catch (storageError) {
+            console.warn("Error fetching location image:", storageError);
+            setLocationImageUrl(null);
+            setLocationImageLoading(false);
+          }
+        } else {
+          setLocationImageLoading(false);
         }
       }
     } catch (error) {
@@ -431,10 +458,14 @@ export default function Home() {
         </View>
 
         <View style={styles.locationCard}>
-          <Image
-            source={require("../../../assets/images/bandung.jpg")}
-            style={styles.locationImage}
-          />
+          {locationImageLoading || !locationImageUrl ? (
+            <View style={[styles.locationImage, styles.skeletonLoading]} />
+          ) : (
+            <Image
+              source={{ uri: locationImageUrl }}
+              style={styles.locationImage}
+            />
+          )}
           <Text style={styles.locationText}>
             <Ionicons name="location-outline" size={16} /> {userLocation.name}
           </Text>
@@ -592,440 +623,8 @@ export default function Home() {
   );
 }
 
-// === KOMPONEN CARD ===
 
-const DirasakanCard = ({
-  data,
-  onShakeMap,
-  hasShakeMap,
-  onCardPress,
-}: {
-  data: DirasakanQuake | null;
-  onShakeMap: () => void;
-  hasShakeMap: boolean;
-  onCardPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={styles.mapCard}
-    activeOpacity={0.95}
-    onPress={onCardPress}
-  >
-    <View style={styles.mapImageContainer}>
-      <Image
-        source={require("../../../assets/images/navigation-map.png")}
-        style={styles.mapImage}
-      />
-      <View style={styles.mapButtons}>
-        <TouchableOpacity
-          style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
-          onPress={(e) => {
-            e.stopPropagation();
-            onShakeMap();
-          }}
-          disabled={!hasShakeMap}
-        >
-          <Feather name="map" size={12} color="white" />
-          <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.mapButton}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <Feather name="share" size={12} color="white" />
-          <Text style={styles.mapButtonText}>BAGIKAN</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
 
-    <View style={styles.statsTopRow}>
-      <StatItem
-        icon="triangle-wave"
-        value={data?.magnitude ?? "-"}
-        label="Magnitudo"
-      />
-      <View style={styles.statTopDivider} />
-      <StatItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
-      <View style={styles.statTopDivider} />
-      <StatItem
-        icon="compass-outline"
-        value={data?.latText ?? "-"}
-        label="LS"
-      />
-      <View style={styles.statTopDivider} />
-      <StatItem
-        icon="compass-outline"
-        value={data?.lonText ?? "-"}
-        label="BT"
-      />
-    </View>
 
-    <View style={styles.separator} />
 
-    <View style={styles.infoContent}>
-      <DetailItem
-        icon="location"
-        label="Lokasi Gempa :"
-        value={data?.wilayah ?? "-"}
-      />
-      <DetailItem
-        icon="time-outline"
-        label="Waktu :"
-        value={data ? `${data.tanggal}, ${data.jam}` : "-"}
-      />
-      <DetailItem
-        icon="walk-outline"
-        label="Jarak :"
-        value={data ? `${data.distanceKm} km dari lokasi Anda` : "-"}
-      />
-      {!!data?.felt && (
-        <DetailItem
-          icon="alert-circle-outline"
-          label="Wilayah Dirasakan :"
-          value={data.felt}
-        />
-      )}
-    </View>
-  </TouchableOpacity>
-);
 
-const TerdeteksiCard = ({
-  data,
-  onCardPress,
-}: {
-  data: TerdeteksiQuake | null;
-  onCardPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={styles.mapCard}
-    activeOpacity={0.95}
-    onPress={onCardPress}
-  >
-    <View style={styles.mapImageContainer}>
-      <Image
-        source={require("../../../assets/images/navigation-map.png")}
-        style={styles.mapImage}
-      />
-      <View style={styles.mapButtons}>
-        <TouchableOpacity
-          style={styles.mapButton}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <Feather name="share" size={12} color="white" />
-          <Text style={styles.mapButtonText}>BAGIKAN</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-
-    <View style={styles.statsTopRow}>
-      <StatItem
-        icon="triangle-wave"
-        value={data?.magnitude ?? "-"}
-        label="Magnitudo"
-      />
-      <View style={styles.statTopDivider} />
-      <StatItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
-      <View style={styles.statTopDivider} />
-      <StatItem
-        icon="compass-outline"
-        value={data?.latText ?? "-"}
-        label="LS"
-      />
-      <View style={styles.statTopDivider} />
-      <StatItem
-        icon="compass-outline"
-        value={data?.lonText ?? "-"}
-        label="BT"
-      />
-    </View>
-
-    <View style={styles.separator} />
-
-    <View style={styles.infoContent}>
-      <DetailItem
-        icon="location"
-        label="Lokasi Gempa :"
-        value={data?.wilayah ?? "-"}
-      />
-      <DetailItem
-        icon="time-outline"
-        label="Tanggal :"
-        value={data?.tanggal ?? "-"}
-      />
-      <DetailItem icon="time-outline" label="Jam :" value={data?.jam ?? "-"} />
-      {!!data?.fase && (
-        <DetailItem
-          icon="alert-circle-outline"
-          label="Fase :"
-          value={data.fase}
-        />
-      )}
-    </View>
-  </TouchableOpacity>
-);
-
-// === KOMPONEN ITEM ===
-const StatItem = ({ icon, value, label }: any) => (
-  <View style={styles.statTopItem}>
-    <MaterialCommunityIcons name={icon} size={20} color="#0369A1" />
-    <Text style={styles.statTopValue}>{value}</Text>
-    <Text style={styles.statTopLabel}>{label}</Text>
-  </View>
-);
-
-const DetailItem = ({ icon, label, value }: any) => (
-  <View style={styles.infoRow}>
-    <Ionicons name={icon} size={18} color="#1E6F9F" style={styles.infoIcon} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);
-
-const InfoModal = ({ visible, onClose, title, desc }: any) => (
-  <Modal
-    visible={visible}
-    transparent
-    animationType="fade"
-    onRequestClose={onClose}
-  >
-    <Pressable style={styles.modalOverlay} onPress={onClose}>
-      <View style={styles.infoCard}>
-        <Ionicons
-          name="information-circle"
-          size={40}
-          color="#1E6F9F"
-          style={{ alignSelf: "center", marginBottom: 12 }}
-        />
-        <Text style={styles.infoTitle}>{title}</Text>
-        <Text style={styles.infoDesc}>{desc}</Text>
-        <TouchableOpacity style={styles.infoButton} onPress={onClose}>
-          <Text style={styles.infoButtonText}>Mengerti</Text>
-        </TouchableOpacity>
-      </View>
-    </Pressable>
-  </Modal>
-);
-
-// === STYLES ===
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  greetingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 10,
-    marginTop: 5,
-  },
-  greeting: { fontSize: 24, fontWeight: "bold", color: "#000" },
-  date: { color: "#000", fontWeight: "bold", fontSize: 14 },
-  locationCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 10,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-  },
-  locationImage: {
-    width: "100%",
-    height: 125,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  locationText: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 15,
-    backgroundColor: "#F5F7FA",
-    marginTop: -10,
-  },
-  statItem: { alignItems: "center" },
-  statLabel: { fontSize: 10, color: "#777" },
-  statValue: { fontWeight: "bold" },
-  bottomSection: {
-    backgroundColor: "#0C4A6E",
-    marginTop: -1,
-    paddingBottom: 10,
-    flex: 1,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  sectionTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", flex: 1 },
-  paginationContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 5,
-  },
-  dot: { borderRadius: 5, marginHorizontal: 4 },
-  dotActive: { width: 20, height: 8, backgroundColor: "#fff" },
-  dotInactive: {
-    width: 8,
-    height: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
-  },
-
-  mapCard: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    borderRadius: 16,
-    paddingBottom: 15,
-    marginBottom: 10,
-    height: 490,
-    overflow: "hidden",
-  },
-
-  mapImageContainer: { position: "relative" },
-  mapImage: {
-    width: "100%",
-    height: 180,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  mapButtons: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    flexDirection: "row",
-    gap: 6,
-  },
-  mapButton: {
-    backgroundColor: "#0891B2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  mapButtonDisabled: { backgroundColor: "#94a3b8" },
-  mapButtonText: { color: "#fff", fontSize: 10 },
-
-  statsTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 11,
-    marginTop: 15,
-  },
-  statTopItem: { flex: 1, alignItems: "center", gap: 2 },
-  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000" },
-  statTopLabel: { fontSize: 12, color: "#000", fontWeight: "500" },
-  statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
-  separator: {
-    height: 2,
-    backgroundColor: "#0369A1",
-    marginBottom: 11,
-    marginHorizontal: 15,
-  },
-
-  infoContent: { paddingHorizontal: 15 },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 8,
-    gap: 10,
-  },
-  infoIcon: { marginTop: 2 },
-  infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
-  infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: "85%",
-    padding: 24,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#000",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  infoDesc: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  infoButton: {
-    backgroundColor: "#1E6F9F",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-  modalOverlayBottom: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
-  },
-  modalCardBottom: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    width: "100%",
-  },
-  modalHeaderBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  modalTitleBottom: { color: "#0C4A6E", fontWeight: "bold", fontSize: 16 },
-  modalSubtitle: { fontSize: 11, color: "#777" },
-  maximizedImage: { width: SCREEN_WIDTH, height: 600, marginTop: 10 },
-  modalFooter: {
-    padding: 15,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    backgroundColor: "#fafafa",
-  },
-  scrollHint: {
-    textAlign: "center",
-    fontSize: 12,
-    color: "#1E6F9F",
-    fontWeight: "500",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#ccc",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginTop: 12,
-  },
-  modalCloseCircle: {
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-    padding: 4,
-  },
-});
