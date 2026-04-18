@@ -1,19 +1,21 @@
+import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import EarthquakeMap from "@/components/earthquake-map";
@@ -82,6 +84,7 @@ export default function GempaDirasakan({
   isActive = true,
 }: Props) {
   const { haversineDistanceKm } = useHaversine();
+  const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
@@ -92,6 +95,7 @@ export default function GempaDirasakan({
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
+  const networkErrorShownRef = useRef(false);
   const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -289,7 +293,15 @@ export default function GempaDirasakan({
         );
         isFirstLoad.current = false;
         return true;
-      } catch {
+      } catch (error) {
+        if (!networkErrorShownRef.current && error instanceof TypeError && error.message.includes('Network')) {
+          networkErrorShownRef.current = true;
+          Alert.alert(
+            'Koneksi Jaringan',
+            'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
+            [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
+          );
+        }
         return false;
       } finally {
         if (!silent) onLoadingChange?.(false);
@@ -351,7 +363,10 @@ export default function GempaDirasakan({
         {tabBar}
         {showCard && (
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
-            <TouchableOpacity style={styles.mapButton}>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => shareQuake(latestQuake, "dirasakan")}
+            >
               <Feather name="share" size={12} color="white" />
               <Text style={styles.mapButtonText}>BAGIKAN</Text>
             </TouchableOpacity>

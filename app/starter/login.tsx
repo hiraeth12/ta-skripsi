@@ -2,19 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import AuthButton from "@/components/auth-button";
+import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth, signInWithEmailAndPassword } from "@react-native-firebase/auth";
 
@@ -42,8 +43,29 @@ export default function Login() {
     try {
       const app = getApp();
       const authInstance = getAuth(app);
-      await signInWithEmailAndPassword(authInstance, trimmedEmail, trimmedPassword);
+      const result = await signInWithEmailAndPassword(authInstance, trimmedEmail, trimmedPassword);
       console.log("Login success in ms:", Date.now() - startedAt);
+      
+      // Save FCM token for push notifications (with timeout - don't block navigation)
+      if (result.user?.uid) {
+        try {
+          console.log('[Login] Starting FCM token save...');
+          // Promise that rejects after 5 seconds
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('FCM token save timeout')), 5000)
+          );
+          await Promise.race([
+            saveFcmTokenToDatabase(result.user.uid),
+            timeoutPromise,
+          ]);
+          console.log('[Login] FCM token saved successfully');
+        } catch (tokenError) {
+          console.warn('[Login] ⚠️ Failed to save FCM token (continuing anyway):', tokenError);
+          // Don't throw - login should succeed even if token save fails
+        }
+      }
+      
+      console.log('[Login] Navigating to ask-location...');
       router.replace("/starter/ask-location");
     } catch (e) {
       const error = e as { code?: string; message?: string };

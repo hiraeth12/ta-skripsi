@@ -3,8 +3,12 @@
  * Run dengan: node api/database/scheduler.js
  */
 
-const fs = require("fs");
-const path = require("path");
+import { spawn } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Simple interval-based scheduler
 function schedule(name, interval, fn) {
@@ -34,11 +38,8 @@ function schedule(name, interval, fn) {
 }
 
 async function syncLatestGempaDirasakan() {
-  const script = require("./sync-latest-gempa-dirasakan-history.js");
-  // The script exports an async run() function that should be invoked
-  // For now, we'll spawn it as a subprocess
+  // Spawn as subprocess to use dynamic import
   return new Promise((resolve, reject) => {
-    const { spawn } = require("child_process");
     const child = spawn("node", [
       path.join(__dirname, "sync-latest-gempa-dirasakan-history.js"),
     ]);
@@ -70,7 +71,6 @@ async function syncLatestGempaDirasakan() {
 
 async function syncGempaTerdeteksi() {
   return new Promise((resolve, reject) => {
-    const { spawn } = require("child_process");
     const child = spawn("node", [
       path.join(__dirname, "db-gempa-terdeteksi-history.js"),
     ]);

@@ -1,4 +1,5 @@
 import AuthButton from "@/components/auth-button";
+import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import { createUserWithEmailAndPassword, getAuth } from "@react-native-firebase/auth";
@@ -6,16 +7,16 @@ import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView, // Tambahkan ScrollView
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView, // Tambahkan ScrollView
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const FIREBASE_DATABASE_URL =
@@ -69,6 +70,20 @@ export default function Register() {
         lastName: trimmedLastName,
         createdAt: Date.now(),
       });
+
+      // Save FCM token for push notifications (with timeout - don't block registration)
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('FCM token save timeout')), 5000)
+        );
+        await Promise.race([
+          saveFcmTokenToDatabase(uid),
+          timeoutPromise,
+        ]);
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to save FCM token during register (continuing anyway):', tokenError);
+        // Don't throw - registration should succeed even if token save fails
+      }
 
       console.log("Register success:", uid, "databaseUrl:", FIREBASE_DATABASE_URL || "default");
       Alert.alert("Registrasi Berhasil", "Akun berhasil dibuat. Silakan login.", [
