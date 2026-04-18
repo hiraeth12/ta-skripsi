@@ -2,17 +2,17 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import EarthquakeMap from "@/components/earthquake-map";
@@ -119,7 +119,8 @@ export default function GempaDirasakan({
   const waveOverlays = useMemo(() => {
     if (!latestQuake) return [];
 
-    const magnitude = parseFloat(String(latestQuake.magnitude).replace("M", "")) || 0;
+    const magnitude =
+      parseFloat(String(latestQuake.magnitude).replace("M", "")) || 0;
     const depthKm =
       parseFloat(String(latestQuake.kedalaman).replace(/[^\d.-]/g, "")) || 0;
     const radii = getStaticWaveRadiiMeters(magnitude, depthKm);
@@ -350,6 +351,7 @@ export default function GempaDirasakan({
     <View style={styles.container}>
       <EarthquakeMap
         mapRef={mapRef}
+        isCardOpen={showCard}
         highlightPolygons={[]}
         waveOverlays={waveOverlays}
         markerCoordinate={
@@ -438,7 +440,10 @@ export default function GempaDirasakan({
           )}
 
           <TouchableOpacity
-            style={[styles.simulasiBtn, !shakeMapUrl && styles.simulasiBtnDisabled]}
+            style={[
+              styles.simulasiBtn,
+              !shakeMapUrl && styles.simulasiBtnDisabled,
+            ]}
             activeOpacity={0.8}
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}

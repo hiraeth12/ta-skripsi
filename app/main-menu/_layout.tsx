@@ -21,14 +21,33 @@ export default function MainLayout() {
   const isNotifPage = pathname === "/main-menu/notifikasi";
 
   // 2. Logic Active Tab: Jika di halaman notifikasi, set ke "NONE" agar garis indikator mati
-  const activeTab = useMemo(
-    () =>
-      isNotifPage
-        ? "NONE"
-        : (Object.entries(ROUTE_MAP).find(([, path]) => pathname === path)?.[0] ??
-          "HOME"),
-    [isNotifPage, pathname],
-  );
+  const activeTab = useMemo(() => {
+    if (isNotifPage) return "NONE";
+
+    // 1. Cek apakah pathname saat ini ada di ROUTE_MAP (Cocok persis)
+    const foundTab = Object.entries(ROUTE_MAP).find(
+      ([, path]) => pathname === path,
+    )?.[0];
+    if (foundTab) return foundTab;
+
+    // 2. Logic khusus untuk RIWAYAT (History)
+    // Tambahkan pengecekan jika URL mengandung 'list-gempa' atau 'filter-gempa'
+    if (
+      pathname.includes("/main-menu/history") ||
+      pathname.includes("/main-menu/list-gempa") ||
+      pathname.includes("/main-menu/filter-gempa-screen")
+    ) {
+      return "RIWAYAT";
+    }
+
+    // 3. Logic khusus untuk AKUN (seperti sebelumnya)
+    if (pathname.includes("/profile") || pathname.includes("/account")) {
+      return "AKUN";
+    }
+
+    // 4. Default fallback jika tidak ada yang cocok
+    return "HOME";
+  }, [isNotifPage, pathname]);
 
   const handleTabChange = useCallback(
     (tab: string) => {

@@ -16,7 +16,7 @@ export default function MainLayout() {
 
   const activeTab =
     Object.entries(routeMap).find(([, path]) => pathname === path)?.[0] ??
-    "HOME";
+    "AKUN";
 
   const handleTabChange = (tab: string) => {
     router.push(routeMap[tab] as any);

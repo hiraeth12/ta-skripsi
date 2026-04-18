@@ -3,12 +3,12 @@ import type { MapViewType } from "@/constants/map";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
@@ -210,6 +210,7 @@ export default function GempaTerdeteksi({
     <View style={styles.container}>
       <EarthquakeMap
         mapRef={mapRef}
+        isCardOpen={showCard}
         markerCoordinate={
           latestQuake
             ? {

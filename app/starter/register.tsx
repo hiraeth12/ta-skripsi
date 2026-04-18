@@ -9,11 +9,11 @@ import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
-  ScrollView, // Tambahkan ScrollView untuk mengatasi
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -34,13 +34,39 @@ export default function Register() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
+  // State untuk mengontrol Modal Custom
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error", // 'error' atau 'success'
+    onConfirm: null as (() => void) | null, // Fungsi untuk pindah halaman setelah sukses
+  });
+
+  // Fungsi untuk menampilkan Custom Alert
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+    onConfirm?: () => void,
+  ) => {
+    setModalConfig({
+      visible: true,
+      title,
+      message,
+      type,
+      onConfirm: onConfirm || null,
+    });
+  };
+
   const passwordsMatch = confirmPassword === "" || password === confirmPassword;
 
   const handleRegister = async () => {
     if (password !== confirmPassword) {
-      Alert.alert(
+      showCustomAlert(
         "Kata sandi tidak cocok",
         "Pastikan kata sandi dan konfirmasi sama.",
+        "error",
       );
       return;
     }
@@ -56,9 +82,10 @@ export default function Register() {
       !trimmedFirstName ||
       !trimmedLastName
     ) {
-      Alert.alert(
+      showCustomAlert(
         "Input belum lengkap",
         "Nama, email, dan kata sandi wajib diisi.",
+        "error",
       );
       return;
     }
@@ -90,22 +117,21 @@ export default function Register() {
         "databaseUrl:",
         FIREBASE_DATABASE_URL || "default",
       );
-      Alert.alert(
+
+      // Munculkan alert sukses, jika ditekan tombol "Mengerti" akan lari ke /starter/login
+      showCustomAlert(
         "Registrasi Berhasil",
         "Akun berhasil dibuat. Silakan login.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.push("/starter/login"),
-          },
-        ],
+        "success",
+        () => router.push("/starter/login"),
       );
     } catch (e) {
       const error = e as { code?: string; message?: string };
       console.log("Register error:", error?.code, error?.message, e);
-      Alert.alert(
+      showCustomAlert(
         "Registrasi Gagal",
         `${error?.code || "error"}: ${error?.message || "Terjadi kesalahan saat membuat akun."}`,
+        "error",
       );
     }
   };
@@ -113,9 +139,8 @@ export default function Register() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ScrollView agar konten bisa digeser saat keyboard muncul */}
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
@@ -220,6 +245,42 @@ export default function Register() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Komponen Modal Alert Kustom */}
+      <Modal
+        visible={modalConfig.visible}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoCard}>
+            <Ionicons
+              name={
+                modalConfig.type === "error"
+                  ? "alert-circle"
+                  : "checkmark-circle"
+              }
+              size={50}
+              color={modalConfig.type === "error" ? "#D9534F" : "#1E6F9F"}
+              style={styles.modalIcon}
+            />
+            <Text style={styles.infoTitle}>{modalConfig.title}</Text>
+            <Text style={styles.infoDesc}>{modalConfig.message}</Text>
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => {
+                setModalConfig({ ...modalConfig, visible: false });
+                // Eksekusi fungsi onConfirm jika ada (misal pindah halaman)
+                if (modalConfig.onConfirm) {
+                  modalConfig.onConfirm();
+                }
+              }}
+            >
+              <Text style={styles.infoButtonText}>Mengerti</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -272,5 +333,47 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 20,
     color: "#555",
+  },
+
+  // --- Styles untuk Modal Custom ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    width: "85%",
+    padding: 24,
+  },
+  modalIcon: {
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  infoDesc: {
+    fontSize: 14,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  infoButton: {
+    backgroundColor: "#1E6F9F",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  infoButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
