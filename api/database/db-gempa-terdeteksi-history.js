@@ -1,6 +1,7 @@
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { getDatabase } from "./firebase-admin-config.js";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");
@@ -196,16 +197,14 @@ async function syncOnce() {
     datasetChecksum: createPayloadChecksum(itemsByKey),
   };
 
-  const currentMetaRes = await fetch(
-    `${dbUrl}/gempa_terdeteksi.json`,
-  );
-  if (!currentMetaRes.ok) {
-    throw new Error(
-      `Failed to read current DB data: ${currentMetaRes.status} ${currentMetaRes.statusText}`,
-    );
+  const currentMetaRes = await getDatabase()
+    .ref("gempa_terdeteksi")
+    .get();
+  
+  let currentData = {};
+  if (currentMetaRes.exists()) {
+    currentData = currentMetaRes.val();
   }
-
-  const currentData = await currentMetaRes.json();
   const currentLastEventId = String(currentData?.lastEventId ?? "");
   const currentTotalItems = Number(currentData?.totalItems ?? 0);
   const currentChecksum = String(currentData?.datasetChecksum ?? "");
@@ -226,21 +225,23 @@ async function syncOnce() {
     };
   }
 
-  const writeResponse = await fetch(`${dbUrl}/gempa_terdeteksi.json`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!writeResponse.ok) {
-    const errText = await writeResponse.text();
-    throw new Error(`Failed to write DB: ${writeResponse.status} ${errText}`);
+  // Write using Firebase Admin SDK
+  try {
+    const db = getDatabase();
+    await db.ref("gempa_terdeteksi").set(payload);
+    console.log("[Sync] Successfully wrote gempa_terdeteksi data using Firebase Admin SDK");
+  } catch (error) {
+    throw new Error(
+      `Failed to write to Firebase Admin: ${error.message}`
+    );
   }
 
-  const verifyResponse = await fetch(
-    `${dbUrl}/gempa_terdeteksi/totalItems.json`,
-  );
-  const verifyTotalItems = await verifyResponse.json();
+  // Verify write using Admin SDK
+  const verifySnapshot = await getDatabase()
+    .ref("gempa_terdeteksi/totalItems")
+    .get();
+  
+  const verifyTotalItems = verifySnapshot.exists() ? verifySnapshot.val() : null;
 
   return {
     ok: true,

@@ -1,6 +1,7 @@
-const fs = require("fs");
-const path = require("path");
-const { XMLParser } = require("fast-xml-parser");
+import { XMLParser } from "fast-xml-parser";
+import fs from "fs";
+import path from "path";
+import { getDatabase } from "./firebase-admin-config.js";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");
@@ -173,27 +174,28 @@ async function syncLatestOnce() {
   // Append new event to the end (ascending order: oldest first, newest last)
   const updatedItems = [...currentItems, latest];
 
-  // Write updated items and metadata
-  const updates = {
-    [`${dbUrl}/gempa_dirasakan/sourceUrl.json`]: apiUrl,
-    [`${dbUrl}/gempa_dirasakan/sourceIdentifier.json`]: globalIdentifier,
-    [`${dbUrl}/gempa_dirasakan/syncedAt.json`]: new Date().toISOString(),
-    [`${dbUrl}/gempa_dirasakan/lastEventId.json`]: latest.eventid,
-    [`${dbUrl}/gempa_dirasakan/totalItems.json`]: updatedItems.length,
-    [`${dbUrl}/gempa_dirasakan/items.json`]: updatedItems,
-  };
+  // Write updated items and metadata using Firebase Admin SDK
+  try {
+    const db = getDatabase();
+    
+    // Prepare all updates
+    const updates = {
+      "gempa_dirasakan/sourceUrl": apiUrl,
+      "gempa_dirasakan/sourceIdentifier": globalIdentifier,
+      "gempa_dirasakan/syncedAt": new Date().toISOString(),
+      "gempa_dirasakan/lastEventId": latest.eventid,
+      "gempa_dirasakan/totalItems": updatedItems.length,
+      "gempa_dirasakan/items": updatedItems,
+    };
 
-  for (const [path, value] of Object.entries(updates)) {
-    const writeRes = await fetch(path, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(value),
-    });
-
-    if (!writeRes.ok) {
-      const errText = await writeRes.text();
-      throw new Error(`Failed to write ${path}: ${writeRes.status} ${errText}`);
-    }
+    // Write all at once using multi-path update for atomicity
+    await db.ref().update(updates);
+    
+    console.log("[Sync] Successfully wrote data using Firebase Admin SDK");
+  } catch (error) {
+    throw new Error(
+      `Failed to write to Firebase Admin: ${error.message}`
+    );
   }
 
   return {

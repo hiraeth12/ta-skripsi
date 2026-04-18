@@ -3,8 +3,8 @@
  * Run: node api/database/verify-sync.js
  */
 
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");

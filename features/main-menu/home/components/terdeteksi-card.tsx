@@ -1,7 +1,7 @@
-import { Image, TouchableOpacity, View } from "react-native";
+import Feather from "@expo/vector-icons/Feather";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { DetailItem } from "./detail-item";
-import { ShareButton } from "./share-button";
 import { StatItem } from "./stat-item";
 
 type TerdeteksiQuake = {
@@ -14,14 +14,18 @@ type TerdeteksiQuake = {
   tanggal: string;
   jam: string;
   fase: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export const TerdeteksiCard = ({
   data,
   onCardPress,
+  onShare,
 }: {
   data: TerdeteksiQuake | null;
   onCardPress: () => void;
+  onShare: () => void;
 }) => (
   <TouchableOpacity
     style={styles.mapCard}
@@ -34,7 +38,16 @@ export const TerdeteksiCard = ({
         style={styles.mapImage}
       />
       <View style={styles.mapButtons}>
-        <ShareButton data={data} type="terdeteksi" />
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onShare();
+          }}
+        >
+          <Feather name="share" size={12} color="white" />
+          <Text style={styles.mapButtonText}>BAGIKAN</Text>
+        </TouchableOpacity>
       </View>
     </View>
 

@@ -1,5 +1,6 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
+import { getDatabase } from "./firebase-admin-config.js";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");
@@ -56,25 +57,23 @@ async function syncLocationsOnce() {
     }
   }
 
-  const writeResponse = await fetch(`${dbUrl}/locations.json`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(locationsById),
-  });
-
-  if (!writeResponse.ok) {
-    const errText = await writeResponse.text();
-    throw new Error(`Failed to write locations: ${writeResponse.status} ${errText}`);
-  }
-
-  const verifyResponse = await fetch(`${dbUrl}/locations.json`);
-  if (!verifyResponse.ok) {
+  // Write using Firebase Admin SDK
+  try {
+    const db = getDatabase();
+    await db.ref("locations").set(locationsById);
+    console.log("[Sync] Successfully wrote locations using Firebase Admin SDK");
+  } catch (error) {
     throw new Error(
-      `Failed to verify locations: ${verifyResponse.status} ${verifyResponse.statusText}`,
+      `Failed to write to Firebase Admin: ${error.message}`
     );
   }
 
-  const verifiedLocations = await verifyResponse.json();
+  // Verify write using Admin SDK
+  const verifySnapshot = await getDatabase().ref("locations").get();
+  let verifiedLocations = {};
+  if (verifySnapshot.exists()) {
+    verifiedLocations = verifySnapshot.val();
+  }
   const totalLocations = Object.keys(verifiedLocations || {}).length;
 
   return {

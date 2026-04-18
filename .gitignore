@@ -48,3 +48,7 @@ app-example
 .env
 
 node_modules
+
+# Firebase service account (NEVER commit!)
+firebase-service-account.json
+*.service-account.json

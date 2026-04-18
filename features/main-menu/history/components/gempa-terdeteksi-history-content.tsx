@@ -3,11 +3,11 @@ import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  AppState,
-  PanResponder,
-  Text,
-  View,
+    Animated,
+    AppState,
+    PanResponder,
+    Text,
+    View,
 } from "react-native";
 import styles from "./styles/gempa-terdeteksi-content";
 

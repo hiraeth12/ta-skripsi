@@ -1,4 +1,6 @@
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/hooks/use-earthquake-cache";
+import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
+import { useFcm } from "@/hooks/use-fcm";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -10,6 +12,7 @@ import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   AppState,
   Dimensions,
   Image,
@@ -116,6 +119,9 @@ type DirasakanQuake = {
   tanggal: string;
   jam: string;
   felt: string;
+  description?: string;
+  latitude: number;
+  longitude: number;
 };
 
 type TerdeteksiQuake = {
@@ -128,12 +134,15 @@ type TerdeteksiQuake = {
   tanggal: string;
   jam: string;
   fase: string;
+  latitude: number;
+  longitude: number;
 };
 
 export default function Home() {
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const networkErrorShownRef = useRef(false);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
@@ -157,6 +166,19 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const user = { name: userName };
+
+  const { shareQuake } = useEarthquakeShare();
+  const { getFcmToken } = useFcm();
+
+  const handleShareDirasakan = useCallback(
+    () => shareQuake(dirasakanData, "dirasakan"),
+    [dirasakanData, shareQuake],
+  );
+
+  const handleShareTerdeteksi = useCallback(
+    () => shareQuake(terdeteksiData, "terdeteksi"),
+    [terdeteksiData, shareQuake],
+  );
 
   // Function to fetch user location and profile from database
   const fetchUserData = useCallback(async () => {
@@ -311,6 +333,9 @@ export default function Home() {
           tanggal: String(latest.date ?? ""),
           jam: String(latest.time ?? ""),
           felt: String(latest.felt ?? ""),
+          description: String(latest.description ?? ""),
+          latitude,
+          longitude,
         };
 
         // Cache the data for other screens
@@ -324,6 +349,15 @@ export default function Home() {
       } catch (e) {
         if (e instanceof Error && e.name !== 'AbortError') {
           console.error("Failed to fetch home dirasakan:", e);
+          // Show network error alert only once
+          if (!networkErrorShownRef.current && e.message.includes('Network')) {
+            networkErrorShownRef.current = true;
+            Alert.alert(
+              'Koneksi Jaringan',
+              'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
+              [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
+            );
+          }
         }
       }
     }
@@ -377,6 +411,8 @@ export default function Home() {
           tanggal: tanggal ?? "",
           jam: jam ?? "",
           fase: String(props.fase ?? ""),
+          latitude,
+          longitude,
         };
 
         // Cache the data for other screens
@@ -387,6 +423,15 @@ export default function Home() {
       } catch (e) {
         if (e instanceof Error && e.name !== 'AbortError') {
           console.error("Failed to fetch home terdeteksi:", e);
+          // Show network error alert only once
+          if (!networkErrorShownRef.current && e.message.includes('Network')) {
+            networkErrorShownRef.current = true;
+            Alert.alert(
+              'Koneksi Jaringan',
+              'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
+              [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
+            );
+          }
         }
       }
     }
@@ -516,6 +561,7 @@ export default function Home() {
                 data={dirasakanData}
                 onShakeMap={() => setShakeMapVisible(true)}
                 hasShakeMap={!!shakeMapUrl}
+                onShare={handleShareDirasakan}
                 onCardPress={() =>
                   router.push({
                     pathname: "/main-menu/earthquake",
@@ -542,6 +588,7 @@ export default function Home() {
               </View>
               <TerdeteksiCard
                 data={terdeteksiData}
+                onShare={handleShareTerdeteksi}
                 onCardPress={() =>
                   router.push({
                     pathname: "/main-menu/earthquake",

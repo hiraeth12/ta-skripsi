@@ -2,7 +2,6 @@ import Feather from "@expo/vector-icons/Feather";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { DetailItem } from "./detail-item";
-import { ShareButton } from "./share-button";
 import { StatItem } from "./stat-item";
 
 type DirasakanQuake = {
@@ -15,6 +14,8 @@ type DirasakanQuake = {
   tanggal: string;
   jam: string;
   felt: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export const DirasakanCard = ({
@@ -22,11 +23,13 @@ export const DirasakanCard = ({
   onShakeMap,
   hasShakeMap,
   onCardPress,
+  onShare,
 }: {
   data: DirasakanQuake | null;
   onShakeMap: () => void;
   hasShakeMap: boolean;
   onCardPress: () => void;
+  onShare: () => void;
 }) => (
   <TouchableOpacity
     style={styles.mapCard}
@@ -42,7 +45,7 @@ export const DirasakanCard = ({
         <TouchableOpacity
           style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
           onPress={(e) => {
-            e.stopPropagation();g
+            e.stopPropagation();
             onShakeMap();
           }}
           disabled={!hasShakeMap}
@@ -50,7 +53,16 @@ export const DirasakanCard = ({
           <Feather name="map" size={12} color="white" />
           <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
         </TouchableOpacity>
-        <ShareButton data={data} type="dirasakan" />
+        <TouchableOpacity
+          style={styles.mapButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onShare();
+          }}
+        >
+          <Feather name="share" size={12} color="white" />
+          <Text style={styles.mapButtonText}>BAGIKAN</Text>
+        </TouchableOpacity>
       </View>
     </View>
 

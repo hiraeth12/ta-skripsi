@@ -1,14 +1,16 @@
 import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
+import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    PanResponder,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
@@ -37,8 +39,10 @@ export default function GempaTerdeteksi({
   onLoadingChange,
   isActive = true,
 }: Props) {
+  const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
+  const networkErrorShownRef = useRef(false);
   const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -198,6 +202,14 @@ export default function GempaTerdeteksi({
         );
       } catch (e) {
         console.error("Failed to fetch gempa terdeteksi:", e);
+        if (!networkErrorShownRef.current && e instanceof TypeError && (e as Error).message.includes('Network')) {
+          networkErrorShownRef.current = true;
+          Alert.alert(
+            'Koneksi Jaringan',
+            'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
+            [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
+          );
+        }
       } finally {
         onLoadingChange?.(false);
       }
@@ -228,7 +240,10 @@ export default function GempaTerdeteksi({
         {tabBar}
         {showCard && (
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
-            <TouchableOpacity style={styles.mapButton}>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => shareQuake(latestQuake, "terdeteksi")}
+            >
               <Feather name="share" size={12} color="white" />
               <Text style={styles.mapButtonText}>BAGIKAN</Text>
             </TouchableOpacity>

@@ -4,9 +4,9 @@
  * Run: npm run sync:gempa-dirasakan:full
  */
 
-const fs = require("fs");
-const path = require("path");
-const { XMLParser } = require("fast-xml-parser");
+import { XMLParser } from "fast-xml-parser";
+import fs from "fs";
+import path from "path";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");
