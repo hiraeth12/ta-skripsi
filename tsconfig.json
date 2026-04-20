@@ -5,6 +5,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@/features/account/components/profile-page-layout": [
+        "./features/account/profile-page-layout"
+      ],
+      "@/features/account/data/profile": [
+        "./features/account/profile"
       ]
     }
   },
@@ -14,5 +20,10 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "global.d.ts"
+  ],
+  "exclude": [
+    "features/account/components/**/*",
+    "features/account/data/**/*",
+    "features/account/screens/**/*"
   ]
 }

@@ -7,6 +7,35 @@ import {
     requestPermission,
 } from '@react-native-firebase/messaging';
 
+const FIREBASE_DATABASE_URL =
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || '';
+
+type SaveFcmTokenOptions = {
+  timeoutMs?: number;
+};
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 /**
  * Save user's FCM token to Firebase Realtime Database
  * Called after successful login
@@ -17,6 +46,7 @@ import {
 export async function saveFcmTokenToDatabase(userId: string) {
   let token: string | null = null;
   let startTime = Date.now();
+  const timeoutMs = 15000;
   
   try {
     console.log('[FCM] === Starting FCM token save ===');
@@ -53,7 +83,9 @@ export async function saveFcmTokenToDatabase(userId: string) {
 
     // Database save with detailed error reporting
     console.log('[FCM] Getting database instance...');
-    const db = getDatabase(app);
+    const db = FIREBASE_DATABASE_URL
+      ? getDatabase(app, FIREBASE_DATABASE_URL)
+      : getDatabase(app);
     console.log('[FCM] ✓ Database instance obtained');
     
     const dbPath = `user_fcm_tokens/${userId}`;
@@ -64,9 +96,8 @@ export async function saveFcmTokenToDatabase(userId: string) {
     
     console.log('[FCM] Calling set() to write token...');
     startTime = Date.now();
-    
-    // Try with no timeout first to see if it actually works
-    await set(dbRef, token);
+
+    await withTimeout(set(dbRef, token), timeoutMs, 'FCM token database write');
     
     const duration = Date.now() - startTime;
     console.log(`✅ FCM Token saved successfully in ${duration}ms`);
