@@ -251,8 +251,10 @@ export default function GempaDirasakan({
         const eventId = String(
           latest.eventid ?? latest.identifier ?? globalIdentifier,
         );
-        if (eventId && eventId === latestEventId.current) return false;
-        latestEventId.current = eventId;
+        const isSameEvent = eventId && eventId === latestEventId.current;
+        if (!isSameEvent) {
+          latestEventId.current = eventId;
+        }
 
         const coordStr: string = String(latest?.point?.coordinates ?? "");
         const [lonStr, latStr] = coordStr.split(",");
@@ -260,28 +262,30 @@ export default function GempaDirasakan({
         const longitude = parseFloat(lonStr);
         if (isNaN(latitude) || isNaN(longitude)) return false;
 
-        setShakeMapUrl(
-          latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
-        );
-        setLatestQuake({
-          id: eventId || `${latitude}-${longitude}-${Date.now()}`,
-          latitude,
-          longitude,
-          distanceKm: haversineDistanceKm(
-            REFERENCE_LOCATION.latitude,
-            REFERENCE_LOCATION.longitude,
+        if (!isSameEvent) {
+          setShakeMapUrl(
+            latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
+          );
+          setLatestQuake({
+            id: eventId || `${latitude}-${longitude}-${Date.now()}`,
             latitude,
             longitude,
-          ).toFixed(1),
-          magnitude: String(latest.magnitude),
-          wilayah: latest.area ?? "",
-          tanggal: latest.date ?? "",
-          jam: latest.time ?? "",
-          kedalaman: latest.depth ?? "",
-          felt: latest.felt ?? "",
-          latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
-          lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
-        });
+            distanceKm: haversineDistanceKm(
+              REFERENCE_LOCATION.latitude,
+              REFERENCE_LOCATION.longitude,
+              latitude,
+              longitude,
+            ).toFixed(1),
+            magnitude: String(latest.magnitude),
+            wilayah: latest.area ?? "",
+            tanggal: latest.date ?? "",
+            jam: latest.time ?? "",
+            kedalaman: latest.depth ?? "",
+            felt: latest.felt ?? "",
+            latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
+            lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+          });
+        }
         const region = {
           latitude,
           longitude,
@@ -293,7 +297,7 @@ export default function GempaDirasakan({
           isFirstLoad.current ? 800 : 600,
         );
         isFirstLoad.current = false;
-        return true;
+        return !isSameEvent;
       } catch (error) {
         if (!networkErrorShownRef.current && error instanceof TypeError && error.message.includes('Network')) {
           networkErrorShownRef.current = true;

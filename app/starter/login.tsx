@@ -2,18 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-<<<<<<< HEAD
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-=======
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -23,8 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
->>>>>>> 1ebfcdf2b6ffdb8f24134776d9c777bcecb42d63
+  View
 } from "react-native";
 
 import AuthButton from "@/components/auth-button";
@@ -80,29 +67,18 @@ export default function Login() {
     try {
       const app = getApp();
       const authInstance = getAuth(app);
-<<<<<<< HEAD
-      const result = await signInWithEmailAndPassword(authInstance, trimmedEmail, trimmedPassword);
-=======
-      await signInWithEmailAndPassword(
+      const result = await signInWithEmailAndPassword(
         authInstance,
         trimmedEmail,
         trimmedPassword,
       );
->>>>>>> 1ebfcdf2b6ffdb8f24134776d9c777bcecb42d63
       console.log("Login success in ms:", Date.now() - startedAt);
       
       // Save FCM token for push notifications (with timeout - don't block navigation)
       if (result.user?.uid) {
         try {
           console.log('[Login] Starting FCM token save...');
-          // Promise that rejects after 5 seconds
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('FCM token save timeout')), 5000)
-          );
-          await Promise.race([
-            saveFcmTokenToDatabase(result.user.uid),
-            timeoutPromise,
-          ]);
+          await saveFcmTokenToDatabase(result.user.uid);
           console.log('[Login] FCM token saved successfully');
         } catch (tokenError) {
           console.warn('[Login] ⚠️ Failed to save FCM token (continuing anyway):', tokenError);
