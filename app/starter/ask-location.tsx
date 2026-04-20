@@ -49,11 +49,7 @@ function haversineDistanceKm(
 }
 
 // Helper function to find nearest location
-function findNearestLocation(
-  gpsLat: number,
-  gpsLon: number,
-  locations: any[],
-) {
+function findNearestLocation(gpsLat: number, gpsLon: number, locations: any[]) {
   if (!locations || locations.length === 0) return null;
 
   let nearest = locations[0];
@@ -96,17 +92,20 @@ export default function AskLocation() {
         if (!dbUrl) throw new Error("Database URL not configured");
 
         const response = await fetch(`${dbUrl}/locations.json`);
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`Failed to fetch: ${response.status}`);
 
         const data = await response.json();
         // Convert object keyed by id to array
-        const locationsArray = Object.entries(data || {}).map(([id, location]: any) => ({
-          id,
-          name: location.name || "",
-          desc: location.alt_name || location.name || "",
-          latitude: location.latitude,
-          longitude: location.longitude,
-        }));
+        const locationsArray = Object.entries(data || {}).map(
+          ([id, location]: any) => ({
+            id,
+            name: location.name || "",
+            desc: location.alt_name || location.name || "",
+            latitude: location.latitude,
+            longitude: location.longitude,
+          }),
+        );
         setAllLocations(locationsArray);
       } catch (error) {
         console.error("Error fetching locations:", error);
@@ -141,7 +140,11 @@ export default function AskLocation() {
       const { latitude, longitude } = location.coords;
 
       // Find nearest location from database
-      const nearestLocation = findNearestLocation(latitude, longitude, allLocations);
+      const nearestLocation = findNearestLocation(
+        latitude,
+        longitude,
+        allLocations,
+      );
       const locationName = nearestLocation?.name || "Lokasi GPS";
 
       // Update user location in database with GPS coordinates
@@ -160,7 +163,11 @@ export default function AskLocation() {
             locationName: locationName,
             locationUpdatedAt: new Date().toISOString(),
           });
-          console.log("User location updated (GPS):", { latitude, longitude, locationName });
+          console.log("User location updated (GPS):", {
+            latitude,
+            longitude,
+            locationName,
+          });
         }
       } catch (dbError) {
         console.error("Error updating user location:", dbError);
@@ -210,7 +217,11 @@ export default function AskLocation() {
           locationName: item.name,
           locationUpdatedAt: new Date().toISOString(),
         });
-        console.log("User location updated (manual select):", { latitude: item.latitude, longitude: item.longitude, locationName: item.name });
+        console.log("User location updated (manual select):", {
+          latitude: item.latitude,
+          longitude: item.longitude,
+          locationName: item.name,
+        });
       }
     } catch (dbError) {
       console.error("Error updating user location:", dbError);
@@ -231,7 +242,7 @@ export default function AskLocation() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -281,7 +292,13 @@ export default function AskLocation() {
             onPress={handleUseGPS}
             disabled={gpsLoading}
           />
-          {gpsLoading && <ActivityIndicator size="small" color="#1E6F9F" style={{ marginTop: 10 }} />}
+          {gpsLoading && (
+            <ActivityIndicator
+              size="small"
+              color="#1E6F9F"
+              style={{ marginTop: 10 }}
+            />
+          )}
         </View>
 
         <Modal

@@ -206,8 +206,8 @@ export default function Home() {
         }
         // Set user name from firstName (and lastName if available)
         if (userData.firstName) {
-          const fullName = userData.lastName 
-            ? `${userData.firstName}` 
+          const fullName = userData.lastName
+            ? `${userData.firstName}`
             : userData.firstName;
           setUserName(fullName);
         }
@@ -347,7 +347,7 @@ export default function Home() {
           latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
         );
       } catch (e) {
-        if (e instanceof Error && e.name !== 'AbortError') {
+        if (e instanceof Error && e.name !== "AbortError") {
           console.error("Failed to fetch home dirasakan:", e);
           // Show network error alert only once
           if (!networkErrorShownRef.current && e.message.includes('Network')) {
@@ -417,11 +417,11 @@ export default function Home() {
 
         // Cache the data for other screens
         setCacheData(CACHE_KEYS.TERDETEKSI, newTerdeteksiData);
-        
+
         // Single state update
         setTerdeteksiData(newTerdeteksiData);
       } catch (e) {
-        if (e instanceof Error && e.name !== 'AbortError') {
+        if (e instanceof Error && e.name !== "AbortError") {
           console.error("Failed to fetch home terdeteksi:", e);
           // Show network error alert only once
           if (!networkErrorShownRef.current && e.message.includes('Network')) {

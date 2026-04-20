@@ -222,6 +222,7 @@ export default function GempaTerdeteksi({
     <View style={styles.container}>
       <EarthquakeMap
         mapRef={mapRef}
+        isCardOpen={showCard}
         markerCoordinate={
           latestQuake
             ? {
