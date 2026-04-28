@@ -1,27 +1,28 @@
 import EarthquakeMap from "@/components/earthquake-map";
+import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { XMLParser } from "fast-xml-parser";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import styles from "./styles/gempa-dirasakan-history-content";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
-const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
+const DB_PATH = "gempa_dirasakan";
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
 const MAX_POINTS = 20;
@@ -149,7 +150,11 @@ export function GempaDirasakanHistoryContent({
               duration: 180,
               useNativeDriver: true,
             }),
-          ]).start(() => setShowCard(false));
+          ]).start(() => {
+            setShowCard(false);
+            temporarySelectionRef.current = null;
+            setTemporarySelection(null);
+          });
         } else {
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
@@ -221,6 +226,7 @@ export function GempaDirasakanHistoryContent({
     (index: number) => {
       if (!quakes[index]) return;
       selectedEventIdRef.current = quakes[index].eventId;
+      setTemporarySelection(null);
       setSelectedIndex(index);
       openCard();
     },
@@ -332,6 +338,7 @@ export function GempaDirasakanHistoryContent({
 
     const targetQuake = quakes[targetIndex];
     selectedEventIdRef.current = targetQuake.eventId;
+    setTemporarySelection(null);
     setSelectedIndex(targetIndex);
     openCard();
     mapRef.current?.animateToRegion(
@@ -353,52 +360,135 @@ export function GempaDirasakanHistoryContent({
       if (isFetching.current) return false;
       isFetching.current = true;
 
+      const startTime = Date.now();
+      console.log(`[Fetch] Starting fetchLatestQuake at ${new Date().toISOString()}`);
+
       if (!silent) onLoadingChange?.(true);
 
       try {
-        if (!API_URL) {
-          console.error(
-            "GEMPA_DIRASAKAN_HISTORY is undefined - restart Metro with --clear",
-          );
+        console.log(`[Fetch] Getting Firebase app and database...`);
+        let app;
+        try {
+          app = getApp();
+          console.log(`[Fetch] ✅ Firebase app initialized`);
+        } catch (appError: any) {
+          console.error(`[Fetch] ❌ Firebase app not initialized:`, appError.message);
+          throw new Error("Firebase app not initialized - ensure google-services.json is configured");
+        }
+        
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        console.log(`[Fetch] Database URL: ${dbUrl ? "✅ configured" : "⚠️ missing - using default"}`);
+        const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        
+        const refStart = Date.now();
+        console.log(`[Fetch] Querying database path: "${DB_PATH}/items"`);
+        let snapshot = await get(ref(db, `${DB_PATH}/items`));
+        if (!snapshot.exists()) {
+          console.log(`[Fetch] Fallback query to root path: "${DB_PATH}"`);
+          snapshot = await get(ref(db, DB_PATH));
+        }
+        const refTime = Date.now() - refStart;
+        console.log(`[Fetch] Database query completed in ${refTime}ms`);
+
+        if (!snapshot.exists()) {
+          console.log("No gempa history data in database");
           return false;
         }
-        const res = await fetch(withCacheBuster(API_URL));
-        const raw = await res.text();
 
-        let candidates: any[] = [];
-        let globalIdentifier = "";
-
-        try {
-          const parsedJson = JSON.parse(raw);
-          const infoRaw = parsedJson?.info;
-          candidates = Array.isArray(infoRaw)
-            ? infoRaw
-            : infoRaw
-              ? [infoRaw]
-              : [];
-          globalIdentifier = String(parsedJson?.identifier ?? "");
-        } catch {
-          const parser = new XMLParser({ ignoreAttributes: false });
-          const parsedXml = parser.parse(raw);
-          const infoRaw = parsedXml?.alert?.info;
-          candidates = Array.isArray(infoRaw)
-            ? infoRaw
-            : infoRaw
-              ? [infoRaw]
-              : [];
-          globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
+        const dbData = snapshot.val();
+        if (!dbData || typeof dbData !== "object") {
+          console.log(`[Fetch] Invalid data type: ${typeof dbData}`);
+          return false;
         }
 
+        // Convert database payload to array and normalize
+        const convertStart = Date.now();
+        const itemsNode = dbData?.items ?? dbData;
+        const candidates = Array.isArray(itemsNode)
+          ? itemsNode
+          : itemsNode && typeof itemsNode === "object"
+            ? (Object.values(itemsNode) as any[])
+            : [];
+        const convertTime = Date.now() - convertStart;
+        console.log(`[Fetch] Converted to candidates array: ${candidates.length} items in ${convertTime}ms`);
+        
         if (candidates.length === 0) return false;
 
-        const normalized = candidates
+        // Sort by recency descending (most recent first)
+        const sortStart = Date.now();
+        const sorted = [...candidates].sort((a: any, b: any) => {
+          const keyA = String(
+            a?.eventid ??
+              a?.eventId ??
+              a?.timesent ??
+              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
+          );
+          const keyB = String(
+            b?.eventid ??
+              b?.eventId ??
+              b?.timesent ??
+              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
+          );
+          return keyB.localeCompare(keyA);
+        });
+        const sortTime = Date.now() - sortStart;
+        console.log(`[Fetch] Sorted candidates in ${sortTime}ms`);
+
+        const normalizeStart = Date.now();
+        const normalized = sorted
           .map((candidate, index): QuakeItem | null => {
-            const coordStr: string = String(
-              candidate?.point?.coordinates ?? "",
-            );
+            const parseWithHemisphere = (
+              value: unknown,
+              negativeToken: string,
+              positiveToken: string,
+            ) => {
+              const raw = String(value ?? "").trim();
+              if (!raw) return NaN;
+
+              const numeric = parseFloat(raw.replace(",", "."));
+              if (isNaN(numeric)) return NaN;
+
+              const upper = raw.toUpperCase();
+              if (upper.includes(negativeToken)) return -Math.abs(numeric);
+              if (upper.includes(positiveToken)) return Math.abs(numeric);
+              return numeric;
+            };
+
+            // Prefer point.coordinates because it usually keeps signed lon,lat from BMKG
+            const coordStr = String(candidate?.point?.coordinates ?? "");
             const [lonStr, latStr] = coordStr.split(",");
-            const latitude = parseFloat(latStr);
-            const longitude = parseFloat(lonStr);
+
+            let latitude = parseWithHemisphere(latStr, "LS", "LU");
+            let longitude = parseWithHemisphere(lonStr, "BB", "BT");
+
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(candidate?.latitude, "LS", "LU");
+            }
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(candidate?.lat, "LS", "LU");
+            }
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(
+                candidate?.coordinates?.latitude,
+                "LS",
+                "LU",
+              );
+            }
+
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(candidate?.longitude, "BB", "BT");
+            }
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(candidate?.lon, "BB", "BT");
+            }
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(
+                candidate?.coordinates?.longitude,
+                "BB",
+                "BT",
+              );
+            }
+
             if (isNaN(latitude) || isNaN(longitude)) return null;
 
             const absLat = Math.abs(latitude).toFixed(2);
@@ -411,9 +501,10 @@ export function GempaDirasakanHistoryContent({
             ).toFixed(1);
 
             const eventId = String(
-              candidate?.eventid ??
-                candidate?.identifier ??
-                `${globalIdentifier}-${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
+              candidate?.eventId ??
+                candidate?.id ??
+                candidate?.eventid ??
+                `${candidate?.tanggal ?? ""}-${candidate?.jam ?? ""}-${index}`,
             );
 
             return {
@@ -421,11 +512,11 @@ export function GempaDirasakanHistoryContent({
               latitude,
               longitude,
               distanceKm,
-              magnitude: String(candidate?.magnitude ?? ""),
-              wilayah: String(candidate?.area ?? ""),
-              tanggal: String(candidate?.date ?? ""),
-              jam: String(candidate?.time ?? ""),
-              kedalaman: String(candidate?.depth ?? ""),
+              magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
+              wilayah: String(candidate?.wilayah ?? candidate?.area ?? candidate?.lokasi ?? candidate?.place ?? ""),
+              tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
+              jam: String(candidate?.jam ?? candidate?.time ?? ""),
+              kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
               felt: String(candidate?.felt ?? ""),
               latText: `${absLat}\u00B0${latitude < 0 ? "LS" : "LU"}`,
               lonText: `${absLon}\u00B0${longitude >= 0 ? "BT" : "BB"}`,
@@ -434,11 +525,20 @@ export function GempaDirasakanHistoryContent({
           })
           .filter((item): item is QuakeItem => Boolean(item))
           .slice(0, MAX_POINTS);
+        const normalizeTime = Date.now() - normalizeStart;
+        console.log(`[Fetch] Normalized ${normalized.length} items in ${normalizeTime}ms (filtered from ${sorted.length})`);
+        
 
         if (normalized.length === 0) return false;
 
         const signature = normalized.map((item) => item.eventId).join("|");
-        if (signature === latestDataSignature.current) return false;
+        console.log(`[Fetch] Data signature: ${signature.substring(0, 50)}...`);
+        console.log(`[Fetch] Previous signature: ${latestDataSignature.current?.substring(0, 50) ?? "none"}...`);
+        
+        if (signature === latestDataSignature.current) {
+          console.log("[Fetch] No data change detected, skipping update");
+          return false;
+        }
         latestDataSignature.current = signature;
 
         let foundIndex = -1;
@@ -446,6 +546,7 @@ export function GempaDirasakanHistoryContent({
           foundIndex = normalized.findIndex(
             (item) => item.eventId === selectedEventIdRef.current,
           );
+          console.log(`[Fetch] Found selected eventId at index: ${foundIndex}`);
         }
 
         const currentTemporarySelection = temporarySelectionRef.current;
@@ -454,9 +555,11 @@ export function GempaDirasakanHistoryContent({
           currentTemporarySelection.eventId === selectedEventIdRef.current;
         const keepTemporarySelection = hasTemporarySelection && foundIndex < 0;
 
+        console.log(`[Fetch] Updating state with ${normalized.length} items`);
         setQuakes(normalized);
 
         if (keepTemporarySelection) {
+          console.log("[Fetch] Keeping temporary selection");
           setSelectedIndex(null);
           return true;
         }
@@ -467,9 +570,14 @@ export function GempaDirasakanHistoryContent({
         setTemporarySelection(null);
         setSelectedIndex(nextSelectedIndex);
 
-        if (!focusQuake) return true;
+        if (!focusQuake) {
+          console.log("[Fetch] No focus quake to animate");
+          return true;
+        }
 
+        const animStart = Date.now();
         if (isFirstLoad.current) {
+          console.log("[Fetch] First load - animating to region");
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
             {
@@ -491,6 +599,10 @@ export function GempaDirasakanHistoryContent({
             600,
           );
         }
+        const animTime = Date.now() - animStart;
+        const totalTime = Date.now() - startTime;
+        console.log(`[Fetch] Map animation scheduled in ${animTime}ms`);
+        console.log(`[Fetch] ✅ Total fetch completed in ${totalTime}ms`);
 
         return true;
       } catch (e) {
@@ -552,7 +664,7 @@ export function GempaDirasakanHistoryContent({
         mapRef={mapRef}
         markerCoordinates={markerCoordinates}
         temporaryMarkerCoordinate={
-          temporarySelection
+          temporarySelection && selectedIndex === null
             ? {
                 latitude: temporarySelection.latitude,
                 longitude: temporarySelection.longitude,

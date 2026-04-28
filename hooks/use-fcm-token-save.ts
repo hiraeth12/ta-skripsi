@@ -1,3 +1,4 @@
+import { ensureNotificationPermission } from '@/hooks/notification-permission';
 import { getApp } from '@react-native-firebase/app';
 import { getDatabase, ref, set } from '@react-native-firebase/database';
 import {
@@ -51,6 +52,12 @@ export async function saveFcmTokenToDatabase(userId: string) {
   try {
     console.log('[FCM] === Starting FCM token save ===');
     console.log('[FCM] User ID:', userId);
+
+    const notificationAllowed = await ensureNotificationPermission();
+    if (!notificationAllowed) {
+      console.warn('[FCM] ⚠️ Android notification permission denied');
+      return null;
+    }
     
     const app = getApp();
     console.log('[FCM] ✓ App instance obtained');
@@ -97,7 +104,14 @@ export async function saveFcmTokenToDatabase(userId: string) {
     console.log('[FCM] Calling set() to write token...');
     startTime = Date.now();
 
-    await withTimeout(set(dbRef, token), timeoutMs, 'FCM token database write');
+    await withTimeout(
+      set(dbRef, {
+        token,
+        updatedAt: Date.now(),
+      }),
+      timeoutMs,
+      'FCM token database write',
+    );
     
     const duration = Date.now() - startTime;
     console.log(`✅ FCM Token saved successfully in ${duration}ms`);

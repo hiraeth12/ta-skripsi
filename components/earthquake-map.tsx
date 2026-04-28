@@ -457,6 +457,11 @@ const EarthquakeMap = memo(
             onMapPress?.();
           }}
           onMapIdle={async () => {
+            const pendingMove = pendingCameraMoveRef.current;
+            if (pendingMove && applyCameraMove(pendingMove.region, pendingMove.duration)) {
+              pendingCameraMoveRef.current = null;
+            }
+
             const b = await mapViewRef.current?.getVisibleBounds();
             if (b) {
               const next = {

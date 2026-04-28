@@ -1,10 +1,10 @@
+import { getApp } from "@/config/firebase-init";
 import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, limitToLast, query, ref } from "@react-native-firebase/database";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { XMLParser } from "fast-xml-parser";
-import { getAuth } from "firebase/auth";
-import { get, getDatabase, ref } from "firebase/database";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import styles from "./styles/list-gempa-screen";
 
-const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 
 type ListMode = "dirasakan" | "terdeteksi";
@@ -35,21 +34,6 @@ type ListItem = {
   felt: string;
   shakemap?: string | null;
 };
-
-function withCacheBuster(url: string) {
-  const base = url.trim();
-  const separator = base.includes("?")
-    ? base.endsWith("?") || base.endsWith("&")
-      ? ""
-      : "&"
-    : "?";
-  return `${base}${separator}t=${Date.now()}`;
-}
-
-function getDetectedHistoryNodeUrl() {
-  const base = String(DATABASE_URL ?? "").trim().replace(/\/+$/, "");
-  return `${base}/gempa_terdeteksi.json`;
-}
 
 export default function ListGempaPage() {
   const router = useRouter();
@@ -97,68 +81,65 @@ export default function ListGempaPage() {
   useEffect(() => {
     let isMounted = true;
 
-    async function loadItems() {
-      // Fetch user location first
+    async function loadUserLocationOnce() {
       try {
-        const auth = getAuth();
+        const app = getApp();
+        const auth = getAuth(app);
         const user = auth.currentUser;
-        if (user && isMounted) {
-          const db = getDatabase();
-          const userRef = ref(db, `/users/${user.uid}`);
-          const snapshot = await get(userRef);
-          const userData = snapshot.val();
-          if (userData && userData.latitude && userData.longitude) {
-            setUserLocation({
-              lat: parseFloat(userData.latitude),
-              lon: parseFloat(userData.longitude),
-            });
-          }
+        if (!user || !isMounted) return;
+
+        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+        const userRef = ref(db, `/users/${user.uid}`);
+        const snapshot = await get(userRef);
+        const userData = snapshot.val();
+
+        const lat = parseFloat(String(userData?.latitude ?? ""));
+        const lon = parseFloat(String(userData?.longitude ?? ""));
+        if (!isNaN(lat) && !isNaN(lon)) {
+          setUserLocation({ lat, lon });
         }
       } catch (error) {
         console.warn("Failed to load user location:", error);
       }
+    }
 
+    void loadUserLocationOnce();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadItems() {
       setLoading(true);
       try {
-        const apiUrl = mode === "dirasakan" ? DIRASAKAN_API_URL : DATABASE_URL;
-        if (!apiUrl) return;
+        const app = getApp();
+        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
 
         if (mode === "dirasakan") {
-          const res = await fetch(withCacheBuster(apiUrl));
-          const raw = await res.text();
-
-          let candidates: any[] = [];
-          let globalIdentifier = "";
-
-          try {
-            const parsedJson = JSON.parse(raw);
-            const infoRaw = parsedJson?.info;
-            candidates = Array.isArray(infoRaw)
-              ? infoRaw
-              : infoRaw
-                ? [infoRaw]
-                : [];
-            globalIdentifier = String(parsedJson?.identifier ?? "");
-          } catch {
-            const parser = new XMLParser({ ignoreAttributes: false });
-            const parsedXml = parser.parse(raw);
-            const infoRaw = parsedXml?.alert?.info;
-            candidates = Array.isArray(infoRaw)
-              ? infoRaw
-              : infoRaw
-                ? [infoRaw]
-                : [];
-            globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
-          }
+          const snapshot = await get(query(ref(db, "gempa_dirasakan/items"), limitToLast(80)));
+          const rawData = snapshot.exists() ? snapshot.val() : null;
+          const candidates = Array.isArray(rawData)
+            ? rawData
+            : rawData && typeof rawData === "object"
+              ? Object.values(rawData)
+              : [];
 
           const normalized = candidates
-            .map((candidate, index): ListItem | null => {
+            .sort((a: any, b: any) => String(b?.eventid ?? b?.timesent ?? "").localeCompare(String(a?.eventid ?? a?.timesent ?? "")))
+            .map((candidate: any, index): ListItem | null => {
               const coordStr = String(candidate?.point?.coordinates ?? "");
               const [lonStr, latStr] = coordStr.split(",");
-              const latitude = parseFloat(latStr);
-              const longitude = parseFloat(lonStr);
-              if (Number.isNaN(latitude) || Number.isNaN(longitude))
-                return null;
+
+              const latitude = parseFloat(
+                String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(",", "."),
+              );
+              const longitude = parseFloat(
+                String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(",", "."),
+              );
+              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
 
               const distanceKm = haversineDistanceKm(
                 userLocation.lat,
@@ -166,85 +147,57 @@ export default function ListGempaPage() {
                 latitude,
                 longitude,
               ).toFixed(1);
+
               const eventId = String(
                 candidate?.eventid ??
-                candidate?.identifier ??
-                `${globalIdentifier}-${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
+                  candidate?.eventId ??
+                  `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
               );
 
               return {
                 id: eventId,
                 latitude,
                 longitude,
-                magnitude: String(candidate?.magnitude ?? ""),
-                lokasi: String(candidate?.area ?? ""),
-                waktu: `${String(candidate?.time ?? "")} • ${String(candidate?.date ?? "")}`,
+                magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
+                lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
+                waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
                 jarak: `${distanceKm} km dari lokasi Anda`,
                 distanceKm,
-                tanggal: String(candidate?.date ?? ""),
-                jam: String(candidate?.time ?? ""),
-                kedalaman: String(candidate?.depth ?? ""),
+                tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
+                jam: String(candidate?.time ?? candidate?.jam ?? ""),
+                kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
                 felt: String(candidate?.felt ?? ""),
-                shakemap: candidate?.shakemap
-                  ? String(candidate.shakemap)
-                  : null,
+                shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
               };
             })
-            .filter((item): item is ListItem => Boolean(item));
+            .filter((item): item is ListItem => Boolean(item))
+            .slice(0, 30);
 
           if (isMounted) setItems(normalized);
         } else {
-          const res = await fetch(withCacheBuster(getDetectedHistoryNodeUrl()));
-          const data = await res.json();
-
-          // Handle both direct array and object keyed structure
-          let nodeArray: any[] = [];
-
-          if (Array.isArray(data)) {
-            // If data is already an array
-            nodeArray = data;
-          } else if (typeof data === "object" && data !== null) {
-            // If data is an object, try to extract items
-            if (data?.items && typeof data.items === "object") {
-              nodeArray = Object.values(data.items);
-            } else if (data?.features && Array.isArray(data.features)) {
-              // If it's GeoJSON format
-              nodeArray = data.features;
-            } else {
-              // Try to get all values from the object
-              nodeArray = Object.values(data);
-            }
-          }
-
-          if (!Array.isArray(nodeArray) || nodeArray.length === 0) {
-            if (isMounted) setItems([]);
-            return;
-          }
+          const snapshot = await get(query(ref(db, "gempa_terdeteksi/items"), limitToLast(150)));
+          const rawData = snapshot.exists() ? snapshot.val() : null;
+          const nodeArray = Array.isArray(rawData)
+            ? rawData
+            : rawData && typeof rawData === "object"
+              ? Object.values(rawData)
+              : [];
 
           const sorted = [...nodeArray].sort((a: any, b: any) => {
-            const tA = String(a?.properties?.time ?? a?.time ?? "");
-            const tB = String(b?.properties?.time ?? b?.time ?? "");
+            const tA = String(a?.time ?? a?.properties?.time ?? "");
+            const tB = String(b?.time ?? b?.properties?.time ?? "");
             return tB.localeCompare(tA);
           });
 
           const normalized = sorted
             .map((item: any, index): ListItem | null => {
-              // Handle both direct properties and GeoJSON format
               const coords = item?.geometry?.coordinates || item?.coordinates;
-              const longitude = parseFloat(
-                String(coords?.longitude ?? coords?.[0] ?? "0"),
-              );
-              const latitude = parseFloat(
-                String(coords?.latitude ?? coords?.[1] ?? "0"),
-              );
-              if (Number.isNaN(latitude) || Number.isNaN(longitude))
-                return null;
+              const longitude = parseFloat(String(item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0] ?? ""));
+              const latitude = parseFloat(String(item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? ""));
+              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
 
-              // Get properties from either properties object or direct properties
               const props = item?.properties ?? item;
-              const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(
-                " ",
-              );
+              const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
               const jamFromTime = (jamRaw ?? "").split(".")[0];
               const distanceKm = haversineDistanceKm(
                 userLocation.lat,
@@ -254,7 +207,8 @@ export default function ListGempaPage() {
               ).toFixed(1);
               const eventId = String(
                 props?.eventid ??
-                `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
+                  props?.eventId ??
+                  `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
               );
 
               return {
@@ -262,22 +216,20 @@ export default function ListGempaPage() {
                 latitude,
                 longitude,
                 magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
-                lokasi: String(props?.lokasi ?? props?.place ?? ""),
+                lokasi: String(props?.lokasi ?? props?.place ?? props?.area ?? ""),
                 waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
                 jarak: `${distanceKm} km dari lokasi Anda`,
                 distanceKm,
                 tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
                 jam: String(props?.jam ?? jamFromTime ?? ""),
                 kedalaman: String(props?.kedalaman ?? props?.depth ?? ""),
-                felt: String(props?.felt ?? ""),
+                felt: String(props?.felt ?? props?.fase ?? ""),
               };
             })
             .filter((item): item is ListItem => Boolean(item))
             .slice(0, 30);
 
-          // Cache the terdeteksi data
           setCacheData(CACHE_KEYS.TERDETEKSI_HISTORY, normalized);
-
           if (isMounted) setItems(normalized);
         }
       } catch (error) {
@@ -292,7 +244,7 @@ export default function ListGempaPage() {
     return () => {
       isMounted = false;
     };
-  }, [mode, userLocation]);
+  }, [haversineDistanceKm, mode, userLocation.lat, userLocation.lon]);
 
   return (
     <View style={styles.container}>

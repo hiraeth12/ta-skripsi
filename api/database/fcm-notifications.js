@@ -52,13 +52,23 @@ export async function sendGempaDirasakanNotification(
     // Get all user tokens from database
     const tokensSnapshot = await db.ref("user_fcm_tokens").get();
     const tokens = [];
+    const tokenPathByValue = {};
 
     if (tokensSnapshot.exists()) {
       const tokenData = tokensSnapshot.val();
-      // Extract unique tokens from user data
+      // Support both legacy token object shape and plain string token value.
       for (const userId in tokenData) {
-        if (tokenData[userId].token) {
-          tokens.push(tokenData[userId].token);
+        const entry = tokenData[userId];
+        const tokenValue =
+          typeof entry === "string"
+            ? entry
+            : typeof entry?.token === "string"
+              ? entry.token
+              : null;
+
+        if (tokenValue) {
+          tokens.push(tokenValue);
+          tokenPathByValue[tokenValue] = `user_fcm_tokens/${userId}`;
         }
       }
     }
@@ -68,11 +78,26 @@ export async function sendGempaDirasakanNotification(
       return;
     }
 
+    // Deduplicate tokens (same device with multiple accounts)
+    const uniqueTokens = Array.from(new Set(tokens));
+    const duplicateCount = tokens.length - uniqueTokens.length;
+    
+    console.log(`[Notification] Extracted ${tokens.length} total tokens, ${uniqueTokens.length} unique`);
+    if (duplicateCount > 0) {
+      console.log(`[Notification] Removed ${duplicateCount} duplicate token(s)`);
+    }
+
     // Use Firebase Cloud Messaging API (HTTP v1)
-    const messages = tokens.map((token) => ({
+    const messages = uniqueTokens.map((token) => ({
       notification: {
         title: "Gempa Dirasakan 🌍",
         body: headline || `Gempa M${magnitude} di ${location}`,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+        },
       },
       data: {
         type: "gempa_dirasakan",
@@ -125,14 +150,9 @@ export async function sendGempaDirasakanNotification(
       const updates = {};
       for (const token of failedTokens) {
         try {
-          const snap = await db
-            .ref("user_fcm_tokens")
-            .orderByChild("token")
-            .equalTo(token)
-            .once("value");
-          snap.forEach((child) => {
-            updates[`user_fcm_tokens/${child.key}`] = null;
-          });
+          if (tokenPathByValue[token]) {
+            updates[tokenPathByValue[token]] = null;
+          }
         } catch (error) {
           console.error(`Error removing token: ${token}`, error);
         }
