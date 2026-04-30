@@ -30,7 +30,6 @@ export const useFcm = () => {
       try {
         const notificationAllowed = await ensureNotificationPermission();
         if (!notificationAllowed) {
-          console.log("Android notification permission denied");
           return;
         }
 
@@ -39,25 +38,18 @@ export const useFcm = () => {
 
         // Request user permission for notifications
         const permission = await requestPermission(messaging);
-        if (permission === AuthorizationStatus.AUTHORIZED) {
-          console.log("User granted notification permission");
-        } else if (permission === AuthorizationStatus.PROVISIONAL) {
-          console.log("User granted provisional notification permission");
-        } else {
-          console.log("User denied notification permission");
+        if (permission !== AuthorizationStatus.AUTHORIZED && permission !== AuthorizationStatus.PROVISIONAL) {
           return;
         }
 
         // Get FCM token
         const token = await getToken(messaging);
         tokenRef.current = token;
-        console.log("FCM Token:", token);
 
         // Register foreground listener only once
         if (!isForegroundListenerInitialized) {
           isForegroundListenerInitialized = true;
           onMessage(messaging, async (remoteMessage) => {
-            console.log("Foreground notification received:", remoteMessage?.messageId);
             if (remoteMessage.notification) {
               Alert.alert(
                 remoteMessage.notification.title || "Notifikasi Gempa",
@@ -67,7 +59,6 @@ export const useFcm = () => {
           });
         }
       } catch (error) {
-        console.error("Error initializing FCM:", error);
       }
     };
 

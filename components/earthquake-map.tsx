@@ -372,7 +372,7 @@ const EarthquakeMap = memo(
           const normalized = normalizeSeismicSensorsFeatureCollection(data);
           if (normalized) setSeismicSensorsGeoJson(normalized);
         })
-        .catch((err) => console.log("Sensor error:", err));
+        .catch(() => {});
     }, [showSeismicSensors, seismicSensorsGeoJson]);
 
     const applyCameraMove = useCallback(

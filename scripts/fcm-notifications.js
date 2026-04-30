@@ -74,18 +74,12 @@ export async function sendGempaDirasakanNotification(
     }
 
     if (tokens.length === 0) {
-      console.log("No user tokens found for notification");
       return;
     }
 
     // Deduplicate tokens (same device with multiple accounts)
     const uniqueTokens = Array.from(new Set(tokens));
     const duplicateCount = tokens.length - uniqueTokens.length;
-    
-    console.log(`[Notification] Extracted ${tokens.length} total tokens, ${uniqueTokens.length} unique`);
-    if (duplicateCount > 0) {
-      console.log(`[Notification] Removed ${duplicateCount} duplicate token(s)`);
-    }
 
     // Use Firebase Cloud Messaging API (HTTP v1)
     const messages = uniqueTokens.map((token) => ({
@@ -141,10 +135,6 @@ export async function sendGempaDirasakanNotification(
       });
     }
 
-    console.log(
-      `Gempa notification sent: ${successCount} succeeded, ${failureCount} failed`,
-    );
-
     // Remove invalid tokens from database
     if (failedTokens.length > 0) {
       const updates = {};
@@ -153,20 +143,17 @@ export async function sendGempaDirasakanNotification(
           if (tokenPathByValue[token]) {
             updates[tokenPathByValue[token]] = null;
           }
-        } catch (error) {
-          console.error(`Error removing token: ${token}`, error);
+        } catch {
         }
       }
 
       if (Object.keys(updates).length > 0) {
         await db.ref().update(updates);
-        console.log(`Removed ${failedTokens.length} invalid tokens`);
       }
     }
 
     return { successCount, failureCount };
   } catch (error) {
-    console.error("Error sending gempa dirasakan notification:", error);
     throw error;
   }
 }
@@ -184,9 +171,7 @@ export async function saveUserFcmToken(userId, token) {
       token,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
-    console.log(`FCM token saved for user: ${userId}`);
   } catch (error) {
-    console.error("Error saving FCM token:", error);
     throw error;
   }
 }
@@ -223,7 +208,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
     }
 
     if (!latest) {
-      console.log("No gempa dirasakan data available");
       return null;
     }
 
@@ -231,7 +215,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
 
     // Check if this is a new event
     if (eventId && eventId === lastKnownEventId) {
-      console.log("Event already notified, skipping");
       return null;
     }
 
@@ -244,7 +227,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
       String(latest.date ?? "") + " " + String(latest.time ?? "");
 
     if (!headline && !magnitude) {
-      console.log("Incomplete gempa data");
       return null;
     }
 
@@ -259,7 +241,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
 
     return eventId;
   } catch (error) {
-    console.error("Error checking for new gempa dirasakan:", error);
     throw error;
   }
 }

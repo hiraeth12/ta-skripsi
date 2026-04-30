@@ -36,7 +36,6 @@ export async function monitorGempaDirasakanAndNotify() {
           checkDelayMs = Math.min(checkDelayMs + 10_000, MAX_CHECK_MS);
         }
       } catch (error) {
-        console.error("Error in check and notify cycle:", error);
         checkDelayMs = Math.min(checkDelayMs + 10_000, MAX_CHECK_MS);
       }
     }
@@ -50,10 +49,7 @@ export async function monitorGempaDirasakanAndNotify() {
         lastKnownEventId = snapshot.val()?.eventId || null;
       }
     } catch (error) {
-      console.log("Could not load last event ID:", error);
     }
-
-    console.log("Starting gempa dirasakan notification monitor...");
 
     // Initial check
     await checkAndNotify();
@@ -61,7 +57,6 @@ export async function monitorGempaDirasakanAndNotify() {
     // Schedule recurring checks
     setInterval(checkAndNotify, checkDelayMs);
   } catch (error) {
-    console.error("Fatal error in monitorGempaDirasakanAndNotify:", error);
     process.exit(1);
   }
 }
@@ -69,7 +64,6 @@ export async function monitorGempaDirasakanAndNotify() {
 // Run if executed directly
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith("monitor-gempa-notifications.js")) {
   monitorGempaDirasakanAndNotify().catch(err => {
-    console.error("Monitor crashed:", err);
     process.exit(1);
   });
 }

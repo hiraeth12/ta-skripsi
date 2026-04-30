@@ -1,3 +1,4 @@
+import { styles } from "../../features/starter/styles/new-password-styles";
 import AuthButton from "@/components/auth-button";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -7,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,7 +15,6 @@ import {
 } from "react-native";
 
 export default function NewPassword() {
-  // State secure dipisah agar kontrol mata kiri dan kanan tidak barengan
   const [secure, setSecure] = useState(true);
   const [secureConfirm, setSecureConfirm] = useState(true);
 
@@ -35,13 +34,7 @@ export default function NewPassword() {
         />
 
         <Text
-          style={{
-            fontSize: 24,
-            fontWeight: "bold",
-            textAlign: "left",
-            marginBottom: 15,
-            color: "#000",
-          }}
+          style={styles.label}
         >
           Kata Sandi Baru
         </Text>
@@ -93,54 +86,3 @@ export default function NewPassword() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EDEDED",
-  },
-  scrollContainer: {
-    padding: 24,
-    justifyContent: "center",
-    minHeight: "100%",
-  },
-  logo: {
-    width: 160,
-    height: 50,
-    alignSelf: "center",
-    marginBottom: 40,
-    marginTop: 20,
-  },
-  description: {
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "left",
-    marginBottom: 30,
-    color: "#555",
-    lineHeight: 20,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 18,
-    color: "#333",
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  passwordContainer2: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    marginBottom: 40, // Jarak ke tombol bawah
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 8,
-    color: "#000",
-  },
-});

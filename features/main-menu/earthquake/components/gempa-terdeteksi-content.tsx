@@ -153,9 +153,6 @@ export default function GempaTerdeteksi({
       onLoadingChange?.(true);
       try {
         if (!API_URL) {
-          console.error(
-            "EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL is undefined — restart Metro with --clear",
-          );
           return;
         }
         const url = `${API_URL.trim()}${Date.now()}`;
@@ -201,7 +198,6 @@ export default function GempaTerdeteksi({
           800,
         );
       } catch (e) {
-        console.error("Failed to fetch gempa terdeteksi:", e);
         if (!networkErrorShownRef.current && e instanceof TypeError && (e as Error).message.includes('Network')) {
           networkErrorShownRef.current = true;
           Alert.alert(

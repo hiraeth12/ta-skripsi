@@ -33,7 +33,6 @@ function readEnvFile(envPath) {
 
 async function testNotification() {
   try {
-    console.log("🔧 Initializing Firebase Admin...");
     await initializeAdmin();
     
     // Load env variables
@@ -45,7 +44,6 @@ async function testNotification() {
       throw new Error("EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL not configured in .env");
     }
 
-    console.log("🌍 Fetching latest gempa data from BMKG...");
     const res = await fetch(`${apiUrl.trim()}${Date.now()}`);
     const data = await res.json();
     
@@ -56,7 +54,6 @@ async function testNotification() {
     const gempaData = Array.isArray(data.info) ? data.info[0] : data.info;
     const headline = String(gempaData.headline || gempaData.description || "Gempa dirasakan");
     
-    console.log(`📱 Sending test notification with headline: "${headline}"`);
     const result = await sendGempaDirasakanNotification(
       headline,                                 // headline from BMKG
       String(gempaData.magnitude || ""),        // magnitude
@@ -65,11 +62,8 @@ async function testNotification() {
       new Date().toISOString()                  // timestamp
     );
 
-    console.log("✅ Notification test completed!");
-    console.log("Result:", result);
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error sending notification:", error);
     process.exit(1);
   }
 }

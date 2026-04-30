@@ -32,14 +32,7 @@ function initializeAdmin() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
       serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      console.log(
-        "[Firebase Admin] Loaded service account from FIREBASE_SERVICE_ACCOUNT_KEY env var"
-      );
     } catch (e) {
-      console.error(
-        "[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:",
-        e.message
-      );
     }
   }
 
@@ -48,14 +41,7 @@ function initializeAdmin() {
     try {
       const keyPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
       serviceAccount = JSON.parse(fs.readFileSync(keyPath, "utf8"));
-      console.log(
-        `[Firebase Admin] Loaded service account from ${keyPath}`
-      );
     } catch (e) {
-      console.error(
-        "[Firebase Admin] Failed to load from FIREBASE_SERVICE_ACCOUNT_PATH:",
-        e.message
-      );
     }
   }
 
@@ -65,15 +51,8 @@ function initializeAdmin() {
       const defaultPath = path.resolve(__dirname, "../../firebase-service-account.json");
       if (fs.existsSync(defaultPath)) {
         serviceAccount = JSON.parse(fs.readFileSync(defaultPath, "utf8"));
-        console.log(
-          "[Firebase Admin] Loaded service account from firebase-service-account.json"
-        );
       }
     } catch (e) {
-      console.error(
-        "[Firebase Admin] Failed to load firebase-service-account.json:",
-        e.message
-      );
     }
   }
 
@@ -84,9 +63,6 @@ function initializeAdmin() {
       if (fs.existsSync(fallbackPath)) {
         const googleServices = JSON.parse(fs.readFileSync(fallbackPath, "utf8"));
         // Extract basic info (not ideal, but can work for simple cases)
-        console.warn(
-          "[Firebase Admin] Using google-services.json as fallback - this is not recommended for backend services"
-        );
         // This won't work for Admin SDK, so we skip
       }
     } catch (e) {
@@ -114,7 +90,6 @@ function initializeAdmin() {
   });
 
   db = admin.database();
-  console.log("[Firebase Admin] Successfully initialized with Admin SDK");
 
   return db;
 }

@@ -328,43 +328,31 @@ export function GempaTerdeteksiHistoryContent({
       isFetching.current = true;
 
       const startTime = Date.now();
-      console.log(`[Fetch-Terdeteksi] Starting fetchLatestQuake at ${new Date().toISOString()}`);
-
       if (!silent) onLoadingChange?.(true);
 
       try {
-        console.log(`[Fetch-Terdeteksi] Getting Firebase app and database...`);
         let app;
         try {
           app = getApp();
-          console.log(`[Fetch-Terdeteksi] ✅ Firebase app initialized`);
         } catch (appError: any) {
-          console.error(`[Fetch-Terdeteksi] ❌ Firebase app not initialized:`, appError.message);
           throw new Error("Firebase app not initialized - ensure google-services.json is configured");
         }
         
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        console.log(`[Fetch-Terdeteksi] Database URL: ${dbUrl ? "✅ configured" : "⚠️ missing - using default"}`);
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
         
         const refStart = Date.now();
-        console.log(`[Fetch-Terdeteksi] Querying database path: "${DB_PATH}/items"`);
         let snapshot = await get(ref(db, `${DB_PATH}/items`));
         if (!snapshot.exists()) {
-          console.log(`[Fetch-Terdeteksi] Fallback query to root path: "${DB_PATH}"`);
           snapshot = await get(ref(db, DB_PATH));
         }
-        const refTime = Date.now() - refStart;
-        console.log(`[Fetch-Terdeteksi] Database query completed in ${refTime}ms`);
 
         if (!snapshot.exists()) {
-          console.log("No gempa terdeteksi history data in database");
           return false;
         }
 
         const dbData = snapshot.val();
         if (!dbData || typeof dbData !== "object") {
-          console.log(`[Fetch-Terdeteksi] Invalid data type: ${typeof dbData}`);
           return false;
         }
 
@@ -377,7 +365,6 @@ export function GempaTerdeteksiHistoryContent({
             ? (Object.values(itemsNode) as any[])
             : [];
         const convertTime = Date.now() - convertStart;
-        console.log(`[Fetch-Terdeteksi] Converted to candidates array: ${candidates.length} items in ${convertTime}ms`);
         
         if (candidates.length === 0) return false;
 
@@ -389,7 +376,6 @@ export function GempaTerdeteksiHistoryContent({
           return tB.localeCompare(tA);
         });
         const sortTime = Date.now() - sortStart;
-        console.log(`[Fetch-Terdeteksi] Sorted candidates in ${sortTime}ms`);
 
         const normalizeStart = Date.now();
         const normalized = sorted
@@ -447,17 +433,13 @@ export function GempaTerdeteksiHistoryContent({
           })
           .filter((item: QuakeItem | null): item is QuakeItem => Boolean(item));
         const normalizeTime = Date.now() - normalizeStart;
-        console.log(`[Fetch-Terdeteksi] Normalized ${normalized.length} items in ${normalizeTime}ms (filtered from ${sorted.length})`);
         
 
         if (normalized.length === 0) return false;
 
         const signature = normalized.map((item) => item.eventId).join("|");
-        console.log(`[Fetch-Terdeteksi] Data signature: ${signature.substring(0, 50)}...`);
-        console.log(`[Fetch-Terdeteksi] Previous signature: ${latestDataSignature.current?.substring(0, 50) ?? "none"}...`);
         
         if (signature === latestDataSignature.current) {
-          console.log("[Fetch-Terdeteksi] No data change detected, skipping update");
           return false;
         }
         latestDataSignature.current = signature;
@@ -467,7 +449,6 @@ export function GempaTerdeteksiHistoryContent({
           foundIndex = normalized.findIndex(
             (item) => item.eventId === selectedEventIdRef.current,
           );
-          console.log(`[Fetch-Terdeteksi] Found selected eventId at index: ${foundIndex}`);
         }
 
         const currentTemporarySelection = temporarySelectionRef.current;
@@ -476,11 +457,9 @@ export function GempaTerdeteksiHistoryContent({
           currentTemporarySelection.eventId === selectedEventIdRef.current;
         const keepTemporarySelection = hasTemporarySelection && foundIndex < 0;
 
-        console.log(`[Fetch-Terdeteksi] Updating state with ${normalized.length} items`);
         setQuakes(normalized);
 
         if (keepTemporarySelection) {
-          console.log("[Fetch-Terdeteksi] Keeping temporary selection");
           setSelectedIndex(null);
           return true;
         }
@@ -492,13 +471,11 @@ export function GempaTerdeteksiHistoryContent({
         setSelectedIndex(nextSelectedIndex);
 
         if (!focusQuake) {
-          console.log("[Fetch-Terdeteksi] No focus quake to animate");
           return true;
         }
 
         const animStart = Date.now();
         if (isFirstLoad.current) {
-          console.log("[Fetch-Terdeteksi] First load - animating to region");
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
             {
@@ -521,13 +498,9 @@ export function GempaTerdeteksiHistoryContent({
           );
         }
         const animTime = Date.now() - animStart;
-        const totalTime = Date.now() - startTime;
-        console.log(`[Fetch-Terdeteksi] Map animation scheduled in ${animTime}ms`);
-        console.log(`[Fetch-Terdeteksi] ✅ Total fetch completed in ${totalTime}ms`);
 
         return true;
       } catch (e) {
-        console.error("Failed to fetch gempa terdeteksi history:", e);
         return false;
       } finally {
         if (!silent) onLoadingChange?.(false);

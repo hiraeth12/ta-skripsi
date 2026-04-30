@@ -1,3 +1,4 @@
+import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useFcm } from "@/hooks/use-fcm";
@@ -12,7 +13,6 @@ import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   AppState,
   Dimensions,
   Image,
@@ -23,7 +23,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { DirasakanCard } from "./components/dirasakan-card";
 import { InfoModal } from "./components/info-modal";
@@ -165,6 +165,8 @@ export default function Home() {
   const [userName, setUserName] = useState("Pengguna");
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+
   const user = { name: userName };
 
   const { shareQuake } = useEarthquakeShare();
@@ -196,12 +198,47 @@ export default function Home() {
       const userData = snapshot.val();
 
       if (userData) {
+        let locationName = userData.locationName || "Lokasi Saya";
+        const userLat = parseFloat(userData.latitude);
+        const userLon = parseFloat(userData.longitude);
+
+        // Replace "Lokasi GPS" with nearest location from database
+        try {
+          if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
+            const locationsRef = ref(database, "locations");
+            const locationsSnapshot = await get(locationsRef);
+            const locationsData = locationsSnapshot.val();
+
+            if (locationsData) {
+              let minDistance = Infinity;
+              let nearestName = locationName;
+              Object.values(locationsData).forEach((loc: any) => {
+                if (loc.latitude !== undefined && loc.longitude !== undefined) {
+                  const dist = haversineDistanceKm(
+                    userLat,
+                    userLon,
+                    parseFloat(loc.latitude),
+                    parseFloat(loc.longitude)
+                  );
+                  if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestName = loc.name;
+                  }
+                }
+              });
+              locationName = nearestName;
+            }
+          }
+        } catch (e) {
+          // Ignore errors and log gracefully
+        }
+
         // Set location data if available
         if (userData.latitude && userData.longitude) {
           setUserLocation({
-            latitude: parseFloat(userData.latitude),
-            longitude: parseFloat(userData.longitude),
-            name: userData.locationName || "Lokasi Saya",
+            latitude: userLat,
+            longitude: userLon,
+            name: locationName,
           });
         }
         // Set user name from firstName (and lastName if available)
@@ -212,10 +249,10 @@ export default function Home() {
           setUserName(fullName);
         }
         // Fetch location image from Firebase Storage via locations collection with caching
-        if (userData.locationName) {
+        if (locationName) {
           try {
             // Check cache first
-            const cacheKey = `location_image_${userData.locationName}`;
+            const cacheKey = `location_image_${locationName}`;
             const cachedUrl = getCachedData<string>(cacheKey);
             
             if (cachedUrl) {
@@ -231,7 +268,7 @@ export default function Home() {
               if (locationsData) {
                 // Find the location matching the user's locationName
                 const locationEntry = Object.values(locationsData).find(
-                  (loc: any) => loc?.name === userData.locationName
+                  (loc: any) => loc?.name === locationName
                 ) as any;
 
                 if (locationEntry?.image) {
@@ -251,7 +288,6 @@ export default function Home() {
               }
             }
           } catch (storageError) {
-            console.warn("Error fetching location image:", storageError);
             setLocationImageUrl(null);
             setLocationImageLoading(false);
           }
@@ -259,10 +295,9 @@ export default function Home() {
           setLocationImageLoading(false);
         }
       }
-    } catch (error) {
-      console.error("Error fetching user data:", error);
+    } catch {
     }
-  }, []);
+  }, [haversineDistanceKm]);
 
   // Fetch user data on mount only - do NOT refetch on every focus
   useEffect(() => {
@@ -348,15 +383,10 @@ export default function Home() {
         );
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
-          console.error("Failed to fetch home dirasakan:", e);
           // Show network error alert only once
           if (!networkErrorShownRef.current && e.message.includes('Network')) {
             networkErrorShownRef.current = true;
-            Alert.alert(
-              'Koneksi Jaringan',
-              'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
-              [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
-            );
+            setNetworkErrorModalVisible(true);
           }
         }
       }
@@ -422,15 +452,10 @@ export default function Home() {
         setTerdeteksiData(newTerdeteksiData);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
-          console.error("Failed to fetch home terdeteksi:", e);
           // Show network error alert only once
           if (!networkErrorShownRef.current && e.message.includes('Network')) {
             networkErrorShownRef.current = true;
-            Alert.alert(
-              'Koneksi Jaringan',
-              'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
-              [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
-            );
+            setNetworkErrorModalVisible(true);
           }
         }
       }
@@ -627,6 +652,14 @@ export default function Home() {
         onClose={() => setInfoVisibleTerdeteksi(false)}
         title="Gempabumi Terakhir Terdeteksi"
         desc="Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia."
+      />
+
+      <NetworkErrorModal
+        visible={networkErrorModalVisible}
+        onClose={() => {
+          setNetworkErrorModalVisible(false);
+          networkErrorShownRef.current = false;
+        }}
       />
 
       <Modal visible={shakeMapVisible} transparent animationType="slide">

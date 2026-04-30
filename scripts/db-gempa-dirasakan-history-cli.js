@@ -1,7 +1,12 @@
+/**
+ * Full sync untuk gempa dirasakan
+ * Menulis semua 30 data dari API ke database
+ * Run: npm run sync:gempa-dirasakan:full
+ */
+
 import { XMLParser } from "fast-xml-parser";
 import fs from "fs";
 import path from "path";
-import { getDatabase } from "./firebase-admin-config.js";
 
 function readEnvFile(envPath) {
   const raw = fs.readFileSync(envPath, "utf8");
@@ -100,7 +105,14 @@ function getLatestItem(items) {
   )[0];
 }
 
-async function syncLatestOnce() {
+function sortItemsDescending(items) {
+  // Sort by eventid ASCENDING (oldest first at index 0, newest last)
+  return [...items].sort((a, b) =>
+    String(a?.eventid ?? "").localeCompare(String(b?.eventid ?? "")),
+  );
+}
+
+async function syncFullGempaDirasakan() {
   const envPath = path.resolve(process.cwd(), ".env");
   const env = readEnvFile(envPath);
 
@@ -126,116 +138,53 @@ async function syncLatestOnce() {
     .map((candidate, index) => normalizeQuakeItem(candidate, index, globalIdentifier))
     .filter(Boolean);
 
-  const latest = getLatestItem(normalizedItems);
-  if (!latest) {
+  if (normalizedItems.length === 0) {
     return {
       ok: false,
       skipped: true,
-      reason: "No valid quake item found",
+      reason: "No valid quake items found",
     };
   }
 
-  const lastEventRes = await fetch(
-    `${dbUrl}/gempa_dirasakan/lastEventId.json`,
-  );
+  const latest = getLatestItem(normalizedItems);
 
-  if (!lastEventRes.ok) {
+  const payload = {
+    sourceUrl: apiUrl,
+    sourceIdentifier: globalIdentifier,
+    totalItems: normalizedItems.length,
+    syncedAt: new Date().toISOString(),
+    lastEventId: latest?.eventid || null,
+    items: sortItemsDescending(normalizedItems),
+  };
+
+  const writeRes = await fetch(`${dbUrl}/gempa_dirasakan.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!writeRes.ok) {
+    const errText = await writeRes.text();
     throw new Error(
-      `Failed to read DB lastEventId: ${lastEventRes.status} ${lastEventRes.statusText}`,
-    );
-  }
-
-  const lastEventId = await lastEventRes.json();
-
-  if (String(lastEventId ?? "") === String(latest.eventid)) {
-    return {
-      ok: true,
-      skipped: true,
-      reason: "No new event",
-      eventid: latest.eventid,
-    };
-  }
-
-  // New event detected! Fetch current items and append the new one
-  let currentItems = [];
-  
-  try {
-    const itemsRes = await fetch(`${dbUrl}/gempa_dirasakan/items.json`);
-    if (itemsRes.ok) {
-      const existingData = await itemsRes.json();
-      if (Array.isArray(existingData)) {
-        currentItems = existingData;
-      }
-    }
-  } catch (e) {
-    console.warn("[Sync] Warning: Could not fetch current items, starting fresh");
-  }
-
-  // Append new event to the end (ascending order: oldest first, newest last)
-  const updatedItems = [...currentItems, latest];
-
-  // Write updated items and metadata using Firebase Admin SDK
-  try {
-    const db = getDatabase();
-    
-    // Prepare all updates
-    const updates = {
-      "gempa_dirasakan/sourceUrl": apiUrl,
-      "gempa_dirasakan/sourceIdentifier": globalIdentifier,
-      "gempa_dirasakan/syncedAt": new Date().toISOString(),
-      "gempa_dirasakan/lastEventId": latest.eventid,
-      "gempa_dirasakan/totalItems": updatedItems.length,
-      "gempa_dirasakan/items": updatedItems,
-    };
-
-    // Write all at once using multi-path update for atomicity
-    await db.ref().update(updates);
-    
-    console.log("[Sync] Successfully wrote data using Firebase Admin SDK");
-  } catch (error) {
-    throw new Error(
-      `Failed to write to Firebase Admin: ${error.message}`
+      `Failed to write DB: ${writeRes.status} ${errText}`
     );
   }
 
   return {
     ok: true,
-    skipped: false,
-    writtenEventId: latest.eventid,
     writePath: "/gempa_dirasakan",
-    totalItemsAfterUpdate: updatedItems.length,
+    totalItems: normalizedItems.length,
+    lastEventId: latest?.eventid,
+    sourceUrl: apiUrl,
   };
 }
 
 async function run() {
-  const intervalArg = Number(process.argv[2] ?? 0);
-
-  if (intervalArg > 0) {
-    console.log(
-      `[Gempa Latest Sync] running every ${intervalArg} ms (Ctrl+C to stop)`,
-    );
-
-    await syncLatestOnce().then((result) => {
-      console.log(JSON.stringify(result, null, 2));
-    });
-
-    setInterval(async () => {
-      try {
-        const result = await syncLatestOnce();
-        console.log(JSON.stringify(result, null, 2));
-      } catch (error) {
-        console.error(error?.stack || error?.message || String(error));
-      }
-    }, intervalArg);
-
-    return;
+  try {
+    const result = await syncFullGempaDirasakan();
+  } catch (error) {
+    process.exit(1);
   }
-
-  const result = await syncLatestOnce();
-  console.log(JSON.stringify(result, null, 2));
 }
 
-run().catch((error) => {
-  console.error(error?.stack || error?.message || String(error));
-  process.exit(1);
-});
+run();

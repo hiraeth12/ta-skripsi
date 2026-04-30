@@ -16,14 +16,11 @@ export function registerFcmBackgroundHandler() {
     const messaging = getMessaging(app);
 
     setBackgroundMessageHandler(messaging, async (remoteMessage) => {
-      console.log("[FCM Background] Notification received:", remoteMessage?.messageId);
       // Background handler processes notification automatically
       // No need to show alert here - Firebase handles the tray notification
     });
 
     isBackgroundHandlerRegistered = true;
-    console.log("[FCM] Background message handler registered successfully");
   } catch (error) {
-    console.warn("[FCM] Failed to register background handler:", error);
   }
 }

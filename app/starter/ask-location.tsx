@@ -1,4 +1,5 @@
 import AuthButton from "@/components/auth-button";
+import { useHaversine } from "@/hooks/use-haversine";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
@@ -15,41 +16,20 @@ import {
   Modal,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-
-// Helper function to calculate haversine distance
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
+import { styles } from "../../features/starter/styles/ask-location-styles";
 
 // Helper function to find nearest location
-function findNearestLocation(gpsLat: number, gpsLon: number, locations: any[]) {
+function findNearestLocation(
+  gpsLat: number,
+  gpsLon: number,
+  locations: any[],
+  haversineDistanceKm: (lat1: number, lon1: number, lat2: number, lon2: number) => number
+) {
   if (!locations || locations.length === 0) return null;
 
   let nearest = locations[0];
@@ -84,6 +64,7 @@ export default function AskLocation() {
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
   const router = useRouter();
+  const { haversineDistanceKm } = useHaversine();
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -107,8 +88,7 @@ export default function AskLocation() {
           }),
         );
         setAllLocations(locationsArray);
-      } catch (error) {
-        console.error("Error fetching locations:", error);
+      } catch {
         setAllLocations([]);
       } finally {
         setLoading(false);
@@ -144,6 +124,7 @@ export default function AskLocation() {
         latitude,
         longitude,
         allLocations,
+        haversineDistanceKm
       );
       const locationName = nearestLocation?.name || "Lokasi GPS";
 
@@ -163,14 +144,8 @@ export default function AskLocation() {
             locationName: locationName,
             locationUpdatedAt: new Date().toISOString(),
           });
-          console.log("User location updated (GPS):", {
-            latitude,
-            longitude,
-            locationName,
-          });
         }
-      } catch (dbError) {
-        console.error("Error updating user location:", dbError);
+      } catch {
         // Don't block navigation if DB update fails
       }
 
@@ -181,8 +156,7 @@ export default function AskLocation() {
           resolve(null);
         }, 500);
       });
-    } catch (error) {
-      console.error("GPS Error:", error);
+    } catch {
       Alert.alert(
         "Error",
         "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
@@ -217,14 +191,8 @@ export default function AskLocation() {
           locationName: item.name,
           locationUpdatedAt: new Date().toISOString(),
         });
-        console.log("User location updated (manual select):", {
-          latitude: item.latitude,
-          longitude: item.longitude,
-          locationName: item.name,
-        });
       }
-    } catch (dbError) {
-      console.error("Error updating user location:", dbError);
+    } catch {
     }
 
     setModalVisible(false);
@@ -361,98 +329,3 @@ export default function AskLocation() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#EDEDED" },
-  scrollContainer: {
-    padding: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "100%",
-  },
-  logo: { width: 160, height: 50, marginBottom: 30, marginTop: 20 },
-  image: { width: 220, height: 220, marginBottom: 20 },
-  description: {
-    fontSize: 22,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 30,
-    color: "#333",
-  },
-  inputArea: { width: "100%" },
-  customInput: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    padding: 15,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: "#DDD",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  inputText: { flex: 1, fontSize: 14, color: "#000" },
-  orText: {
-    textAlign: "center",
-    marginVertical: 20,
-    color: "#777",
-    fontSize: 14,
-  },
-  buttonWrapper: { width: "100%", alignItems: "center" },
-
-  bottomSheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  bottomSheetContent: {
-    backgroundColor: "#FFF",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 20,
-    height: "85%",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#EEE",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginBottom: 15,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#333" },
-  searchBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  modalInput: { flex: 1, padding: 12, fontSize: 15 },
-  locationCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F9F9F9",
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#E8F4F8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
-  },
-  locName: { fontSize: 16, fontWeight: "bold", color: "#333" },
-  locDesc: { fontSize: 12, color: "#888", marginTop: 2 },
-});
