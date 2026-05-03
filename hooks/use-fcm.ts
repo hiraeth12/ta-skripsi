@@ -1,3 +1,4 @@
+import { notificationEmitter } from "@/hooks/fcm-event-emitter";
 import { ensureNotificationPermission } from "@/hooks/notification-permission";
 import { getApp } from "@react-native-firebase/app";
 import {
@@ -8,7 +9,6 @@ import {
     requestPermission,
 } from "@react-native-firebase/messaging";
 import { useEffect, useRef } from "react";
-import { Alert } from "react-native";
 
 // Global flag to ensure foreground listener is registered only once
 let isForegroundListenerInitialized = false;
@@ -50,12 +50,16 @@ export const useFcm = () => {
         if (!isForegroundListenerInitialized) {
           isForegroundListenerInitialized = true;
           onMessage(messaging, async (remoteMessage) => {
-            if (remoteMessage.notification) {
-              Alert.alert(
-                remoteMessage.notification.title || "Notifikasi Gempa",
-                remoteMessage.notification.body || "Ada gempa baru terdeteksi",
-              );
-            }
+            console.log("FOREGROUND HANDLER TRIGGERED", remoteMessage.data);
+            // Karena kita menggunakan Data-Only Payload untuk background Wake-Up,
+            // properti ada di remoteMessage.data
+            const title = remoteMessage.data?.title || remoteMessage.notification?.title || "Notifikasi Gempa";
+            const body = remoteMessage.data?.body || remoteMessage.notification?.body || "Ada gempa baru terdeteksi";
+            
+            notificationEmitter.emit({
+              title,
+              body,
+            });
           });
         }
       } catch (error) {

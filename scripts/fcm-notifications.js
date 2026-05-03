@@ -83,23 +83,18 @@ export async function sendGempaDirasakanNotification(
 
     // Use Firebase Cloud Messaging API (HTTP v1)
     const messages = uniqueTokens.map((token) => ({
-      notification: {
-        title: "Gempa Dirasakan 🌍",
-        body: headline || `Gempa M${magnitude} di ${location}`,
-      },
       android: {
-        priority: "high",
-        notification: {
-          sound: "default",
-        },
+        priority: "high"
       },
       data: {
         type: "gempa_dirasakan",
-        magnitude,
-        location,
-        depth,
-        timestamp,
+        magnitude: magnitude || "",
+        location: location || "",
+        depth: depth || "",
+        timestamp: timestamp || "",
         headline: headline || "",
+        title: "Peringatan Gempa Bumi !",
+        body: headline || `Gempa M${magnitude} di ${location}`,
       },
       token,
     }));

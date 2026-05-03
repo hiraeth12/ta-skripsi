@@ -1,4 +1,6 @@
+import EarthquakeMap from "@/components/earthquake-map";
 import Feather from "@expo/vector-icons/Feather";
+import React, { useRef } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { DetailItem } from "./detail-item";
@@ -30,17 +32,41 @@ export const DirasakanCard = ({
   hasShakeMap: boolean;
   onCardPress: () => void;
   onShare: () => void;
-}) => (
+}) => {
+  const mapRef = useRef<any>(null);
+  
+  return (
   <TouchableOpacity
     style={styles.mapCard}
     activeOpacity={0.95}
     onPress={onCardPress}
   >
     <View style={styles.mapImageContainer}>
-      <Image
-        source={require("../../../../assets/images/navigation-map.png")}
-        style={styles.mapImage}
-      />
+      {data?.latitude && data?.longitude ? (
+        <View style={styles.mapImage} pointerEvents="none">
+          <EarthquakeMap 
+            mapRef={mapRef}
+            initialRegion={{
+              latitude: data.latitude,
+              longitude: data.longitude,
+              latitudeDelta: 3.5,
+              longitudeDelta: 3.5,
+            }}
+            markerCoordinate={{
+              latitude: data.latitude,
+              longitude: data.longitude,
+              magnitude: data.magnitude,
+              depth: data.kedalaman,
+            }}
+            isCardOpen={true}
+          />
+        </View>
+      ) : (
+        <Image
+          source={require("../../../../assets/images/navigation-map.png")}
+          style={styles.mapImage}
+        />
+      )}
       <View style={styles.mapButtons}>
         <TouchableOpacity
           style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
@@ -115,4 +141,5 @@ export const DirasakanCard = ({
       )}
     </View>
   </TouchableOpacity>
-);
+  );
+};

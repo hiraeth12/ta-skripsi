@@ -1,7 +1,10 @@
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import patahanGeoJson from "../assets/geojson/patahan.geojson";
 
 import type { MapViewType } from "../constants/map";
@@ -267,6 +270,36 @@ function normalizeSeismicSensorsFeatureCollection(
   return { type: "FeatureCollection", features: normalizedFeatures };
 }
 
+const UserMarker = memo(function UserMarker({
+  coordinate,
+  initials,
+  photoUrl,
+}: {
+  coordinate: { latitude: number; longitude: number };
+  initials: string;
+  photoUrl?: string;
+}) {
+  return (
+    <Mapbox.PointAnnotation
+      id="user-location-marker"
+      coordinate={[coordinate.longitude, coordinate.latitude]}
+    >
+      <View style={styles.userMarkerContainer}>
+        <View style={styles.userMarkerOuter}>
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.userImage} />
+          ) : (
+            <View style={styles.initialsContainer}>
+              <Text style={styles.initialsText}>{initials}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.userMarkerPointer} />
+      </View>
+    </Mapbox.PointAnnotation>
+  );
+});
+
 const DotMarker = memo(function DotMarker({
   coordinate,
   markerKey,
@@ -347,6 +380,51 @@ const EarthquakeMap = memo(
     const [showSeismicSensors, setShowSeismicSensors] = useState(false);
     const [seismicSensorsGeoJson, setSeismicSensorsGeoJson] =
       useState<GeoJSON.FeatureCollection | null>(null);
+
+    const [userProfile, setUserProfile] = useState<{
+      latitude: number;
+      longitude: number;
+      initials: string;
+      photoUrl?: string;
+    } | null>(null);
+
+    useEffect(() => {
+      let isMounted = true;
+      const fetchUser = async () => {
+        try {
+          const app = getApp();
+          const authInstance = getAuth(app);
+          const currentUser = authInstance.currentUser;
+          if (!currentUser) return;
+          
+          const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+          const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+          const userRef = ref(database, `users/${currentUser.uid}`);
+          const snapshot = await get(userRef);
+          const userData = snapshot.val();
+          
+          if (userData && userData.latitude && userData.longitude && isMounted) {
+            const lat = parseFloat(userData.latitude);
+            const lon = parseFloat(userData.longitude);
+            if (!isNaN(lat) && !isNaN(lon)) {
+              const firstInt = userData.firstName ? userData.firstName[0] : "";
+              const lastInt = userData.lastName ? userData.lastName[0] : "";
+              const initials = (firstInt + lastInt).toUpperCase() || "ME";
+              setUserProfile({
+                latitude: lat,
+                longitude: lon,
+                initials,
+                photoUrl: userData.photoURL || userData.photoUrl || userData.profilePicture,
+              });
+            }
+          }
+        } catch(e) {}
+      };
+      
+      fetchUser();
+      
+      return () => { isMounted = false; };
+    }, []);
 
     useEffect(() => {
       if (!waveOverlays?.length) {
@@ -600,6 +678,14 @@ const EarthquakeMap = memo(
             </React.Fragment>
           ))}
 
+          {userProfile && (
+            <UserMarker 
+              coordinate={{ latitude: userProfile.latitude, longitude: userProfile.longitude }}
+              initials={userProfile.initials}
+              photoUrl={userProfile.photoUrl}
+            />
+          )}
+
           {markerCoordinate && (
             <DotMarker
               coordinate={markerCoordinate}
@@ -728,4 +814,54 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuLabel: { fontSize: 13, fontWeight: "600" },
+  userMarkerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 48,
+    height: 48,
+  },
+  userMarkerOuter: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    padding: 2,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    zIndex: 2,
+  },
+  userImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+  },
+  initialsContainer: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 16,
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#64748b",
+  },
+  userMarkerPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    backgroundColor: "transparent",
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#fff",
+    marginTop: -2,
+    zIndex: 1,
+  },
 });
