@@ -12,27 +12,15 @@ const __dirname = path.dirname(__filename);
 
 // Simple interval-based scheduler
 function schedule(name, interval, fn) {
-  console.log(
-    `[${new Date().toISOString()}] Scheduling ${name} every ${interval}ms`
-  );
-
   // Run immediately on startup
   fn().catch((error) => {
-    console.error(`[${name}] Error on startup:`, error.message);
   });
 
   // Then run at intervals
   setInterval(async () => {
     try {
       const result = await fn();
-      console.log(
-        `[${new Date().toISOString()}] [${name}] ${JSON.stringify(result, null, 2)}`
-      );
     } catch (error) {
-      console.error(
-        `[${new Date().toISOString()}] [${name}] Error:`,
-        error.message || String(error)
-      );
     }
   }, interval);
 }
@@ -101,8 +89,6 @@ async function syncGempaTerdeteksi() {
 }
 
 // Start schedulers
-console.log("[Scheduler] Starting auto-sync services...\n");
-
 // Sync gempa dirasakan latest every 5 minutes (300000 ms)
 schedule(
   "sync:gempa-dirasakan:latest",
@@ -117,12 +103,7 @@ schedule(
   syncGempaTerdeteksi
 );
 
-console.log(
-  "\n[Scheduler] Services running. Press Ctrl+C to stop.\n"
-);
-
 // Graceful shutdown
 process.on("SIGINT", () => {
-  console.log("\n[Scheduler] Shutting down...");
   process.exit(0);
 });

@@ -3,24 +3,24 @@ import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import {
-  createUserWithEmailAndPassword,
-  getAuth,
+    createUserWithEmailAndPassword,
+    getAuth,
 } from "@react-native-firebase/auth";
 import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView, // Tambahkan ScrollView
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView, 
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
+import { styles } from "../../features/starter/styles/register-styles";
 
 const FIREBASE_DATABASE_URL =
   process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
@@ -115,17 +115,9 @@ export default function Register() {
       // Save FCM token for push notifications (with timeout - don't block registration)
       try {
         await saveFcmTokenToDatabase(uid);
-      } catch (tokenError) {
-        console.warn('⚠️ Failed to save FCM token during register (continuing anyway):', tokenError);
+      } catch {
         // Don't throw - registration should succeed even if token save fails
       }
-
-      console.log(
-        "Register success:",
-        uid,
-        "databaseUrl:",
-        FIREBASE_DATABASE_URL || "default",
-      );
 
       // Munculkan alert sukses, jika ditekan tombol "Mengerti" akan lari ke /starter/login
       showCustomAlert(
@@ -136,7 +128,6 @@ export default function Register() {
       );
     } catch (e) {
       const error = e as { code?: string; message?: string };
-      console.log("Register error:", error?.code, error?.message, e);
       showCustomAlert(
         "Registrasi Gagal",
         `${error?.code || "error"}: ${error?.message || "Terjadi kesalahan saat membuat akun."}`,
@@ -293,96 +284,3 @@ export default function Register() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EDEDED",
-  },
-  scrollContainer: {
-    padding: 24,
-    justifyContent: "center",
-    minHeight: "100%",
-  },
-  image: {
-    width: 180,
-    height: 59,
-    alignSelf: "center",
-    marginBottom: 30,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 18,
-  },
-  input: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    paddingVertical: 8,
-    color: "#111",
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 8,
-    color: "#111",
-  },
-  errorText: {
-    color: "red",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  signInText: {
-    textAlign: "right",
-    fontSize: 13,
-    marginTop: 20,
-    color: "#555",
-  },
-
-  // --- Styles untuk Modal Custom ---
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: "85%",
-    padding: 24,
-  },
-  modalIcon: {
-    alignSelf: "center",
-    marginBottom: 12,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  infoDesc: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  infoButton: {
-    backgroundColor: "#1E6F9F",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  infoButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-});

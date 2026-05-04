@@ -1,36 +1,66 @@
-import { ACCOUNT_PROFILE, fetchProfileFromFirebase, ProfileData } from "../data/profile";
-import ProfilePageLayout from "../components/profile-page-layout";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, ref, remove } from "@react-native-firebase/database";
+import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    Modal,
+    Pressable,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
+import { saveFcmTokenToDatabase } from "../../../hooks/use-fcm-token-save";
+import ProfilePageLayout from "../components/profile-page-layout";
+import {
+    ACCOUNT_PROFILE,
+    fetchProfileFromFirebase,
+    ProfileData,
+} from "../data/profile";
+
+import { styles } from "./styles/account-styles";
+
+const PUSH_NOTIFICATION_PREF_KEY = "push_notifications_enabled";
 
 export default function Account() {
   const router = useRouter();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
+  const [isToggleProcessing, setIsToggleProcessing] = useState(false);
   const [profile, setProfile] = useState<ProfileData>(ACCOUNT_PROFILE);
   const [loading, setLoading] = useState(true);
 
-  // State untuk Modal Notifikasi
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifStatus, setNotifStatus] = useState(true);
 
-  // Fetch profile from Firebase on mount
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const firebaseProfile = await fetchProfileFromFirebase();
         setProfile(firebaseProfile);
-      } catch (error) {
-        console.error("Failed to load Firebase profile:", error);
+
+        const app = getApp();
+        const auth = getAuth(app);
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        const tokenRef = ref(database, `user_fcm_tokens/${currentUser.uid}`);
+        const tokenSnapshot = await get(tokenRef);
+
+        const savedPreference = await AsyncStorage.getItem(
+          PUSH_NOTIFICATION_PREF_KEY,
+        );
+        if (savedPreference !== null) {
+          setIsNotificationsEnabled(savedPreference === "true");
+        } else {
+          setIsNotificationsEnabled(tokenSnapshot.exists());
+        }
+      } catch {
         // Keep default profile on error
       } finally {
         setLoading(false);
@@ -38,13 +68,48 @@ export default function Account() {
     };
 
     loadProfile();
-  }, []); 
+  }, []);
 
-  // Fungsi Handler Switch Notifikasi
-  const handleToggleNotification = (value: boolean) => {
+  const handleToggleNotification = async (value: boolean) => {
+    const app = getApp();
+    const auth = getAuth(app);
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) return;
+
+    const previousValue = isNotificationsEnabled;
+    setIsToggleProcessing(true);
     setIsNotificationsEnabled(value);
-    setNotifStatus(value);
-    setShowNotifModal(true);
+
+    try {
+      if (value) {
+        const token = await saveFcmTokenToDatabase(currentUser.uid);
+        if (token) {
+          setNotifStatus(true);
+          await AsyncStorage.setItem(PUSH_NOTIFICATION_PREF_KEY, "true");
+          setShowNotifModal(true);
+        } else {
+          setIsNotificationsEnabled(previousValue);
+          setNotifStatus(previousValue);
+        }
+      } else {
+        const messaging = getMessaging(app);
+        await deleteToken(messaging);
+
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        await remove(ref(database, `user_fcm_tokens/${currentUser.uid}`));
+
+        setNotifStatus(false);
+        await AsyncStorage.setItem(PUSH_NOTIFICATION_PREF_KEY, "false");
+        setShowNotifModal(true);
+      }
+    } catch {
+      setIsNotificationsEnabled(previousValue);
+      setNotifStatus(previousValue);
+    } finally {
+      setIsToggleProcessing(false);
+    }
   };
 
   return (
@@ -60,26 +125,22 @@ export default function Account() {
           title="Pengaturan Profil"
           onPress={() => router.push("/profile/pengaturan")}
         />
-
         <MenuLink
           icon="lock-outline"
           title="Ubah Kata Sandi"
           onPress={() => router.push("/profile/ubah-kata-sandi")}
         />
-
         <MenuLink
           icon="map-marker-outline"
           title="Ubah Lokasi"
           onPress={() => router.push("/profile/ubah-lokasi")}
         />
-
         <MenuLink
           icon="earth"
           title="Ubah Bahasa"
           onPress={() => router.push("/profile/ubah-bahasa")}
         />
 
-        {/* NOTIFIKASI PUSH DENGAN LOGIKA MODAL */}
         <View style={styles.menuItem}>
           <View style={styles.menuLeft}>
             <View style={styles.iconWrapper}>
@@ -96,6 +157,7 @@ export default function Account() {
             thumbColor={isNotificationsEnabled ? "#1E6F9F" : "#f4f3f4"}
             onValueChange={handleToggleNotification}
             value={isNotificationsEnabled}
+            disabled={isToggleProcessing}
             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
           />
         </View>
@@ -107,7 +169,6 @@ export default function Account() {
         />
       </ProfilePageLayout>
 
-      {/* MODAL NOTIFIKASI (MENGIKUTI STYLING SEBELUMNYA) */}
       <Modal visible={showNotifModal} transparent animationType="fade">
         <Pressable
           style={styles.modalOverlay}
@@ -141,7 +202,6 @@ export default function Account() {
   );
 }
 
-// MenuLink component stays the same as before...
 const MenuLink = ({ icon, title, onPress }: any) => (
   <TouchableOpacity
     style={styles.menuItem}
@@ -157,66 +217,3 @@ const MenuLink = ({ icon, title, onPress }: any) => (
     <Ionicons name="chevron-forward" size={18} color="#999" />
   </TouchableOpacity>
 );
-
-const styles = StyleSheet.create({
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#fff",
-    paddingHorizontal: 15,
-    borderRadius: 12,
-    marginBottom: 12,
-    height: 58,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  menuLeft: { flexDirection: "row", alignItems: "center" },
-  iconWrapper: {
-    width: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  menuText: { fontSize: 15, fontWeight: "600", color: "#333" },
-
-  // MODAL STYLES
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: "85%",
-    padding: 24,
-  },
-  modalIcon: { alignSelf: "center", marginBottom: 12 },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  infoDesc: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  infoButton: {
-    backgroundColor: "#1E6F9F",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-});
-
-

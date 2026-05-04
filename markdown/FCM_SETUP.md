@@ -44,8 +44,8 @@ EXPO_PUBLIC_FCM_ENABLED=true
 
 Backend sudah menyediakan 2 file utama:
 
-- `api/database/fcm-notifications.js` - Fungsi untuk mengirim notifikasi
-- `api/database/monitor-gempa-notifications.js` - Monitor gempa dan kirim notifikasi
+- `scripts/fcm-notifications.js` - Fungsi untuk mengirim notifikasi
+- `scripts/monitor-gempa-notifications.js` - Monitor gempa dan kirim notifikasi
 
 ### 3.2 Jalankan Notification Monitor
 
@@ -60,7 +60,7 @@ Atau tambahkan ke `package.json`:
 ```json
 {
   "scripts": {
-    "monitor:notifications": "node api/database/monitor-gempa-notifications.js"
+    "monitor:notifications": "node scripts/monitor-gempa-notifications.js"
   }
 }
 ```
@@ -86,7 +86,7 @@ Hook `useFcm()` akan:
 Setelah user login, simpan FCM token mereka:
 
 ```typescript
-import { saveUserFcmToken } from "@/api/database/fcm-notifications";
+import { saveUserFcmToken } from "@/scripts/fcm-notifications";
 
 // After user login success
 const fcmToken = getFcmToken();

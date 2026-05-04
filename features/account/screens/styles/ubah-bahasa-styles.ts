@@ -1,0 +1,138 @@
+import { StyleSheet } from "react-native";
+
+export const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#fff" },
+  headerSection: {
+    alignItems: "center",
+    paddingVertical: 20,
+    backgroundColor: "#fff",
+  },
+  avatarCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#D81B60",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    position: "relative",
+  },
+  avatarText: { color: "#fff", fontSize: 32, fontWeight: "bold" },
+  editBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    backgroundColor: "#1E6F9F",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 5,
+  },
+  userDetails: { fontSize: 14, color: "#555", marginBottom: 2 },
+
+  menuContainer: {
+    flex: 1,
+    backgroundColor: "#0C4A6E",
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+  },
+  menuContent: { paddingHorizontal: 20, paddingTop: 20, flex: 1 },
+  titleRow: { marginBottom: 15 },
+  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+
+  languageItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    height: 60,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  menuLeft: { flexDirection: "row", alignItems: "center" },
+  flagWrapper: {
+    width: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  flagIcon: {
+    width: 30,
+    height: 20,
+    borderRadius: 3,
+    // TAMBAHKAN OUTLINE DI SINI
+    borderWidth: 0.5,
+    borderColor: "#D1D1D1", // Abu-abu tipis
+  },
+  menuText: { fontSize: 15, fontWeight: "600", color: "#333" },
+
+  // MODAL STYLES (MATCH HOME/PREVIOUS)
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    width: "85%",
+    padding: 24,
+  },
+  modalIcon: { alignSelf: "center", marginBottom: 12 },
+  infoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  infoTitleError: {
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 12,
+    color: "#E11D48",
+  },
+  infoDesc: {
+    fontSize: 14,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  infoButton: {
+    backgroundColor: "#1E6F9F",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  infoButtonError: {
+    backgroundColor: "#E11D48",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+});
+
+

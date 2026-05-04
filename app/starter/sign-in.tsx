@@ -1,6 +1,7 @@
 import AuthButton from "@/components/auth-button";
 import { useRouter } from "expo-router";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
+import { styles } from "../../features/starter/styles/sign-in-styles";
 
 export default function SignIn() {
   const router = useRouter();
@@ -28,21 +29,3 @@ export default function SignIn() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#EDEDED",
-  },
-  image: {
-    width: 250,
-    height: 80,
-    alignSelf: "center",
-    marginBottom: 150,
-  },
-  buttonContainer: {
-    width: "100%",
-    alignItems: "center",
-  },
-});

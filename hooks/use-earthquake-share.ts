@@ -40,8 +40,7 @@ Koordinat: ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°`;
           message: shareMessage,
           title: `Bagikan Informasi Gempa ${typeLabel}`,
         });
-      } catch (error) {
-        console.error("Share error:", error);
+      } catch {
       }
     },
     [],

@@ -7,11 +7,11 @@ import { get, getDatabase, limitToLast, query, ref } from "@react-native-firebas
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import styles from "./styles/list-gempa-screen";
 
@@ -98,8 +98,7 @@ export default function ListGempaPage() {
         if (!isNaN(lat) && !isNaN(lon)) {
           setUserLocation({ lat, lon });
         }
-      } catch (error) {
-        console.warn("Failed to load user location:", error);
+      } catch {
       }
     }
 
@@ -232,8 +231,7 @@ export default function ListGempaPage() {
           setCacheData(CACHE_KEYS.TERDETEKSI_HISTORY, normalized);
           if (isMounted) setItems(normalized);
         }
-      } catch (error) {
-        console.error("Failed to load list gempa:", error);
+      } catch {
         if (isMounted) setItems([]);
       } finally {
         if (isMounted) setLoading(false);

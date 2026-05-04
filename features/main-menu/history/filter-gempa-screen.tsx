@@ -2,10 +2,10 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import styles from "./styles/filter-gempa-screen";
@@ -47,7 +47,6 @@ export default function FilterGempaScreen() {
   };
 
   const handleSimpan = () => {
-    console.log("Filter Disimpan:", { selectedTime, selectedCity });
     router.back();
   };
 

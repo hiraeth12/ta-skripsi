@@ -1,5 +1,4 @@
-import { ACCOUNT_PROFILE, fetchProfileFromFirebase, ProfileData } from "../data/profile";
-import ProfilePageLayout from "../components/profile-page-layout";
+import { useHaversine } from "@/hooks/use-haversine";
 import {
   EvilIcons,
   Ionicons,
@@ -15,44 +14,21 @@ import {
   FlatList,
   Modal,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-
-// Helper function to calculate haversine distance
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const radLat1 = toRad(lat1);
-  const radLat2 = toRad(lat2);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(radLat1) *
-      Math.cos(radLat2) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
+import ProfilePageLayout from "../components/profile-page-layout";
+import { ACCOUNT_PROFILE, fetchProfileFromFirebase, ProfileData } from "../data/profile";
+import { styles } from "./styles/ubah-lokasi-styles";
 
 // Helper function to find nearest location
 function findNearestLocation(
   gpsLat: number,
   gpsLon: number,
   locations: any[],
+  haversineDistanceKm: (lat1: number, lon1: number, lat2: number, lon2: number) => number,
 ) {
   if (!locations || locations.length === 0) return null;
 
@@ -82,6 +58,7 @@ function findNearestLocation(
 
 export default function UbahLokasi() {
   const router = useRouter();
+  const { haversineDistanceKm } = useHaversine();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [query, setQuery] = useState("");
@@ -99,8 +76,7 @@ export default function UbahLokasi() {
       try {
         const firebaseProfile = await fetchProfileFromFirebase();
         setProfile(firebaseProfile);
-      } catch (error) {
-        console.error("Failed to load Firebase profile:", error);
+      } catch {
       } finally {
         setLoadingProfile(false);
       }
@@ -128,8 +104,7 @@ export default function UbahLokasi() {
           longitude: location.longitude,
         }));
         setAllLocations(locationsArray);
-      } catch (error) {
-        console.error("Error fetching locations:", error);
+      } catch {
         setAllLocations([]);
       } finally {
         setLoading(false);
@@ -173,36 +148,14 @@ export default function UbahLokasi() {
 
       const { latitude, longitude } = location.coords;
 
-      // Find nearest location from database
-      const nearestLocation = findNearestLocation(latitude, longitude, allLocations);
-      const locationName = nearestLocation?.name || "Lokasi GPS";
+      // Use actual GPS location name directly
+      const locationName = "Lokasi GPS";
 
-      // Update user location in database with GPS coordinates
-      try {
-        const app = getApp();
-        const authInstance = getAuth(app);
-        const currentUser = authInstance.currentUser;
-
-        if (currentUser) {
-          const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-          const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-
-          await update(ref(database, `users/${currentUser.uid}`), {
-            latitude: latitude.toFixed(6),
-            longitude: longitude.toFixed(6),
-            locationName: locationName,
-            locationUpdatedAt: new Date().toISOString(),
-          });
-          console.log("User location updated (GPS):", { latitude, longitude, locationName });
-          setSelectedLocation(locationName);
-          setSelectedLocationItem({ name: locationName, latitude, longitude });
-        }
-      } catch (dbError) {
-        console.error("Error updating user location:", dbError);
-        Alert.alert("Error", "Gagal menyimpan lokasi ke database");
-      }
-    } catch (error) {
-      console.error("GPS Error:", error);
+      // Set the selected location without directly writing to DB here
+      // so user can click "Simpan" first.
+      setSelectedLocation(locationName);
+      setSelectedLocationItem({ name: locationName, latitude, longitude });
+    } catch {
       Alert.alert(
         "Error",
         "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
@@ -233,19 +186,17 @@ export default function UbahLokasi() {
           locationName: selectedLocationItem.name,
           locationUpdatedAt: new Date().toISOString(),
         });
-        console.log("User location updated (manual select):", { 
-          latitude: selectedLocationItem.latitude, 
-          longitude: selectedLocationItem.longitude, 
-          locationName: selectedLocationItem.name 
-        });
       }
-    } catch (dbError) {
-      console.error("Error updating user location:", dbError);
+    } catch {
       Alert.alert("Error", "Gagal menyimpan lokasi ke database");
       return;
     }
 
     setShowSuccessModal(true);
+    setTimeout(() => {
+      setShowSuccessModal(false);
+      router.replace("/main-menu/account");
+    }, 1500); // go back after 1.5s
   };
 
   return (
@@ -371,7 +322,10 @@ export default function UbahLokasi() {
       <Modal visible={showSuccessModal} transparent animationType="fade">
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setShowSuccessModal(false)}
+          onPress={() => {
+            setShowSuccessModal(false);
+            router.replace("/main-menu/account");
+          }}
         >
           <View style={styles.infoCard}>
             <Ionicons
@@ -386,7 +340,10 @@ export default function UbahLokasi() {
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
-              onPress={() => setShowSuccessModal(false)}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace("/main-menu/account");
+              }}
             >
               <Text style={styles.infoButtonText}>Mengerti</Text>
             </TouchableOpacity>
@@ -396,214 +353,4 @@ export default function UbahLokasi() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  headerSection: {
-    alignItems: "center",
-    paddingVertical: 20,
-    backgroundColor: "#fff",
-  },
-  avatarCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#D81B60",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 15,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    position: "relative",
-  },
-  editBadge: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    backgroundColor: "#1E6F9F",
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  avatarText: { color: "#fff", fontSize: 32, fontWeight: "bold" },
-  userName: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 5,
-  },
-  userDetails: { fontSize: 14, color: "#555", marginBottom: 2 },
-
-  menuContainer: {
-    flex: 1,
-    backgroundColor: "#0C4A6E",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-  },
-  menuContent: { paddingHorizontal: 20, paddingTop: 20, flex: 1 },
-  titleRow: { marginBottom: 15 },
-  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-
-  inputCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  description: {
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: 14,
-    color: "#333",
-    marginBottom: 25,
-    lineHeight: 20,
-  },
-  inputArea: { marginBottom: 15 },
-  label: { fontSize: 16, fontWeight: "bold", color: "#000", marginBottom: 10 },
-  customInput: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-    paddingVertical: 8,
-  },
-  inputText: { flex: 1, fontSize: 14, color: "#333" },
-  orText: {
-    textAlign: "center",
-    marginVertical: 10,
-    fontWeight: "bold",
-    color: "#000",
-  },
-
-  // PERBAIKAN TOMBOL GPS
-  gpsWrapper: { alignItems: "center", marginBottom: 25 },
-  btnGPS: {
-    backgroundColor: "#0870A5",
-    paddingVertical: 10,
-    paddingHorizontal: 40, // Memberi jarak agar tombol tidak kepanjangan
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  btnTextGPS: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
-  buttonWrapper: { flexDirection: "row", justifyContent: "space-between" },
-  btnBatal: {
-    flex: 1,
-    marginRight: 10,
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#D1D1D1",
-    alignItems: "center",
-  },
-  btnSimpan: {
-    flex: 1,
-    marginLeft: 10,
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: "#1E6F9F",
-    alignItems: "center",
-  },
-  btnTextBatal: { color: "#999", fontWeight: "bold" },
-  btnTextSimpan: { color: "#fff", fontWeight: "bold" },
-
-  bottomSheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  bottomSheetContent: {
-    backgroundColor: "#FFF",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 20,
-    height: "85%",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#EEE",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginBottom: 15,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#333" },
-  searchBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  modalInput: { flex: 1, padding: 12, fontSize: 15 },
-  locListItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F9F9F9",
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#E8F4F8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
-  },
-  locName: { fontSize: 16, fontWeight: "bold", color: "#333" },
-  locDesc: { fontSize: 12, color: "#888", marginTop: 2 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: "85%",
-    padding: 24,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  infoDesc: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  infoButton: {
-    backgroundColor: "#1E6F9F",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-});
-
 

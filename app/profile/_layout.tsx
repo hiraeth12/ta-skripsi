@@ -1,11 +1,14 @@
 import BottomNav from "@/components/ui/navigation";
+import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, usePathname, useRouter } from "expo-router";
+import { useCallback } from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
 
 export default function MainLayout() {
   const router = useRouter();
   const pathname = usePathname();
+  const { unreadCount } = useQuakeNotifications();
 
   const routeMap: Record<string, string> = {
     HOME: "/main-menu/home",
@@ -22,6 +25,11 @@ export default function MainLayout() {
     router.push(routeMap[tab] as any);
   };
 
+  const handleOpenNotifications = useCallback(() => {
+    if (pathname === "/main-menu/notifikasi") return;
+    router.push("/main-menu/notifikasi");
+  }, [pathname, router]);
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -32,8 +40,13 @@ export default function MainLayout() {
           resizeMode="contain"
         />
 
-        <TouchableOpacity style={styles.notification}>
+        <TouchableOpacity 
+          style={styles.notification}
+          onPress={handleOpenNotifications}
+          activeOpacity={0.7}
+        >
           <Ionicons name="notifications-outline" size={22} color="#fff" />
+          {unreadCount > 0 && <View style={styles.unreadDot} />}
         </TouchableOpacity>
       </View>
 
@@ -78,5 +91,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#1E6F9F",
     padding: 10,
     borderRadius: 10,
+    position: "relative",
+  },
+  unreadDot: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: "#EF4444",
+    borderWidth: 1,
+    borderColor: "#ffffff",
   },
 });
