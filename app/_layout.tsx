@@ -1,6 +1,7 @@
 import { GempaBumiNotificationModal } from "@/components/ui/GempaBumiNotificationModal";
 import { InAppNotificationData } from "@/components/ui/in-app-notification-modal";
 import { notificationEmitter } from "@/hooks/fcm-event-emitter";
+import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react";
 export default function RootLayout() {
   const [notification, setNotification] = useState<InAppNotificationData | null>(null);
   const segments = useSegments();
+  useFcm();
   
   // Deteksi apakah saat ini sedang berada di folder/layar starter (auth)
   const isStarter = segments[0] === "starter";

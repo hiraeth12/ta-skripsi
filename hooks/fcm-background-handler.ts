@@ -3,6 +3,8 @@ import { getApp } from "@react-native-firebase/app";
 import { getMessaging, setBackgroundMessageHandler } from "@react-native-firebase/messaging";
 
 let isBackgroundHandlerRegistered = false;
+const GEMPA_ALERT_CHANNEL_ID = "gempa_alert_channel_eqeva_v1";
+const GEMPA_ALERT_SOUND_NAME = "eq_eva";
 
 // Tangani event background Notifee (mutlak dibutuhkan agar Notifee tidak crash)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -25,14 +27,21 @@ export function registerFcmBackgroundHandler() {
 
     setBackgroundMessageHandler(messaging, async (remoteMessage) => {
       console.log("BACKGROUND HANDLER TRIGGERED", remoteMessage.data);
+      
+      if (remoteMessage.data?.send_timestamp) {
+        const latency = (Date.now() - parseInt(remoteMessage.data.send_timestamp, 10)) / 1000;
+        console.log(`[LATENCY LOG] Notifikasi diterima dalam: ${latency.toFixed(3)} detik (Background)`);
+      }
+
       // Setup channel keamanan tinggi untuk Notifee
       const channelId = await notifee.createChannel({
-        id: 'gempa_alert_channel',
+        id: GEMPA_ALERT_CHANNEL_ID,
         name: 'Peringatan Dini Gempa',
         importance: AndroidImportance.HIGH,
         bypassDnd: true, // Melewati mode Do Not Disturb
         vibration: true,
         vibrationPattern: [500, 1000, 500, 1000],
+        sound: GEMPA_ALERT_SOUND_NAME,
       });
 
       // Menampilkan Notifikasi Full-Screen yang "Membangunkan" HP
@@ -42,6 +51,7 @@ export function registerFcmBackgroundHandler() {
         data: remoteMessage.data,
         android: {
           channelId,
+          sound: GEMPA_ALERT_SOUND_NAME,
           category: AndroidCategory.ALARM, // Memicu sebagai ALARM sistem
           visibility: AndroidVisibility.PUBLIC, // Tampil di lock screen
           importance: AndroidImportance.HIGH,
