@@ -33,6 +33,7 @@ function readEnvFile(envPath) {
 
 async function testNotification() {
   try {
+    console.log("[test-notification] Initializing Firebase Admin...");
     await initializeAdmin();
     
     // Load env variables
@@ -53,6 +54,7 @@ async function testNotification() {
 
     const gempaData = Array.isArray(data.info) ? data.info[0] : data.info;
     const headline = String(gempaData.headline || gempaData.description || "Gempa dirasakan");
+    console.log("[test-notification] Sending test push...");
     
     const result = await sendGempaDirasakanNotification(
       headline,                                 // headline from BMKG
@@ -62,8 +64,22 @@ async function testNotification() {
       new Date().toISOString()                  // timestamp
     );
 
+    if (!result) {
+      throw new Error(
+        "No recipient tokens found in user_fcm_tokens. Aktifkan notifikasi push di aplikasi lalu login ulang atau toggle OFF/ON agar token tersimpan.",
+      );
+    }
+
+    console.log(
+      `[test-notification] Done. success=${result.successCount}, failure=${result.failureCount}`,
+    );
+    if (result.successCount === 0) {
+      throw new Error("FCM sent but zero successful deliveries. Cek token/perizinan device.");
+    }
+
     process.exit(0);
   } catch (error) {
+    console.error("[test-notification] Failed:", error?.message || error);
     process.exit(1);
   }
 }

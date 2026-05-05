@@ -95,6 +95,7 @@ export async function sendGempaDirasakanNotification(
         headline: headline || "",
         title: "Peringatan Gempa Bumi !",
         body: headline || `Gempa M${magnitude} di ${location}`,
+        send_timestamp: String(Date.now()),
       },
       token,
     }));

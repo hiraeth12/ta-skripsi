@@ -51,6 +51,12 @@ export const useFcm = () => {
           isForegroundListenerInitialized = true;
           onMessage(messaging, async (remoteMessage) => {
             console.log("FOREGROUND HANDLER TRIGGERED", remoteMessage.data);
+            
+            if (remoteMessage.data?.send_timestamp) {
+              const latency = (Date.now() - parseInt(remoteMessage.data.send_timestamp, 10)) / 1000;
+              console.log(`[LATENCY LOG] Notifikasi diterima dalam: ${latency.toFixed(3)} detik (Foreground)`);
+            }
+
             // Karena kita menggunakan Data-Only Payload untuk background Wake-Up,
             // properti ada di remoteMessage.data
             const title = remoteMessage.data?.title || remoteMessage.notification?.title || "Notifikasi Gempa";

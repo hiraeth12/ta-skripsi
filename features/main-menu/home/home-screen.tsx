@@ -1,7 +1,6 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
-import { useFcm } from "@/hooks/use-fcm";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -170,7 +169,6 @@ export default function Home() {
   const user = { name: userName };
 
   const { shareQuake } = useEarthquakeShare();
-  const { getFcmToken } = useFcm();
 
   const handleShareDirasakan = useCallback(
     () => shareQuake(dirasakanData, "dirasakan"),
@@ -383,8 +381,9 @@ export default function Home() {
         );
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
-          // Show network error alert only once
-          if (!networkErrorShownRef.current && e.message.includes('Network')) {
+          console.warn("fetchDirasakan error:", e.message);
+          // Show network error alert only once for any non-abort fetch/network error
+          if (!networkErrorShownRef.current) {
             networkErrorShownRef.current = true;
             setNetworkErrorModalVisible(true);
           }
@@ -452,8 +451,9 @@ export default function Home() {
         setTerdeteksiData(newTerdeteksiData);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
-          // Show network error alert only once
-          if (!networkErrorShownRef.current && e.message.includes('Network')) {
+          console.warn("fetchTerdeteksi error:", e.message);
+          // Show network error alert only once for any non-abort fetch/network error
+          if (!networkErrorShownRef.current) {
             networkErrorShownRef.current = true;
             setNetworkErrorModalVisible(true);
           }
@@ -507,6 +507,36 @@ export default function Home() {
     }
   };
 
+  let statusWilayah = "-";
+  let statusColor = "#1E6F9F";
+
+  if (dirasakanData) {
+    const M = parseFloat(dirasakanData.magnitude);
+    const D = parseFloat(dirasakanData.kedalaman.replace(/[^0-9.]/g, ""));
+    const jarak = parseFloat(dirasakanData.distanceKm);
+
+    if (!isNaN(M) && !isNaN(D) && !isNaN(jarak)) {
+      const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
+
+      const s = clamp(Math.pow(10, 0.5 * (M - 5)), 0.05, 3.5);
+      const fd = clamp(1 / (1 + D / 200), 0.35, 1);
+
+      const Router_km = Math.max(((100000 + 240000 * s) * fd), 1) / 1000;
+      const Rinner_km = Math.max(((35000 + 80000 * s) * fd), 1) / 1000;
+
+      if (jarak <= Rinner_km) {
+        statusWilayah = "Bahaya";
+        statusColor = "#F44336"; 
+      } else if (jarak <= Router_km) {
+        statusWilayah = "Terdampak";
+        statusColor = "#FF9800"; 
+      } else {
+        statusWilayah = "Aman";
+        statusColor = "#4CAF50"; 
+      }
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -553,9 +583,9 @@ export default function Home() {
               </Text>
             </View>
             <View style={styles.statItem}>
-              <Ionicons name="alert-circle-outline" size={20} color="#1E6F9F" />
+              <Ionicons name="alert-circle-outline" size={20} color={statusColor} />
               <Text style={styles.statLabel}>STATUS WILAYAH</Text>
-              <Text style={styles.statValue}>Aman</Text>
+              <Text style={[styles.statValue, { color: statusColor, fontWeight: 'bold' }]}>{statusWilayah}</Text>
             </View>
           </View>
         </View>
