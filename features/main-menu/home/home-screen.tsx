@@ -1,5 +1,9 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
-import { CACHE_KEYS, getCachedData, setCacheData } from "@/hooks/use-earthquake-cache";
+import {
+  CACHE_KEYS,
+  getCachedData,
+  setCacheData,
+} from "@/hooks/use-earthquake-cache";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,7 +11,11 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { get, getDatabase, ref } from "@react-native-firebase/database";
-import { getDownloadURL, getStorage, ref as storageRef } from "@react-native-firebase/storage";
+import {
+  getDownloadURL,
+  getStorage,
+  ref as storageRef,
+} from "@react-native-firebase/storage";
 import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,19 +23,21 @@ import {
   AppState,
   Dimensions,
   Image,
-  InteractionManager,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { DirasakanCard } from "./components/dirasakan-card";
 import { InfoModal } from "./components/info-modal";
 import { TerdeteksiCard } from "./components/terdeteksi-card";
 import { styles } from "./styles/homeStyles";
+
+// === IMPORT SKELETON ===
+import Skeleton from "@/components/skeleton";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -96,7 +106,6 @@ function calculateTimeAgo(tanggal: string, jam: string) {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    // Perbaikan: "1 Jam Lalu" pakai angka agar konsisten
     if (diffDays > 0)
       return diffDays === 1 ? "Kemarin" : `${diffDays} Hari Lalu`;
     if (diffHours > 0) return `${diffHours} Jam Lalu`;
@@ -145,12 +154,15 @@ export default function Home() {
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
+
+  // OPTIMASI: Inisialisasi state langsung dengan data cache jika tersedia
   const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
-    null,
+    () => getCachedData(CACHE_KEYS.DIRASAKAN) || null,
   );
   const [terdeteksiData, setTerdeteksiData] = useState<TerdeteksiQuake | null>(
-    null,
+    () => getCachedData(CACHE_KEYS.TERDETEKSI) || null,
   );
+
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [timeAgo, setTimeAgo] = useState("Memuat...");
   const [activeTab, setActiveTab] = useState(0);
@@ -164,7 +176,8 @@ export default function Home() {
   const [userName, setUserName] = useState("Pengguna");
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
+    useState(false);
 
   const user = { name: userName };
 
@@ -180,7 +193,6 @@ export default function Home() {
     [terdeteksiData, shareQuake],
   );
 
-  // Function to fetch user location and profile from database
   const fetchUserData = useCallback(async () => {
     try {
       const app = getApp();
@@ -200,9 +212,12 @@ export default function Home() {
         const userLat = parseFloat(userData.latitude);
         const userLon = parseFloat(userData.longitude);
 
-        // Replace "Lokasi GPS" with nearest location from database
         try {
-          if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
+          if (
+            locationName === "Lokasi GPS" &&
+            !isNaN(userLat) &&
+            !isNaN(userLon)
+          ) {
             const locationsRef = ref(database, "locations");
             const locationsSnapshot = await get(locationsRef);
             const locationsData = locationsSnapshot.val();
@@ -216,7 +231,7 @@ export default function Home() {
                     userLat,
                     userLon,
                     parseFloat(loc.latitude),
-                    parseFloat(loc.longitude)
+                    parseFloat(loc.longitude),
                   );
                   if (dist < minDistance) {
                     minDistance = dist;
@@ -227,11 +242,8 @@ export default function Home() {
               locationName = nearestName;
             }
           }
-        } catch (e) {
-          // Ignore errors and log gracefully
-        }
+        } catch (e) {}
 
-        // Set location data if available
         if (userData.latitude && userData.longitude) {
           setUserLocation({
             latitude: userLat,
@@ -239,42 +251,35 @@ export default function Home() {
             name: locationName,
           });
         }
-        // Set user name from firstName (and lastName if available)
         if (userData.firstName) {
           const fullName = userData.lastName
             ? `${userData.firstName}`
             : userData.firstName;
           setUserName(fullName);
         }
-        // Fetch location image from Firebase Storage via locations collection with caching
         if (locationName) {
           try {
-            // Check cache first
             const cacheKey = `location_image_${locationName}`;
             const cachedUrl = getCachedData<string>(cacheKey);
-            
+
             if (cachedUrl) {
-              // Use cached URL
               setLocationImageUrl(cachedUrl);
               setLocationImageLoading(false);
             } else {
-              // Fetch from Firebase if not cached
               const locationsRef = ref(database, "locations");
               const locationsSnapshot = await get(locationsRef);
               const locationsData = locationsSnapshot.val();
 
               if (locationsData) {
-                // Find the location matching the user's locationName
                 const locationEntry = Object.values(locationsData).find(
-                  (loc: any) => loc?.name === locationName
+                  (loc: any) => loc?.name === locationName,
                 ) as any;
 
                 if (locationEntry?.image) {
                   const storage = getStorage(app);
                   const imageRef = storageRef(storage, locationEntry.image);
                   const url = await getDownloadURL(imageRef);
-                  
-                  // Cache the URL for future use (1 hour TTL)
+
                   setCacheData(cacheKey, url, 3600_000);
                   setLocationImageUrl(url);
                   setLocationImageLoading(false);
@@ -293,16 +298,13 @@ export default function Home() {
           setLocationImageLoading(false);
         }
       }
-    } catch {
-    }
+    } catch {}
   }, [haversineDistanceKm]);
 
-  // Fetch user data on mount only - do NOT refetch on every focus
   useEffect(() => {
     fetchUserData();
   }, [fetchUserData]);
 
-  // Update current date every minute
   useEffect(() => {
     const updateDate = () => {
       setCurrentDate(new Date());
@@ -371,10 +373,8 @@ export default function Home() {
           longitude,
         };
 
-        // Cache the data for other screens
         setCacheData(CACHE_KEYS.DIRASAKAN, newDirasakanData);
 
-        // Batch state updates
         setDirasakanData(newDirasakanData);
         setShakeMapUrl(
           latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
@@ -382,7 +382,6 @@ export default function Home() {
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           console.warn("fetchDirasakan error:", e.message);
-          // Show network error alert only once for any non-abort fetch/network error
           if (!networkErrorShownRef.current) {
             networkErrorShownRef.current = true;
             setNetworkErrorModalVisible(true);
@@ -444,15 +443,12 @@ export default function Home() {
           longitude,
         };
 
-        // Cache the data for other screens
         setCacheData(CACHE_KEYS.TERDETEKSI, newTerdeteksiData);
 
-        // Single state update
         setTerdeteksiData(newTerdeteksiData);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           console.warn("fetchTerdeteksi error:", e.message);
-          // Show network error alert only once for any non-abort fetch/network error
           if (!networkErrorShownRef.current) {
             networkErrorShownRef.current = true;
             setNetworkErrorModalVisible(true);
@@ -465,11 +461,11 @@ export default function Home() {
       await Promise.all([fetchDirasakan(), fetchTerdeteksi()]);
     }
 
-    InteractionManager.runAfterInteractions(() => {
-      if (isMounted) {
-        void fetchAll();
-      }
-    });
+    // OPTIMASI: Menghapus InteractionManager agar fetch API segera berjalan
+    if (isMounted) {
+      void fetchAll();
+    }
+
     const interval = setInterval(fetchAll, 60_000);
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") fetchAll();
@@ -479,7 +475,6 @@ export default function Home() {
       isMounted = false;
       clearInterval(interval);
       appStateSub.remove();
-      // Cancel pending requests
       abortControllerRef.current?.abort();
     };
   }, [userLocation]);
@@ -516,23 +511,24 @@ export default function Home() {
     const jarak = parseFloat(dirasakanData.distanceKm);
 
     if (!isNaN(M) && !isNaN(D) && !isNaN(jarak)) {
-      const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
+      const clamp = (val: number, min: number, max: number) =>
+        Math.min(Math.max(val, min), max);
 
       const s = clamp(Math.pow(10, 0.5 * (M - 5)), 0.05, 3.5);
       const fd = clamp(1 / (1 + D / 200), 0.35, 1);
 
-      const Router_km = Math.max(((100000 + 240000 * s) * fd), 1) / 1000;
-      const Rinner_km = Math.max(((35000 + 80000 * s) * fd), 1) / 1000;
+      const Router_km = Math.max((100000 + 240000 * s) * fd, 1) / 1000;
+      const Rinner_km = Math.max((35000 + 80000 * s) * fd, 1) / 1000;
 
       if (jarak <= Rinner_km) {
         statusWilayah = "Bahaya";
-        statusColor = "#F44336"; 
+        statusColor = "#F44336";
       } else if (jarak <= Router_km) {
         statusWilayah = "Terdampak";
-        statusColor = "#FF9800"; 
+        statusColor = "#FF9800";
       } else {
         statusWilayah = "Aman";
-        statusColor = "#4CAF50"; 
+        statusColor = "#4CAF50";
       }
     }
   }
@@ -573,19 +569,42 @@ export default function Home() {
             <View style={styles.statItem}>
               <MaterialIcons name="history" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>GEMPA TERAKHIR</Text>
-              <Text style={styles.statValue}>{timeAgo}</Text>
+              {dirasakanData ? (
+                <Text style={styles.statValue}>{timeAgo}</Text>
+              ) : (
+                <Skeleton width={80} height={14} borderRadius={4} />
+              )}
             </View>
             <View style={styles.statItem}>
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>JARAK GEMPA</Text>
-              <Text style={styles.statValue}>
-                {dirasakanData ? `${dirasakanData.distanceKm} km` : "-"}
-              </Text>
+              {dirasakanData ? (
+                <Text
+                  style={styles.statValue}
+                >{`${dirasakanData.distanceKm} km`}</Text>
+              ) : (
+                <Skeleton width={60} height={14} borderRadius={4} />
+              )}
             </View>
             <View style={styles.statItem}>
-              <Ionicons name="alert-circle-outline" size={20} color={statusColor} />
+              <Ionicons
+                name="alert-circle-outline"
+                size={20}
+                color={dirasakanData ? statusColor : "#CBD5E1"}
+              />
               <Text style={styles.statLabel}>STATUS WILAYAH</Text>
-              <Text style={[styles.statValue, { color: statusColor, fontWeight: 'bold' }]}>{statusWilayah}</Text>
+              {dirasakanData ? (
+                <Text
+                  style={[
+                    styles.statValue,
+                    { color: statusColor, fontWeight: "bold" },
+                  ]}
+                >
+                  {statusWilayah}
+                </Text>
+              ) : (
+                <Skeleton width={70} height={14} borderRadius={4} />
+              )}
             </View>
           </View>
         </View>
@@ -612,18 +631,43 @@ export default function Home() {
                   />
                 </TouchableOpacity>
               </View>
-              <DirasakanCard
-                data={dirasakanData}
-                onShakeMap={() => setShakeMapVisible(true)}
-                hasShakeMap={!!shakeMapUrl}
-                onShare={handleShareDirasakan}
-                onCardPress={() =>
-                  router.push({
-                    pathname: "/main-menu/earthquake",
-                    params: { tab: "GEMPA DIRASAKAN" },
-                  })
-                }
-              />
+              {dirasakanData ? (
+                <DirasakanCard
+                  data={dirasakanData}
+                  onShakeMap={() => setShakeMapVisible(true)}
+                  hasShakeMap={!!shakeMapUrl}
+                  onShare={handleShareDirasakan}
+                  onCardPress={() =>
+                    router.push({
+                      pathname: "/main-menu/earthquake",
+                      params: { tab: "GEMPA DIRASAKAN" },
+                    })
+                  }
+                />
+              ) : (
+                // OPTIMASI: Composite Skeleton yang lebih natural
+                <View
+                  style={{
+                    paddingHorizontal: 20,
+                    height: 220,
+                    justifyContent: "space-between",
+                    paddingVertical: 10,
+                  }}
+                >
+                  <View>
+                    <Skeleton width="60%" height={24} borderRadius={8} />
+                    <View
+                      style={{ marginTop: 12, flexDirection: "row", gap: 10 }}
+                    >
+                      <Skeleton width="40%" height={16} borderRadius={4} />
+                      <Skeleton width="30%" height={16} borderRadius={4} />
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 24 }}>
+                    <Skeleton width="100%" height={100} borderRadius={12} />
+                  </View>
+                </View>
+              )}
             </View>
 
             <View style={{ width: SCREEN_WIDTH }}>
@@ -641,16 +685,41 @@ export default function Home() {
                   />
                 </TouchableOpacity>
               </View>
-              <TerdeteksiCard
-                data={terdeteksiData}
-                onShare={handleShareTerdeteksi}
-                onCardPress={() =>
-                  router.push({
-                    pathname: "/main-menu/earthquake",
-                    params: { tab: "GEMPA TERDETEKSI" },
-                  })
-                }
-              />
+              {terdeteksiData ? (
+                <TerdeteksiCard
+                  data={terdeteksiData}
+                  onShare={handleShareTerdeteksi}
+                  onCardPress={() =>
+                    router.push({
+                      pathname: "/main-menu/earthquake",
+                      params: { tab: "GEMPA TERDETEKSI" },
+                    })
+                  }
+                />
+              ) : (
+                // OPTIMASI: Composite Skeleton yang lebih natural
+                <View
+                  style={{
+                    paddingHorizontal: 20,
+                    height: 220,
+                    justifyContent: "space-between",
+                    paddingVertical: 10,
+                  }}
+                >
+                  <View>
+                    <Skeleton width="60%" height={24} borderRadius={8} />
+                    <View
+                      style={{ marginTop: 12, flexDirection: "row", gap: 10 }}
+                    >
+                      <Skeleton width="40%" height={16} borderRadius={4} />
+                      <Skeleton width="30%" height={16} borderRadius={4} />
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 24 }}>
+                    <Skeleton width="100%" height={100} borderRadius={12} />
+                  </View>
+                </View>
+              )}
             </View>
           </ScrollView>
 
@@ -732,9 +801,3 @@ export default function Home() {
     </View>
   );
 }
-
-
-
-
-
-

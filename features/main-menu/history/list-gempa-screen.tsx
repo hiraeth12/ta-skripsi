@@ -3,15 +3,21 @@ import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import { getAuth } from "@react-native-firebase/auth";
-import { get, getDatabase, limitToLast, query, ref } from "@react-native-firebase/database";
+import {
+  get,
+  getDatabase,
+  limitToLast,
+  query,
+  ref,
+} from "@react-native-firebase/database";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import styles from "./styles/list-gempa-screen";
 
@@ -43,7 +49,10 @@ export default function ListGempaPage() {
   const { haversineDistanceKm } = useHaversine();
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number }>({
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lon: number;
+  }>({
     lat: -6.9175,
     lon: 107.6191,
   });
@@ -88,7 +97,9 @@ export default function ListGempaPage() {
         const user = auth.currentUser;
         if (!user || !isMounted) return;
 
-        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+        const db = DATABASE_URL
+          ? getDatabase(app, DATABASE_URL)
+          : getDatabase(app);
         const userRef = ref(db, `/users/${user.uid}`);
         const snapshot = await get(userRef);
         const userData = snapshot.val();
@@ -98,8 +109,7 @@ export default function ListGempaPage() {
         if (!isNaN(lat) && !isNaN(lon)) {
           setUserLocation({ lat, lon });
         }
-      } catch {
-      }
+      } catch {}
     }
 
     void loadUserLocationOnce();
@@ -115,10 +125,14 @@ export default function ListGempaPage() {
       setLoading(true);
       try {
         const app = getApp();
-        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+        const db = DATABASE_URL
+          ? getDatabase(app, DATABASE_URL)
+          : getDatabase(app);
 
         if (mode === "dirasakan") {
-          const snapshot = await get(query(ref(db, "gempa_dirasakan/items"), limitToLast(80)));
+          const snapshot = await get(
+            query(ref(db, "gempa_dirasakan/items"), limitToLast(80)),
+          );
           const rawData = snapshot.exists() ? snapshot.val() : null;
           const candidates = Array.isArray(rawData)
             ? rawData
@@ -127,18 +141,27 @@ export default function ListGempaPage() {
               : [];
 
           const normalized = candidates
-            .sort((a: any, b: any) => String(b?.eventid ?? b?.timesent ?? "").localeCompare(String(a?.eventid ?? a?.timesent ?? "")))
+            .sort((a: any, b: any) =>
+              String(b?.eventid ?? b?.timesent ?? "").localeCompare(
+                String(a?.eventid ?? a?.timesent ?? ""),
+              ),
+            )
             .map((candidate: any, index): ListItem | null => {
               const coordStr = String(candidate?.point?.coordinates ?? "");
               const [lonStr, latStr] = coordStr.split(",");
 
               const latitude = parseFloat(
-                String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(",", "."),
+                String(
+                  candidate?.latitude ?? candidate?.lat ?? latStr ?? "",
+                ).replace(",", "."),
               );
               const longitude = parseFloat(
-                String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(",", "."),
+                String(
+                  candidate?.longitude ?? candidate?.lon ?? lonStr ?? "",
+                ).replace(",", "."),
               );
-              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+              if (Number.isNaN(latitude) || Number.isNaN(longitude))
+                return null;
 
               const distanceKm = haversineDistanceKm(
                 userLocation.lat,
@@ -158,15 +181,24 @@ export default function ListGempaPage() {
                 latitude,
                 longitude,
                 magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-                lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
+                lokasi: String(
+                  candidate?.area ??
+                    candidate?.wilayah ??
+                    candidate?.lokasi ??
+                    "",
+                ),
                 waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
                 jarak: `${distanceKm} km dari lokasi Anda`,
                 distanceKm,
                 tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
                 jam: String(candidate?.time ?? candidate?.jam ?? ""),
-                kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
+                kedalaman: String(
+                  candidate?.depth ?? candidate?.kedalaman ?? "",
+                ),
                 felt: String(candidate?.felt ?? ""),
-                shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
+                shakemap: candidate?.shakemap
+                  ? String(candidate.shakemap)
+                  : null,
               };
             })
             .filter((item): item is ListItem => Boolean(item))
@@ -174,7 +206,9 @@ export default function ListGempaPage() {
 
           if (isMounted) setItems(normalized);
         } else {
-          const snapshot = await get(query(ref(db, "gempa_terdeteksi/items"), limitToLast(150)));
+          const snapshot = await get(
+            query(ref(db, "gempa_terdeteksi/items"), limitToLast(150)),
+          );
           const rawData = snapshot.exists() ? snapshot.val() : null;
           const nodeArray = Array.isArray(rawData)
             ? rawData
@@ -191,12 +225,31 @@ export default function ListGempaPage() {
           const normalized = sorted
             .map((item: any, index): ListItem | null => {
               const coords = item?.geometry?.coordinates || item?.coordinates;
-              const longitude = parseFloat(String(item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0] ?? ""));
-              const latitude = parseFloat(String(item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? ""));
-              if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+              const longitude = parseFloat(
+                String(
+                  item?.longitude ??
+                    item?.lon ??
+                    coords?.longitude ??
+                    coords?.[0] ??
+                    "",
+                ),
+              );
+              const latitude = parseFloat(
+                String(
+                  item?.latitude ??
+                    item?.lat ??
+                    coords?.latitude ??
+                    coords?.[1] ??
+                    "",
+                ),
+              );
+              if (Number.isNaN(latitude) || Number.isNaN(longitude))
+                return null;
 
               const props = item?.properties ?? item;
-              const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
+              const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(
+                " ",
+              );
               const jamFromTime = (jamRaw ?? "").split(".")[0];
               const distanceKm = haversineDistanceKm(
                 userLocation.lat,
@@ -215,7 +268,9 @@ export default function ListGempaPage() {
                 latitude,
                 longitude,
                 magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
-                lokasi: String(props?.lokasi ?? props?.place ?? props?.area ?? ""),
+                lokasi: String(
+                  props?.lokasi ?? props?.place ?? props?.area ?? "",
+                ),
                 waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
                 jarak: `${distanceKm} km dari lokasi Anda`,
                 distanceKm,
@@ -318,4 +373,3 @@ export default function ListGempaPage() {
     </View>
   );
 }
-

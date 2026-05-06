@@ -129,13 +129,17 @@ async function syncFullGempaDirasakan() {
 
   const response = await fetch(withCacheBuster(apiUrl));
   if (!response.ok) {
-    throw new Error(`Failed to fetch API: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch API: ${response.status} ${response.statusText}`,
+    );
   }
 
   const rawText = await response.text();
   const { candidates, globalIdentifier } = parseCandidates(rawText);
   const normalizedItems = candidates
-    .map((candidate, index) => normalizeQuakeItem(candidate, index, globalIdentifier))
+    .map((candidate, index) =>
+      normalizeQuakeItem(candidate, index, globalIdentifier),
+    )
     .filter(Boolean);
 
   if (normalizedItems.length === 0) {
@@ -165,9 +169,7 @@ async function syncFullGempaDirasakan() {
 
   if (!writeRes.ok) {
     const errText = await writeRes.text();
-    throw new Error(
-      `Failed to write DB: ${writeRes.status} ${errText}`
-    );
+    throw new Error(`Failed to write DB: ${writeRes.status} ${errText}`);
   }
 
   return {

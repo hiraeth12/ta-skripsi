@@ -299,12 +299,23 @@ export default function GempaDirasakan({
         isFirstLoad.current = false;
         return !isSameEvent;
       } catch (error) {
-        if (!networkErrorShownRef.current && error instanceof TypeError && error.message.includes('Network')) {
+        if (
+          !networkErrorShownRef.current &&
+          error instanceof TypeError &&
+          error.message.includes("Network")
+        ) {
           networkErrorShownRef.current = true;
           Alert.alert(
-            'Koneksi Jaringan',
-            'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
-            [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
+            "Koneksi Jaringan",
+            "Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  networkErrorShownRef.current = false;
+                },
+              },
+            ],
           );
         }
         return false;
@@ -511,4 +522,3 @@ const DetailItem = ({ icon, label, value }: any) => (
     </View>
   </View>
 );
-

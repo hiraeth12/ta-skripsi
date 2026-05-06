@@ -32,8 +32,7 @@ function initializeAdmin() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
       serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   // Method 2: Check environment variable as file path
@@ -41,27 +40,33 @@ function initializeAdmin() {
     try {
       const keyPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
       serviceAccount = JSON.parse(fs.readFileSync(keyPath, "utf8"));
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   // Method 3: Check firebase-service-account.json in project root
   if (!serviceAccount) {
     try {
-      const defaultPath = path.resolve(__dirname, "../../firebase-service-account.json");
+      const defaultPath = path.resolve(
+        __dirname,
+        "../firebase-service-account.json",
+      );
       if (fs.existsSync(defaultPath)) {
         serviceAccount = JSON.parse(fs.readFileSync(defaultPath, "utf8"));
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   // Method 4: Fallback to google-services.json (Android config)
   if (!serviceAccount) {
     try {
-      const fallbackPath = path.resolve(__dirname, "../../android/app/google-services.json");
+      const fallbackPath = path.resolve(
+        __dirname,
+        "../android/app/google-services.json",
+      );
       if (fs.existsSync(fallbackPath)) {
-        const googleServices = JSON.parse(fs.readFileSync(fallbackPath, "utf8"));
+        const googleServices = JSON.parse(
+          fs.readFileSync(fallbackPath, "utf8"),
+        );
         // Extract basic info (not ideal, but can work for simple cases)
         // This won't work for Admin SDK, so we skip
       }
@@ -75,7 +80,7 @@ function initializeAdmin() {
       `[Firebase Admin] Service account not found. Please:
 1. Download service account key from Firebase Console
 2. Save as 'firebase-service-account.json' in project root, OR
-3. Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_PATH env var`
+3. Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_PATH env var`,
     );
   }
 
@@ -102,4 +107,3 @@ function getDatabase() {
 }
 
 export { admin, getDatabase, initializeAdmin };
-

@@ -117,13 +117,17 @@ async function syncLatestOnce() {
 
   const response = await fetch(withCacheBuster(apiUrl));
   if (!response.ok) {
-    throw new Error(`Failed to fetch API: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch API: ${response.status} ${response.statusText}`,
+    );
   }
 
   const rawText = await response.text();
   const { candidates, globalIdentifier } = parseCandidates(rawText);
   const normalizedItems = candidates
-    .map((candidate, index) => normalizeQuakeItem(candidate, index, globalIdentifier))
+    .map((candidate, index) =>
+      normalizeQuakeItem(candidate, index, globalIdentifier),
+    )
     .filter(Boolean);
 
   const latest = getLatestItem(normalizedItems);
@@ -135,9 +139,7 @@ async function syncLatestOnce() {
     };
   }
 
-  const lastEventRes = await fetch(
-    `${dbUrl}/gempa_dirasakan/lastEventId.json`,
-  );
+  const lastEventRes = await fetch(`${dbUrl}/gempa_dirasakan/lastEventId.json`);
 
   if (!lastEventRes.ok) {
     throw new Error(
@@ -158,7 +160,7 @@ async function syncLatestOnce() {
 
   // New event detected! Fetch current items and append the new one
   let currentItems = [];
-  
+
   try {
     const itemsRes = await fetch(`${dbUrl}/gempa_dirasakan/items.json`);
     if (itemsRes.ok) {
@@ -167,8 +169,7 @@ async function syncLatestOnce() {
         currentItems = existingData;
       }
     }
-  } catch (e) {
-  }
+  } catch (e) {}
 
   // Append new event to the end (ascending order: oldest first, newest last)
   const updatedItems = [...currentItems, latest];
@@ -176,7 +177,7 @@ async function syncLatestOnce() {
   // Write updated items and metadata using Firebase Admin SDK
   try {
     const db = getDatabase();
-    
+
     // Prepare all updates
     const updates = {
       "gempa_dirasakan/sourceUrl": apiUrl,
@@ -190,9 +191,7 @@ async function syncLatestOnce() {
     // Write all at once using multi-path update for atomicity
     await db.ref().update(updates);
   } catch (error) {
-    throw new Error(
-      `Failed to write to Firebase Admin: ${error.message}`
-    );
+    throw new Error(`Failed to write to Firebase Admin: ${error.message}`);
   }
 
   return {
@@ -208,14 +207,12 @@ async function run() {
   const intervalArg = Number(process.argv[2] ?? 0);
 
   if (intervalArg > 0) {
-    await syncLatestOnce().then(() => {
-    });
+    await syncLatestOnce().then(() => {});
 
     setInterval(async () => {
       try {
         await syncLatestOnce();
-      } catch (error) {
-      }
+      } catch (error) {}
     }, intervalArg);
 
     return;

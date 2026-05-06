@@ -71,6 +71,8 @@ type Props = {
   highlightPolygons?: HighlightPolygon[];
   waveOverlays?: WaveOverlay[];
   isCardOpen?: boolean;
+  // --- PERBAIKAN: Menambahkan tipe cardHeight
+  cardHeight?: number;
 };
 
 type DotMarkerProps = {
@@ -357,6 +359,8 @@ const EarthquakeMap = memo(
     highlightPolygons,
     waveOverlays,
     isCardOpen = false,
+    // --- PERBAIKAN: Default parameter cardHeight
+    cardHeight = 0,
   }: Props) {
     const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
     const cameraRef = React.useRef<Mapbox.Camera | null>(null);
@@ -396,14 +400,19 @@ const EarthquakeMap = memo(
           const authInstance = getAuth(app);
           const currentUser = authInstance.currentUser;
           if (!currentUser) return;
-          
+
           const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
           const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
           const userRef = ref(database, `users/${currentUser.uid}`);
           const snapshot = await get(userRef);
           const userData = snapshot.val();
-          
-          if (userData && userData.latitude && userData.longitude && isMounted) {
+
+          if (
+            userData &&
+            userData.latitude &&
+            userData.longitude &&
+            isMounted
+          ) {
             const lat = parseFloat(userData.latitude);
             const lon = parseFloat(userData.longitude);
             if (!isNaN(lat) && !isNaN(lon)) {
@@ -414,16 +423,21 @@ const EarthquakeMap = memo(
                 latitude: lat,
                 longitude: lon,
                 initials,
-                photoUrl: userData.photoURL || userData.photoUrl || userData.profilePicture,
+                photoUrl:
+                  userData.photoURL ||
+                  userData.photoUrl ||
+                  userData.profilePicture,
               });
             }
           }
-        } catch(e) {}
+        } catch (e) {}
       };
-      
+
       fetchUser();
-      
-      return () => { isMounted = false; };
+
+      return () => {
+        isMounted = false;
+      };
     }, []);
 
     useEffect(() => {
@@ -536,7 +550,10 @@ const EarthquakeMap = memo(
           }}
           onMapIdle={async () => {
             const pendingMove = pendingCameraMoveRef.current;
-            if (pendingMove && applyCameraMove(pendingMove.region, pendingMove.duration)) {
+            if (
+              pendingMove &&
+              applyCameraMove(pendingMove.region, pendingMove.duration)
+            ) {
               pendingCameraMoveRef.current = null;
             }
 
@@ -679,8 +696,11 @@ const EarthquakeMap = memo(
           ))}
 
           {userProfile && (
-            <UserMarker 
-              coordinate={{ latitude: userProfile.latitude, longitude: userProfile.longitude }}
+            <UserMarker
+              coordinate={{
+                latitude: userProfile.latitude,
+                longitude: userProfile.longitude,
+              }}
               initials={userProfile.initials}
               photoUrl={userProfile.photoUrl}
             />
@@ -716,45 +736,52 @@ const EarthquakeMap = memo(
           ))}
         </Mapbox.MapView>
 
-        {!isCardOpen && (
-          <View pointerEvents="box-none" style={styles.menuOverlay}>
-            {isMenuOpen && (
-              <View style={styles.menuPanel}>
-                <View style={styles.menuRow}>
-                  <Text style={styles.menuLabel}>Tampilkan patahan</Text>
-                  <Switch
-                    value={showFaultLines}
-                    onValueChange={setShowFaultLines}
-                    trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
-                  />
-                </View>
-                <View style={styles.menuRow}>
-                  <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
-                  <Switch
-                    value={showSeismicSensors}
-                    onValueChange={setShowSeismicSensors}
-                    trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
-                  />
-                </View>
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.menuOverlay,
+            // --- PERBAIKAN: Jika card terbuka dan kita sudah tahu tingginya, geser ke tinggi card + 16px rongga
+            isCardOpen && cardHeight > 0 && { bottom: cardHeight + 16 },
+          ]}
+        >
+          {isMenuOpen && (
+            <View style={styles.menuPanel}>
+              <View style={styles.menuRow}>
+                <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+                <Switch
+                  value={showFaultLines}
+                  onValueChange={setShowFaultLines}
+                  trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
+                />
               </View>
-            )}
-            <Pressable
-              style={styles.menuButton}
-              onPress={() => setIsMenuOpen(!isMenuOpen)}
-            >
-              <View style={styles.menuIcon}>
-                <View style={styles.menuBar} />
-                <View style={styles.menuBar} />
-                <View style={styles.menuBar} />
+              <View style={styles.menuRow}>
+                <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+                <Switch
+                  value={showSeismicSensors}
+                  onValueChange={setShowSeismicSensors}
+                  trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
+                />
               </View>
-            </Pressable>
-          </View>
-        )}
+            </View>
+          )}
+          <Pressable
+            style={styles.menuButton}
+            onPress={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <View style={styles.menuIcon}>
+              <View style={styles.menuBar} />
+              <View style={styles.menuBar} />
+              <View style={styles.menuBar} />
+            </View>
+          </Pressable>
+        </View>
       </View>
     );
   },
   (prev, next) => {
     if (prev.isCardOpen !== next.isCardOpen) return false;
+    // Peta perlu render ulang kalau ukuran card berubah agar bisa adjust posisi tombolnya
+    if (prev.cardHeight !== next.cardHeight) return false;
     if (prev.markerCoordinate !== next.markerCoordinate) return false;
     if (
       !areHighlightPolygonsEqual(prev.highlightPolygons, next.highlightPolygons)

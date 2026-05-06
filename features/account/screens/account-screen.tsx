@@ -7,21 +7,22 @@ import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    Modal,
-    Pressable,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Modal,
+  Pressable,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { saveFcmTokenToDatabase } from "../../../hooks/use-fcm-token-save";
 import ProfilePageLayout from "../components/profile-page-layout";
 import {
-    ACCOUNT_PROFILE,
-    fetchProfileFromFirebase,
-    ProfileData,
+  ACCOUNT_PROFILE,
+  fetchProfileFromFirebase,
+  ProfileData,
 } from "../data/profile";
 
+import Skeleton from "../../../components/skeleton";
 import { styles } from "./styles/account-styles";
 
 const PUSH_NOTIFICATION_PREF_KEY = "push_notifications_enabled";
@@ -111,6 +112,57 @@ export default function Account() {
       setIsToggleProcessing(false);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+        {/* Header Profil */}
+        <View
+          style={{
+            backgroundColor: "#0C4A6E",
+            paddingVertical: 40,
+            alignItems: "center",
+            borderBottomLeftRadius: 24,
+            borderBottomRightRadius: 24,
+          }}
+        >
+          <Skeleton
+            width={90}
+            height={90}
+            borderRadius={45}
+            style={{ marginBottom: 16 }}
+          />
+          <Skeleton
+            width={160}
+            height={20}
+            borderRadius={6}
+            style={{ marginBottom: 8 }}
+          />
+          <Skeleton width={200} height={14} borderRadius={4} />
+        </View>
+
+        {/* Daftar Menu */}
+        <View style={{ padding: 20, marginTop: 10 }}>
+          {[...Array(6)].map((_, i) => (
+            <View key={i} style={styles.menuItem}>
+              <View style={styles.menuLeft}>
+                <View style={styles.iconWrapper}>
+                  <Skeleton width={25} height={25} borderRadius={12.5} />
+                </View>
+                <Skeleton
+                  width={140}
+                  height={16}
+                  borderRadius={6}
+                  style={{ marginLeft: 12 }}
+                />
+              </View>
+              <Skeleton width={16} height={16} borderRadius={4} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <>
