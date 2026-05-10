@@ -1,8 +1,9 @@
 import EarthquakeMap from "@/components/earthquake-map";
+import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { XMLParser } from "fast-xml-parser";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
@@ -21,7 +22,7 @@ import styles from "./styles/gempa-dirasakan-history-content";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
-const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_HISTORY!;
+const DB_PATH = "gempa_dirasakan";
 const MIN_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
 const MAX_POINTS = 20;
@@ -149,7 +150,11 @@ export function GempaDirasakanHistoryContent({
               duration: 180,
               useNativeDriver: true,
             }),
-          ]).start(() => setShowCard(false));
+          ]).start(() => {
+            setShowCard(false);
+            temporarySelectionRef.current = null;
+            setTemporarySelection(null);
+          });
         } else {
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
@@ -221,6 +226,7 @@ export function GempaDirasakanHistoryContent({
     (index: number) => {
       if (!quakes[index]) return;
       selectedEventIdRef.current = quakes[index].eventId;
+      setTemporarySelection(null);
       setSelectedIndex(index);
       openCard();
     },
@@ -332,6 +338,7 @@ export function GempaDirasakanHistoryContent({
 
     const targetQuake = quakes[targetIndex];
     selectedEventIdRef.current = targetQuake.eventId;
+    setTemporarySelection(null);
     setSelectedIndex(targetIndex);
     openCard();
     mapRef.current?.animateToRegion(
@@ -353,52 +360,121 @@ export function GempaDirasakanHistoryContent({
       if (isFetching.current) return false;
       isFetching.current = true;
 
+      const startTime = Date.now();
       if (!silent) onLoadingChange?.(true);
 
       try {
-        if (!API_URL) {
-          console.error(
-            "GEMPA_DIRASAKAN_HISTORY is undefined - restart Metro with --clear",
-          );
+        let app;
+        try {
+          app = getApp();
+        } catch (appError: any) {
+          throw new Error("Firebase app not initialized - ensure google-services.json is configured");
+        }
+        
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        
+        const refStart = Date.now();
+        let snapshot = await get(ref(db, `${DB_PATH}/items`));
+        if (!snapshot.exists()) {
+          snapshot = await get(ref(db, DB_PATH));
+        }
+
+        if (!snapshot.exists()) {
           return false;
         }
-        const res = await fetch(withCacheBuster(API_URL));
-        const raw = await res.text();
 
-        let candidates: any[] = [];
-        let globalIdentifier = "";
-
-        try {
-          const parsedJson = JSON.parse(raw);
-          const infoRaw = parsedJson?.info;
-          candidates = Array.isArray(infoRaw)
-            ? infoRaw
-            : infoRaw
-              ? [infoRaw]
-              : [];
-          globalIdentifier = String(parsedJson?.identifier ?? "");
-        } catch {
-          const parser = new XMLParser({ ignoreAttributes: false });
-          const parsedXml = parser.parse(raw);
-          const infoRaw = parsedXml?.alert?.info;
-          candidates = Array.isArray(infoRaw)
-            ? infoRaw
-            : infoRaw
-              ? [infoRaw]
-              : [];
-          globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
+        const dbData = snapshot.val();
+        if (!dbData || typeof dbData !== "object") {
+          return false;
         }
 
+        // Convert database payload to array and normalize
+        const convertStart = Date.now();
+        const itemsNode = dbData?.items ?? dbData;
+        const candidates = Array.isArray(itemsNode)
+          ? itemsNode
+          : itemsNode && typeof itemsNode === "object"
+            ? (Object.values(itemsNode) as any[])
+            : [];
+        const convertTime = Date.now() - convertStart;
+        
         if (candidates.length === 0) return false;
 
-        const normalized = candidates
+        // Sort by recency descending (most recent first)
+        const sortStart = Date.now();
+        const sorted = [...candidates].sort((a: any, b: any) => {
+          const keyA = String(
+            a?.eventid ??
+              a?.eventId ??
+              a?.timesent ??
+              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
+          );
+          const keyB = String(
+            b?.eventid ??
+              b?.eventId ??
+              b?.timesent ??
+              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
+          );
+          return keyB.localeCompare(keyA);
+        });
+        const sortTime = Date.now() - sortStart;
+
+        const normalizeStart = Date.now();
+        const normalized = sorted
           .map((candidate, index): QuakeItem | null => {
-            const coordStr: string = String(
-              candidate?.point?.coordinates ?? "",
-            );
+            const parseWithHemisphere = (
+              value: unknown,
+              negativeToken: string,
+              positiveToken: string,
+            ) => {
+              const raw = String(value ?? "").trim();
+              if (!raw) return NaN;
+
+              const numeric = parseFloat(raw.replace(",", "."));
+              if (isNaN(numeric)) return NaN;
+
+              const upper = raw.toUpperCase();
+              if (upper.includes(negativeToken)) return -Math.abs(numeric);
+              if (upper.includes(positiveToken)) return Math.abs(numeric);
+              return numeric;
+            };
+
+            // Prefer point.coordinates because it usually keeps signed lon,lat from BMKG
+            const coordStr = String(candidate?.point?.coordinates ?? "");
             const [lonStr, latStr] = coordStr.split(",");
-            const latitude = parseFloat(latStr);
-            const longitude = parseFloat(lonStr);
+
+            let latitude = parseWithHemisphere(latStr, "LS", "LU");
+            let longitude = parseWithHemisphere(lonStr, "BB", "BT");
+
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(candidate?.latitude, "LS", "LU");
+            }
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(candidate?.lat, "LS", "LU");
+            }
+            if (isNaN(latitude)) {
+              latitude = parseWithHemisphere(
+                candidate?.coordinates?.latitude,
+                "LS",
+                "LU",
+              );
+            }
+
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(candidate?.longitude, "BB", "BT");
+            }
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(candidate?.lon, "BB", "BT");
+            }
+            if (isNaN(longitude)) {
+              longitude = parseWithHemisphere(
+                candidate?.coordinates?.longitude,
+                "BB",
+                "BT",
+              );
+            }
+
             if (isNaN(latitude) || isNaN(longitude)) return null;
 
             const absLat = Math.abs(latitude).toFixed(2);
@@ -411,9 +487,10 @@ export function GempaDirasakanHistoryContent({
             ).toFixed(1);
 
             const eventId = String(
-              candidate?.eventid ??
-                candidate?.identifier ??
-                `${globalIdentifier}-${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
+              candidate?.eventId ??
+                candidate?.id ??
+                candidate?.eventid ??
+                `${candidate?.tanggal ?? ""}-${candidate?.jam ?? ""}-${index}`,
             );
 
             return {
@@ -421,11 +498,11 @@ export function GempaDirasakanHistoryContent({
               latitude,
               longitude,
               distanceKm,
-              magnitude: String(candidate?.magnitude ?? ""),
-              wilayah: String(candidate?.area ?? ""),
-              tanggal: String(candidate?.date ?? ""),
-              jam: String(candidate?.time ?? ""),
-              kedalaman: String(candidate?.depth ?? ""),
+              magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
+              wilayah: String(candidate?.wilayah ?? candidate?.area ?? candidate?.lokasi ?? candidate?.place ?? ""),
+              tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
+              jam: String(candidate?.jam ?? candidate?.time ?? ""),
+              kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
               felt: String(candidate?.felt ?? ""),
               latText: `${absLat}\u00B0${latitude < 0 ? "LS" : "LU"}`,
               lonText: `${absLon}\u00B0${longitude >= 0 ? "BT" : "BB"}`,
@@ -434,11 +511,16 @@ export function GempaDirasakanHistoryContent({
           })
           .filter((item): item is QuakeItem => Boolean(item))
           .slice(0, MAX_POINTS);
+        const normalizeTime = Date.now() - normalizeStart;
+        
 
         if (normalized.length === 0) return false;
 
         const signature = normalized.map((item) => item.eventId).join("|");
-        if (signature === latestDataSignature.current) return false;
+        
+        if (signature === latestDataSignature.current) {
+          return false;
+        }
         latestDataSignature.current = signature;
 
         let foundIndex = -1;
@@ -467,8 +549,11 @@ export function GempaDirasakanHistoryContent({
         setTemporarySelection(null);
         setSelectedIndex(nextSelectedIndex);
 
-        if (!focusQuake) return true;
+        if (!focusQuake) {
+          return true;
+        }
 
+        const animStart = Date.now();
         if (isFirstLoad.current) {
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
@@ -491,10 +576,10 @@ export function GempaDirasakanHistoryContent({
             600,
           );
         }
+        const animTime = Date.now() - animStart;
 
         return true;
       } catch (e) {
-        console.error("Failed to fetch gempa dirasakan history:", e);
         return false;
       } finally {
         if (!silent) onLoadingChange?.(false);
@@ -552,7 +637,7 @@ export function GempaDirasakanHistoryContent({
         mapRef={mapRef}
         markerCoordinates={markerCoordinates}
         temporaryMarkerCoordinate={
-          temporarySelection
+          temporarySelection && selectedIndex === null
             ? {
                 latitude: temporarySelection.latitude,
                 longitude: temporarySelection.longitude,

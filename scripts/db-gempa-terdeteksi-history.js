@@ -229,7 +229,6 @@ async function syncOnce() {
   try {
     const db = getDatabase();
     await db.ref("gempa_terdeteksi").set(payload);
-    console.log("[Sync] Successfully wrote gempa_terdeteksi data using Firebase Admin SDK");
   } catch (error) {
     throw new Error(
       `Failed to write to Firebase Admin: ${error.message}`
@@ -258,19 +257,12 @@ async function run() {
   const intervalArg = Number(process.argv[2] ?? 0);
 
   if (intervalArg > 0) {
-    console.log(
-      `[Gempa Terdeteksi Sync] watch mode every ${intervalArg} ms (Ctrl+C to stop)`,
-    );
-
     const first = await syncOnce();
-    console.log(JSON.stringify(first, null, 2));
 
     setInterval(async () => {
       try {
         const result = await syncOnce();
-        console.log(JSON.stringify(result, null, 2));
       } catch (error) {
-        console.error(error?.stack || error?.message || String(error));
       }
     }, intervalArg);
 
@@ -278,10 +270,8 @@ async function run() {
   }
 
   const result = await syncOnce();
-  console.log(JSON.stringify(result, null, 2));
 }
 
 run().catch((error) => {
-  console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { styles } from "./notifications-screen.styles";
+import { styles } from "./styles/notifications-screen.styles";
 
 const NotifCard = ({ item, onPress }: any) => {
   const isDirasakan = item.type === "Dirasakan";

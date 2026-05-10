@@ -52,35 +52,50 @@ export async function sendGempaDirasakanNotification(
     // Get all user tokens from database
     const tokensSnapshot = await db.ref("user_fcm_tokens").get();
     const tokens = [];
+    const tokenPathByValue = {};
 
     if (tokensSnapshot.exists()) {
       const tokenData = tokensSnapshot.val();
-      // Extract unique tokens from user data
+      // Support both legacy token object shape and plain string token value.
       for (const userId in tokenData) {
-        if (tokenData[userId].token) {
-          tokens.push(tokenData[userId].token);
+        const entry = tokenData[userId];
+        const tokenValue =
+          typeof entry === "string"
+            ? entry
+            : typeof entry?.token === "string"
+              ? entry.token
+              : null;
+
+        if (tokenValue) {
+          tokens.push(tokenValue);
+          tokenPathByValue[tokenValue] = `user_fcm_tokens/${userId}`;
         }
       }
     }
 
     if (tokens.length === 0) {
-      console.log("No user tokens found for notification");
       return;
     }
 
+    // Deduplicate tokens (same device with multiple accounts)
+    const uniqueTokens = Array.from(new Set(tokens));
+    const duplicateCount = tokens.length - uniqueTokens.length;
+
     // Use Firebase Cloud Messaging API (HTTP v1)
-    const messages = tokens.map((token) => ({
-      notification: {
-        title: "Gempa Dirasakan 🌍",
-        body: headline || `Gempa M${magnitude} di ${location}`,
+    const messages = uniqueTokens.map((token) => ({
+      android: {
+        priority: "high"
       },
       data: {
         type: "gempa_dirasakan",
-        magnitude,
-        location,
-        depth,
-        timestamp,
+        magnitude: magnitude || "",
+        location: location || "",
+        depth: depth || "",
+        timestamp: timestamp || "",
         headline: headline || "",
+        title: "Peringatan Gempa Bumi !",
+        body: headline || `Gempa M${magnitude} di ${location}`,
+        send_timestamp: String(Date.now()),
       },
       token,
     }));
@@ -116,37 +131,25 @@ export async function sendGempaDirasakanNotification(
       });
     }
 
-    console.log(
-      `Gempa notification sent: ${successCount} succeeded, ${failureCount} failed`,
-    );
-
     // Remove invalid tokens from database
     if (failedTokens.length > 0) {
       const updates = {};
       for (const token of failedTokens) {
         try {
-          const snap = await db
-            .ref("user_fcm_tokens")
-            .orderByChild("token")
-            .equalTo(token)
-            .once("value");
-          snap.forEach((child) => {
-            updates[`user_fcm_tokens/${child.key}`] = null;
-          });
-        } catch (error) {
-          console.error(`Error removing token: ${token}`, error);
+          if (tokenPathByValue[token]) {
+            updates[tokenPathByValue[token]] = null;
+          }
+        } catch {
         }
       }
 
       if (Object.keys(updates).length > 0) {
         await db.ref().update(updates);
-        console.log(`Removed ${failedTokens.length} invalid tokens`);
       }
     }
 
     return { successCount, failureCount };
   } catch (error) {
-    console.error("Error sending gempa dirasakan notification:", error);
     throw error;
   }
 }
@@ -164,9 +167,7 @@ export async function saveUserFcmToken(userId, token) {
       token,
       updatedAt: admin.database.ServerValue.TIMESTAMP,
     });
-    console.log(`FCM token saved for user: ${userId}`);
   } catch (error) {
-    console.error("Error saving FCM token:", error);
     throw error;
   }
 }
@@ -203,7 +204,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
     }
 
     if (!latest) {
-      console.log("No gempa dirasakan data available");
       return null;
     }
 
@@ -211,7 +211,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
 
     // Check if this is a new event
     if (eventId && eventId === lastKnownEventId) {
-      console.log("Event already notified, skipping");
       return null;
     }
 
@@ -224,7 +223,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
       String(latest.date ?? "") + " " + String(latest.time ?? "");
 
     if (!headline && !magnitude) {
-      console.log("Incomplete gempa data");
       return null;
     }
 
@@ -239,7 +237,6 @@ export async function checkAndNotifyNewGempaDirasakan(lastKnownEventId) {
 
     return eventId;
   } catch (error) {
-    console.error("Error checking for new gempa dirasakan:", error);
     throw error;
   }
 }

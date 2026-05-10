@@ -7,11 +7,11 @@ import {
   Alert,
   Animated,
   PanResponder,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 
@@ -153,9 +153,6 @@ export default function GempaTerdeteksi({
       onLoadingChange?.(true);
       try {
         if (!API_URL) {
-          console.error(
-            "EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL is undefined — restart Metro with --clear",
-          );
           return;
         }
         const url = `${API_URL.trim()}${Date.now()}`;
@@ -201,7 +198,6 @@ export default function GempaTerdeteksi({
           800,
         );
       } catch (e) {
-        console.error("Failed to fetch gempa terdeteksi:", e);
         if (!networkErrorShownRef.current && e instanceof TypeError && (e as Error).message.includes('Network')) {
           networkErrorShownRef.current = true;
           Alert.alert(
@@ -359,77 +355,3 @@ export default function GempaTerdeteksi({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topControls: {
-    position: "absolute",
-    top: 16,
-    left: 10,
-    right: 10,
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 10,
-  },
-  mapButtons: {
-    flexDirection: "row",
-    gap: 6,
-    alignSelf: "flex-end",
-    paddingHorizontal: 14,
-  },
-  mapButton: {
-    backgroundColor: "#0891B2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 333,
-    marginLeft: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  mapButtonText: { color: "#fff", fontSize: 10 },
-  locationCard: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    paddingTop: 12,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-  },
-  dragHandleArea: { alignItems: "center", paddingVertical: 8, marginBottom: 8 },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#1E6F9F",
-    alignSelf: "center",
-  },
-  statsTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 11,
-  },
-  statTopItem: { flex: 1, alignItems: "center", gap: 2 },
-  statTopValue: { fontSize: 14, fontWeight: "700", color: "#000000" },
-  statTopLabel: { fontSize: 12, color: "#000000", fontWeight: "500" },
-  statTopDivider: { width: 1, backgroundColor: "#E0E0E0", marginVertical: 4 },
-  separator: { height: 2, backgroundColor: "#0369A1", marginBottom: 11 },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 4,
-    gap: 10,
-  },
-  infoIcon: { marginTop: 2 },
-  infoTextFlex: { flex: 1 },
-  infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
-  infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
-});

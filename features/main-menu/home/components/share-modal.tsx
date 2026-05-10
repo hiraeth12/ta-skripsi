@@ -71,8 +71,7 @@ export const ShareModal = ({
         message: generateShareText(),
         title: "Bagikan Informasi Gempa",
       });
-    } catch (error) {
-      console.error("Error sharing:", error);
+    } catch {
     }
     onClose();
   };

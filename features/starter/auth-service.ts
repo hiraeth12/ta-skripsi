@@ -10,7 +10,6 @@ export function getAuthInstance() {
       const app = getApp();
       authInstance = getAuth(app);
     } catch (error) {
-      console.error("Failed to get auth instance:", error);
       throw error;
     }
   }

@@ -61,7 +61,6 @@ async function syncLocationsOnce() {
   try {
     const db = getDatabase();
     await db.ref("locations").set(locationsById);
-    console.log("[Sync] Successfully wrote locations using Firebase Admin SDK");
   } catch (error) {
     throw new Error(
       `Failed to write to Firebase Admin: ${error.message}`
@@ -87,9 +86,7 @@ async function syncLocationsOnce() {
 async function run() {
   try {
     const result = await syncLocationsOnce();
-    console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    console.error("Error:", error.message);
     process.exit(1);
   }
 }

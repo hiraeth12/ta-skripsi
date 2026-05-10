@@ -34,17 +34,12 @@ export async function fetchProfileFromFirebase(): Promise<ProfileData> {
     const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
     const user = auth.currentUser;
-    console.log("[Profile] Current user:", user?.uid);
     if (!user) {
       throw new Error("No authenticated user found");
     }
 
     const userPath = `users/${user.uid}`;
     const userRef = ref(database, userPath);
-    console.log("[Profile] Fetching from:", userPath);
-    if (dbUrl) {
-      console.log("[Profile] Using DB URL from env");
-    }
 
     const snapshot = (await Promise.race([
       get(userRef),
@@ -52,8 +47,6 @@ export async function fetchProfileFromFirebase(): Promise<ProfileData> {
         setTimeout(() => reject(new Error("Profile fetch timeout")), 8000)
       ),
     ])) as Awaited<ReturnType<typeof get>>;
-    console.log("[Profile] Snapshot exists:", snapshot.exists());
-    console.log("[Profile] Snapshot data:", snapshot.val());
 
     if (!snapshot.exists()) {
       throw new Error("User profile not found in database");
@@ -69,8 +62,6 @@ export async function fetchProfileFromFirebase(): Promise<ProfileData> {
     const email = userData.email || user.email || "";
     const location = userData.locationName || "Unknown";
 
-    console.log("[Profile] Loaded data:", { name, email, location });
-
     const initials = getInitials(name);
 
     return {
@@ -81,7 +72,6 @@ export async function fetchProfileFromFirebase(): Promise<ProfileData> {
       // phone field is intentionally NOT included
     };
   } catch (error) {
-    console.error("[Profile] Error fetching profile from Firebase:", error);
     // Fallback to empty profile on error
     return {
       name: "User",

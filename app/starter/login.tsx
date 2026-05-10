@@ -1,25 +1,25 @@
+import { styles } from "../../features/starter/styles/login-styles";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 
 import AuthButton from "@/components/auth-button";
 import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { getApp } from "@react-native-firebase/app";
 import {
-  getAuth,
-  signInWithEmailAndPassword,
+    getAuth,
+    signInWithEmailAndPassword,
 } from "@react-native-firebase/auth";
 
 export default function Login() {
@@ -72,25 +72,19 @@ export default function Login() {
         trimmedEmail,
         trimmedPassword,
       );
-      console.log("Login success in ms:", Date.now() - startedAt);
       
       // Save FCM token for push notifications (with timeout - don't block navigation)
       if (result.user?.uid) {
         try {
-          console.log('[Login] Starting FCM token save...');
           await saveFcmTokenToDatabase(result.user.uid);
-          console.log('[Login] FCM token saved successfully');
-        } catch (tokenError) {
-          console.warn('[Login] ⚠️ Failed to save FCM token (continuing anyway):', tokenError);
+        } catch {
           // Don't throw - login should succeed even if token save fails
         }
       }
       
-      console.log('[Login] Navigating to ask-location...');
       router.replace("/starter/ask-location");
     } catch (e) {
       const error = e as { code?: string; message?: string };
-      console.log("Login error:", error?.code, error?.message, e);
       showCustomAlert(
         "Login gagal",
         "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.",
@@ -200,104 +194,3 @@ export default function Login() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#EDEDED",
-  },
-  scrollContainer: {
-    padding: 24,
-    justifyContent: "center",
-    minHeight: "100%",
-  },
-  image: {
-    width: 250,
-    height: 80,
-    alignSelf: "center",
-    marginBottom: 30,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 30,
-    textAlign: "center",
-  },
-  input: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    paddingVertical: 8,
-    color: "#111",
-  },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 8,
-    color: "#111",
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 18,
-  },
-  forgotPassword: {
-    textAlign: "right",
-    color: "#1E6F9F",
-    fontSize: 13,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  signUpText: {
-    textAlign: "right",
-    fontSize: 13,
-    marginTop: 20,
-    color: "#000000",
-  },
-
-  // --- Styles untuk Modal Custom ---
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    width: "85%",
-    padding: 24,
-  },
-  modalIcon: {
-    alignSelf: "center",
-    marginBottom: 12,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  infoDesc: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  infoButton: {
-    backgroundColor: "#1E6F9F",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  infoButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-});
