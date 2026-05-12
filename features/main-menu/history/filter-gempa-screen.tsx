@@ -1,12 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import React, { useState } from "react";
-import {
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import styles from "./styles/filter-gempa-screen";
 
@@ -32,7 +27,7 @@ const CITIES = [
 ];
 
 export default function FilterGempaScreen() {
-  const router = useRouter(); 
+  const router = useRouter();
   const [expandedSection, setExpandedSection] = useState<
     "time" | "location" | null
   >("time");
@@ -42,7 +37,7 @@ export default function FilterGempaScreen() {
     if (expandedSection === section) {
       setExpandedSection(null);
     } else {
-      setExpandedSection(section); 
+      setExpandedSection(section);
     }
   };
 

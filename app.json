@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.myApp"
+      "package": "com.fasyabrhns.myApp"
     },
     "web": {
       "output": "static",

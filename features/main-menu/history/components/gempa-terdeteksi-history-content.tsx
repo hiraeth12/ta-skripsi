@@ -4,13 +4,7 @@ import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  AppState,
-  PanResponder,
-  Text,
-  View,
-} from "react-native";
+import { Animated, AppState, PanResponder, Text, View } from "react-native";
 import styles from "./styles/gempa-terdeteksi-content";
 
 const DB_PATH = "gempa_terdeteksi";
@@ -59,6 +53,8 @@ type Props = {
   onListDataChange?: (items: HistoryListItem[]) => void;
   selectedListEventId?: string | null;
   onListSelectionHandled?: () => void;
+  onCardClose?: () => void;
+  onCardOpen?: () => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
 };
@@ -69,6 +65,8 @@ export function GempaTerdeteksiHistoryContent({
   onListDataChange,
   selectedListEventId,
   onListSelectionHandled,
+  onCardClose,
+  onCardOpen,
   externalSelection,
   isActive = true,
 }: Props) {
@@ -77,6 +75,9 @@ export function GempaTerdeteksiHistoryContent({
   const [showCard, setShowCard] = useState(false);
   const [temporarySelection, setTemporarySelection] =
     useState<QuakeItem | null>(null);
+
+  // --- PERBAIKAN: State penampung tinggi aktual Card
+  const [cardHeight, setCardHeight] = useState(0);
 
   const selectedEventIdRef = useRef<string | null>(null);
   const latestDataSignature = useRef<string | null>(null);
@@ -123,6 +124,7 @@ export function GempaTerdeteksiHistoryContent({
             setShowCard(false);
             temporarySelectionRef.current = null;
             setTemporarySelection(null);
+            onCardClose?.();
           });
         } else {
           Animated.parallel([
@@ -150,6 +152,7 @@ export function GempaTerdeteksiHistoryContent({
     translateY.setValue(600);
     opacity.setValue(0);
     setShowCard(true);
+    onCardOpen?.();
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
@@ -182,13 +185,15 @@ export function GempaTerdeteksiHistoryContent({
           setShowCard(false);
           temporarySelectionRef.current = null;
           setTemporarySelection(null);
+          onCardClose?.();
           callback?.();
         });
       } else {
+        onCardClose?.();
         callback?.();
       }
     },
-    [opacity, translateY],
+    [opacity, translateY, onCardOpen],
   );
 
   const onPressMarker = useCallback(
@@ -231,6 +236,16 @@ export function GempaTerdeteksiHistoryContent({
     (index: number) => onPressMarker(index),
     [onPressMarker],
   );
+
+  useEffect(() => {
+    if (!isActive && showCard) {
+      translateY.setValue(600);
+      opacity.setValue(0);
+      setShowCard(false);
+      setTemporarySelection(null);
+      temporarySelectionRef.current = null;
+    }
+  }, [isActive, showCard, opacity, translateY]);
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
@@ -335,12 +350,14 @@ export function GempaTerdeteksiHistoryContent({
         try {
           app = getApp();
         } catch (appError: any) {
-          throw new Error("Firebase app not initialized - ensure google-services.json is configured");
+          throw new Error(
+            "Firebase app not initialized - ensure google-services.json is configured",
+          );
         }
-        
+
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-        
+
         const refStart = Date.now();
         let snapshot = await get(ref(db, `${DB_PATH}/items`));
         if (!snapshot.exists()) {
@@ -356,7 +373,6 @@ export function GempaTerdeteksiHistoryContent({
           return false;
         }
 
-        // Convert database payload to array and normalize
         const convertStart = Date.now();
         const itemsNode = dbData?.items ?? dbData;
         const candidates = Array.isArray(itemsNode)
@@ -365,10 +381,9 @@ export function GempaTerdeteksiHistoryContent({
             ? (Object.values(itemsNode) as any[])
             : [];
         const convertTime = Date.now() - convertStart;
-        
+
         if (candidates.length === 0) return false;
 
-        // Sort by date/time descending (most recent first)
         const sortStart = Date.now();
         const sorted = [...candidates].sort((a: any, b: any) => {
           const tA = String(a?.time ?? a?.jam ?? "");
@@ -405,7 +420,9 @@ export function GempaTerdeteksiHistoryContent({
             }
             if (isNaN(latitude) || isNaN(longitude)) return null;
 
-            const [tanggal, jamRaw] = String(item?.time ?? item?.tanggal ?? "").split(" ");
+            const [tanggal, jamRaw] = String(
+              item?.time ?? item?.tanggal ?? "",
+            ).split(" ");
             const jam = (jamRaw ?? "").split(".")[0];
             const absLat = Math.abs(latitude).toFixed(2);
             const absLon = Math.abs(longitude).toFixed(2);
@@ -421,7 +438,9 @@ export function GempaTerdeteksiHistoryContent({
               eventId,
               latitude,
               longitude,
-              magnitude: parseFloat(String(item?.mag ?? item?.magnitude ?? "0")).toFixed(1),
+              magnitude: parseFloat(
+                String(item?.mag ?? item?.magnitude ?? "0"),
+              ).toFixed(1),
               wilayah: String(item?.place ?? item?.area ?? item?.lokasi ?? ""),
               tanggal: tanggal ?? "",
               jam: jam ?? "",
@@ -433,12 +452,11 @@ export function GempaTerdeteksiHistoryContent({
           })
           .filter((item: QuakeItem | null): item is QuakeItem => Boolean(item));
         const normalizeTime = Date.now() - normalizeStart;
-        
 
         if (normalized.length === 0) return false;
 
         const signature = normalized.map((item) => item.eventId).join("|");
-        
+
         if (signature === latestDataSignature.current) {
           return false;
         }
@@ -569,12 +587,20 @@ export function GempaTerdeteksiHistoryContent({
         }
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
+        isCardOpen={showCard}
+        // --- PERBAIKAN: Kirim cardHeight aktual ke Map
+        cardHeight={cardHeight}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
 
       {showCard && selectedQuake && (
         <Animated.View
+          // --- PERBAIKAN: Mengukur layout card
+          onLayout={(event) => {
+            const { height } = event.nativeEvent.layout;
+            if (height > 0) setCardHeight(height);
+          }}
           style={[
             styles.locationCard,
             { transform: [{ translateY }], opacity },

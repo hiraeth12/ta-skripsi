@@ -6,16 +6,16 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Animated,
-    AppState,
-    Dimensions,
-    Image,
-    Modal,
-    PanResponder,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  AppState,
+  Dimensions,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import styles from "./styles/gempa-dirasakan-history-content";
 
@@ -85,6 +85,8 @@ type Props = {
   onListDataChange?: (items: HistoryListItem[]) => void;
   selectedListEventId?: string | null;
   onListSelectionHandled?: () => void;
+  onCardClose?: () => void;
+  onCardOpen?: () => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
 };
@@ -95,6 +97,8 @@ export function GempaDirasakanHistoryContent({
   onListDataChange,
   selectedListEventId,
   onListSelectionHandled,
+  onCardClose,
+  onCardOpen,
   externalSelection,
   isActive = true,
 }: Props) {
@@ -105,6 +109,9 @@ export function GempaDirasakanHistoryContent({
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [temporarySelection, setTemporarySelection] =
     useState<QuakeItem | null>(null);
+
+  // --- PERBAIKAN: State untuk menampung tinggi aktual Card
+  const [cardHeight, setCardHeight] = useState(0);
 
   const selectedEventIdRef = useRef<string | null>(null);
   const latestDataSignature = useRef<string | null>(null);
@@ -154,6 +161,7 @@ export function GempaDirasakanHistoryContent({
             setShowCard(false);
             temporarySelectionRef.current = null;
             setTemporarySelection(null);
+            onCardClose?.();
           });
         } else {
           Animated.parallel([
@@ -181,6 +189,7 @@ export function GempaDirasakanHistoryContent({
     translateY.setValue(600);
     opacity.setValue(0);
     setShowCard(true);
+    onCardOpen?.();
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
@@ -213,13 +222,15 @@ export function GempaDirasakanHistoryContent({
           setShowCard(false);
           temporarySelectionRef.current = null;
           setTemporarySelection(null);
+          onCardClose?.();
           callback?.();
         });
       } else {
+        onCardClose?.();
         callback?.();
       }
     },
-    [opacity, translateY],
+    [opacity, translateY, onCardOpen],
   );
 
   const onPressMarker = useCallback(
@@ -262,6 +273,16 @@ export function GempaDirasakanHistoryContent({
     (index: number) => onPressMarker(index),
     [onPressMarker],
   );
+
+  useEffect(() => {
+    if (!isActive && showCard) {
+      translateY.setValue(600);
+      opacity.setValue(0);
+      setShowCard(false);
+      setTemporarySelection(null);
+      temporarySelectionRef.current = null;
+    }
+  }, [isActive, showCard, opacity, translateY]);
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
@@ -368,12 +389,14 @@ export function GempaDirasakanHistoryContent({
         try {
           app = getApp();
         } catch (appError: any) {
-          throw new Error("Firebase app not initialized - ensure google-services.json is configured");
+          throw new Error(
+            "Firebase app not initialized - ensure google-services.json is configured",
+          );
         }
-        
+
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-        
+
         const refStart = Date.now();
         let snapshot = await get(ref(db, `${DB_PATH}/items`));
         if (!snapshot.exists()) {
@@ -389,7 +412,6 @@ export function GempaDirasakanHistoryContent({
           return false;
         }
 
-        // Convert database payload to array and normalize
         const convertStart = Date.now();
         const itemsNode = dbData?.items ?? dbData;
         const candidates = Array.isArray(itemsNode)
@@ -398,10 +420,9 @@ export function GempaDirasakanHistoryContent({
             ? (Object.values(itemsNode) as any[])
             : [];
         const convertTime = Date.now() - convertStart;
-        
+
         if (candidates.length === 0) return false;
 
-        // Sort by recency descending (most recent first)
         const sortStart = Date.now();
         const sorted = [...candidates].sort((a: any, b: any) => {
           const keyA = String(
@@ -440,7 +461,6 @@ export function GempaDirasakanHistoryContent({
               return numeric;
             };
 
-            // Prefer point.coordinates because it usually keeps signed lon,lat from BMKG
             const coordStr = String(candidate?.point?.coordinates ?? "");
             const [lonStr, latStr] = coordStr.split(",");
 
@@ -499,7 +519,13 @@ export function GempaDirasakanHistoryContent({
               longitude,
               distanceKm,
               magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-              wilayah: String(candidate?.wilayah ?? candidate?.area ?? candidate?.lokasi ?? candidate?.place ?? ""),
+              wilayah: String(
+                candidate?.wilayah ??
+                  candidate?.area ??
+                  candidate?.lokasi ??
+                  candidate?.place ??
+                  "",
+              ),
               tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
               jam: String(candidate?.jam ?? candidate?.time ?? ""),
               kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
@@ -512,12 +538,11 @@ export function GempaDirasakanHistoryContent({
           .filter((item): item is QuakeItem => Boolean(item))
           .slice(0, MAX_POINTS);
         const normalizeTime = Date.now() - normalizeStart;
-        
 
         if (normalized.length === 0) return false;
 
         const signature = normalized.map((item) => item.eventId).join("|");
-        
+
         if (signature === latestDataSignature.current) {
           return false;
         }
@@ -648,12 +673,20 @@ export function GempaDirasakanHistoryContent({
         }
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
+        isCardOpen={showCard}
+        // --- PERBAIKAN: Mengirim hasil ukur layout ke map
+        cardHeight={cardHeight}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
 
       {showCard && selectedQuake && (
         <Animated.View
+          // --- PERBAIKAN: Mengukur tinggi aktual dari konten card
+          onLayout={(event) => {
+            const { height } = event.nativeEvent.layout;
+            if (height > 0) setCardHeight(height);
+          }}
           style={[
             styles.locationCard,
             { transform: [{ translateY }], opacity },
@@ -662,7 +695,17 @@ export function GempaDirasakanHistoryContent({
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
-
+          <View
+            style={{
+              width: 40,
+              height: 5,
+              backgroundColor: "#CBD5E1",
+              borderRadius: 3,
+              alignSelf: "center",
+              marginTop: 8,
+              marginBottom: 12,
+            }}
+          />
           <View style={styles.statsTopRow}>
             <View style={styles.statTopItem}>
               <MaterialCommunityIcons
