@@ -49,9 +49,10 @@ app-example
 
 node_modules
 
-# Firebase service account (NEVER commit!)
+# Firebase (NEVER commit!)
 firebase-service-account.json
 *.service-account.json
+google-services.json
 
 markdown/
 scripts/

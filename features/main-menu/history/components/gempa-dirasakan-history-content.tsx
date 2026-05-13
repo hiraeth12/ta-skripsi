@@ -15,31 +15,21 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import styles from "./styles/gempa-dirasakan-history-content";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
-
-const DB_PATH = "gempa_dirasakan";
-const MIN_POLL_MS = 10_000;
-const MAX_POLL_MS = 60_000;
+const DB_PATH = "gempa_dirasakan/items";
+const MIN_POLL_MS = 30_000;
+const MAX_POLL_MS = 120_000;
 const MAX_POINTS = 20;
-const REFERENCE_LOCATION = {
-  latitude: -6.9175,
-  longitude: 107.6191,
-};
+const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
 
-function withCacheBuster(url: string) {
-  const base = url.trim();
-  const separator = base.includes("?")
-    ? base.endsWith("?") || base.endsWith("&")
-      ? ""
-      : "&"
-    : "?";
-  return `${base}${separator}t=${Date.now()}`;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type QuakeItem = {
   eventId: string;
@@ -91,6 +81,89 @@ type Props = {
   isActive?: boolean;
 };
 
+// ─── Module-level helpers ─────────────────────────────────────────────────────
+
+function parseWithHemisphere(value: unknown, negToken: string, posToken: string): number {
+  const raw = String(value ?? "").trim();
+  if (!raw) return NaN;
+  const numeric = parseFloat(raw.replace(",", "."));
+  if (isNaN(numeric)) return NaN;
+  const upper = raw.toUpperCase();
+  if (upper.includes(negToken)) return -Math.abs(numeric);
+  if (upper.includes(posToken)) return Math.abs(numeric);
+  return numeric;
+}
+
+function parseQuakeCoords(candidate: any): { latitude: number; longitude: number } | null {
+  const coordStr = String(candidate?.point?.coordinates ?? "");
+  const [lonStr, latStr] = coordStr.split(",");
+
+  let latitude = parseWithHemisphere(latStr, "LS", "LU");
+  if (isNaN(latitude)) latitude = parseWithHemisphere(candidate?.latitude ?? candidate?.lat, "LS", "LU");
+  if (isNaN(latitude)) latitude = parseWithHemisphere(candidate?.coordinates?.latitude, "LS", "LU");
+
+  let longitude = parseWithHemisphere(lonStr, "BB", "BT");
+  if (isNaN(longitude)) longitude = parseWithHemisphere(candidate?.longitude ?? candidate?.lon, "BB", "BT");
+  if (isNaN(longitude)) longitude = parseWithHemisphere(candidate?.coordinates?.longitude, "BB", "BT");
+
+  if (isNaN(latitude) || isNaN(longitude)) return null;
+  return { latitude, longitude };
+}
+
+function buildQuakeItem(candidate: any, index: number, haversine: (a: number, b: number, c: number, d: number) => number): QuakeItem | null {
+  const coords = parseQuakeCoords(candidate);
+  if (!coords) return null;
+  const { latitude, longitude } = coords;
+
+  const distanceKm = haversine(
+    REFERENCE_LOCATION.latitude,
+    REFERENCE_LOCATION.longitude,
+    latitude,
+    longitude,
+  ).toFixed(1);
+
+  return {
+    eventId: String(
+      candidate?.eventId ?? candidate?.id ?? candidate?.eventid ??
+      `${candidate?.tanggal ?? candidate?.date ?? ""}-${candidate?.jam ?? candidate?.time ?? ""}-${index}`,
+    ),
+    latitude,
+    longitude,
+    distanceKm,
+    magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
+    wilayah: String(candidate?.wilayah ?? candidate?.area ?? candidate?.lokasi ?? candidate?.place ?? ""),
+    tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
+    jam: String(candidate?.jam ?? candidate?.time ?? ""),
+    kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
+    felt: String(candidate?.felt ?? ""),
+    latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
+    lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+    shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
+  };
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const StatItem = ({ icon, value, label }: { icon: string; value: string; label: string }) => (
+  <View style={styles.statTopItem}>
+    <MaterialCommunityIcons name={icon as any} size={20} color="#0369A1" />
+    <Text style={styles.statTopValue}>{value}</Text>
+    <Text style={styles.statTopLabel}>{label}</Text>
+  </View>
+);
+
+const DetailItem = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
+  <View style={styles.infoRow}>
+    <Ionicons name={icon as any} size={18} color="#1E6F9F" style={styles.infoIcon} />
+    <View style={{ flex: 1 }}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  </View>
+);
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function GempaDirasakanHistoryContent({
   tabBar,
   onLoadingChange,
@@ -103,37 +176,142 @@ export function GempaDirasakanHistoryContent({
   isActive = true,
 }: Props) {
   const { haversineDistanceKm } = useHaversine();
+
+  // ── State ──────────────────────────────────────────────────────────────────
+
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
-  const [temporarySelection, setTemporarySelection] =
-    useState<QuakeItem | null>(null);
 
-  // --- PERBAIKAN: State untuk menampung tinggi aktual Card
-  const [cardHeight, setCardHeight] = useState(0);
+  // Single source of truth for what's displayed in the card.
+  // `selectedIndex` points into `quakes[]`; when the event isn't in the list
+  // (external selection / not-yet-loaded), `overrideQuake` holds the data.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
-  const selectedEventIdRef = useRef<string | null>(null);
-  const latestDataSignature = useRef<string | null>(null);
-  const lastExternalSelectionIdRef = useRef<string | null>(null);
-  const temporarySelectionRef = useRef<QuakeItem | null>(null);
-  const isFirstLoad = useRef(true);
-  const isFetching = useRef(false);
+  // ── Refs ───────────────────────────────────────────────────────────────────
+
+  const mapRef = useRef<MapViewType | null>(null);
   const showCardRef = useRef(false);
+  const selectedEventIdRef = useRef<string | null>(null);
+  const lastExternalIdRef = useRef<string | null>(null);
+  const dataSignatureRef = useRef<string | null>(null);
+  const isFetching = useRef(false);
+  const isFirstLoad = useRef(true);
+  const isMountedRef = useRef(true);
   const pollDelayRef = useRef(MIN_POLL_MS);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const mapRef = useRef<MapViewType | null>(null);
+
+  // Animation values
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
-  const selectedQuake =
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  const activeQuake: QuakeItem | null =
     selectedIndex !== null && quakes[selectedIndex]
       ? quakes[selectedIndex]
-      : temporarySelection;
-  const shakeMapUrl = selectedQuake?.shakemap
-    ? `${SHAKEMAP_BASE}/${selectedQuake.shakemap}`
+      : overrideQuake;
+
+  const shakeMapUrl = activeQuake?.shakemap
+    ? `${SHAKEMAP_BASE}/${activeQuake.shakemap}`
     : null;
+
+  const markerCoordinates = useMemo(
+    () =>
+      quakes.map((q) => ({
+        latitude: q.latitude,
+        longitude: q.longitude,
+        magnitude: q.magnitude,
+        depth: q.kedalaman,
+        eventId: q.eventId,
+      })),
+    [quakes],
+  );
+
+  const listItems = useMemo(
+    () =>
+      quakes.map((q) => ({
+        eventId: q.eventId,
+        magnitude: q.magnitude,
+        lokasi: q.wilayah,
+        waktu: `${q.jam} • ${q.tanggal}`,
+        jarak: `${q.distanceKm} km dari Bandung`,
+      })),
+    [quakes],
+  );
+
+  // ── Card animation ─────────────────────────────────────────────────────────
+
+  const openCard = useCallback(() => {
+    translateY.setValue(600);
+    opacity.setValue(0);
+    showCardRef.current = true;
+    setShowCard(true);
+    onCardOpen?.();
+    Animated.parallel([
+      Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, [translateY, opacity, onCardOpen]);
+
+  const dismissCard = useCallback(
+    (callback?: () => void) => {
+      if (!showCardRef.current) {
+        onCardClose?.();
+        callback?.();
+        return;
+      }
+
+      // Re-centre map without offset when card closes
+      if (activeQuake) {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: activeQuake.latitude,
+            longitude: activeQuake.longitude,
+            latitudeDelta: 2.5,
+            longitudeDelta: 2.5,
+          },
+          400,
+        );
+      }
+
+      Animated.parallel([
+        Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      ]).start(() => {
+        showCardRef.current = false;
+        setShowCard(false);
+        setSelectedIndex(null);        // FIX: clear so polling can't reopen card
+        setOverrideQuake(null);
+        selectedEventIdRef.current = null; // FIX: clear so polling has nothing to track
+        lastExternalIdRef.current = null;  // FIX: allow same item to reopen card after dismiss
+        onCardClose?.();
+        callback?.();
+      });
+    },
+    [translateY, opacity, onCardClose, activeQuake],
+  );
+
+  // ── Fly-to-marker with offset ──────────────────────────────────────────────
+
+  const flyToAndOpen = useCallback(
+    (quake: QuakeItem, delay = 0) => {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: quake.latitude - 0.15,
+          longitude: quake.longitude,
+          latitudeDelta: 2.5,
+          longitudeDelta: 2.5,
+        },
+        400,
+      );
+      setTimeout(openCard, delay || 300);
+    },
+    [openCard],
+  );
+
+  // ── PanResponder ───────────────────────────────────────────────────────────
 
   const panResponder = useRef(
     PanResponder.create({
@@ -146,126 +324,42 @@ export function GempaDirasakanHistoryContent({
       },
       onPanResponderRelease: (_, gs) => {
         if (gs.dy > 80) {
+          // Dragged far enough — dismiss
           Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: 600,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 180,
-              useNativeDriver: true,
-            }),
+            Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
           ]).start(() => {
+            showCardRef.current = false;
             setShowCard(false);
-            temporarySelectionRef.current = null;
-            setTemporarySelection(null);
+            setSelectedIndex(null);        // FIX
+            setOverrideQuake(null);
+            selectedEventIdRef.current = null; // FIX
+            lastExternalIdRef.current = null;  // FIX: allow same item to reopen card after swipe-dismiss
             onCardClose?.();
           });
         } else {
+          // Snap back
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
+            Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
           ]).start();
         }
       },
     }),
   ).current;
 
-  useEffect(() => {
-    showCardRef.current = showCard;
-  }, [showCard]);
-
-  useEffect(() => {
-    temporarySelectionRef.current = temporarySelection;
-  }, [temporarySelection]);
-
-  const openCard = useCallback(() => {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    setShowCard(true);
-    onCardOpen?.();
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [opacity, translateY]);
-
-  const dismissCard = useCallback(
-    (callback?: () => void) => {
-      if (showCardRef.current) {
-        Animated.parallel([
-          Animated.timing(translateY, {
-            toValue: 600,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0,
-            duration: 180,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          setShowCard(false);
-          temporarySelectionRef.current = null;
-          setTemporarySelection(null);
-          onCardClose?.();
-          callback?.();
-        });
-      } else {
-        onCardClose?.();
-        callback?.();
-      }
-    },
-    [opacity, translateY, onCardOpen],
-  );
+  // ── Marker press ──────────────────────────────────────────────────────────
 
   const onPressMarker = useCallback(
     (index: number) => {
-      if (!quakes[index]) return;
-      selectedEventIdRef.current = quakes[index].eventId;
-      setTemporarySelection(null);
+      const quake = quakes[index];
+      if (!quake) return;
+      selectedEventIdRef.current = quake.eventId;
+      setOverrideQuake(null);
       setSelectedIndex(index);
-      openCard();
+      flyToAndOpen(quake);
     },
-    [openCard, quakes],
-  );
-
-  const markerCoordinates = useMemo(
-    () =>
-      quakes.map((quake) => ({
-        latitude: quake.latitude,
-        longitude: quake.longitude,
-        magnitude: quake.magnitude,
-        depth: quake.kedalaman,
-        eventId: quake.eventId,
-      })),
-    [quakes],
-  );
-
-  const listItems = useMemo(
-    () =>
-      quakes.map((quake) => ({
-        eventId: quake.eventId,
-        magnitude: quake.magnitude,
-        lokasi: quake.wilayah,
-        waktu: `${quake.jam} • ${quake.tanggal}`,
-        jarak: `${quake.distanceKm} km dari Bandung`,
-      })),
-    [quakes],
+    [quakes, flyToAndOpen],
   );
 
   const handleMapPress = useCallback(() => dismissCard(), [dismissCard]);
@@ -274,337 +368,166 @@ export function GempaDirasakanHistoryContent({
     [onPressMarker],
   );
 
+  // ── Hide card when tab goes inactive ──────────────────────────────────────
+
   useEffect(() => {
-    if (!isActive && showCard) {
+    if (!isActive) {
       translateY.setValue(600);
       opacity.setValue(0);
+      showCardRef.current = false;
       setShowCard(false);
-      setTemporarySelection(null);
-      temporarySelectionRef.current = null;
+      setSelectedIndex(null);        // FIX
+      setOverrideQuake(null);
+      selectedEventIdRef.current = null; // FIX
+      lastExternalIdRef.current = null;  // FIX: so re-activating tab doesn't block same-item re-open
     }
-  }, [isActive, showCard, opacity, translateY]);
+  }, [isActive, translateY, opacity]);
+
+  // ── External selection (from history list row press) ─────────────────────
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
-    if (lastExternalSelectionIdRef.current === externalSelection.eventId)
-      return;
+    if (lastExternalIdRef.current === externalSelection.eventId) return;
+    if (!isActive) return;
+    lastExternalIdRef.current = externalSelection.eventId;
 
-    const targetIndex = quakes.findIndex(
-      (quake) => quake.eventId === externalSelection.eventId,
-    );
-    const targetQuake: QuakeItem = {
-      eventId: externalSelection.eventId,
-      latitude: externalSelection.latitude,
-      longitude: externalSelection.longitude,
-      distanceKm: externalSelection.distanceKm,
-      magnitude: externalSelection.magnitude,
-      wilayah: externalSelection.lokasi,
-      tanggal: externalSelection.tanggal,
-      jam: externalSelection.jam,
-      kedalaman: externalSelection.kedalaman,
-      felt: externalSelection.felt,
-      latText: `${Math.abs(externalSelection.latitude).toFixed(2)}°${externalSelection.latitude < 0 ? "LS" : "LU"}`,
-      lonText: `${Math.abs(externalSelection.longitude).toFixed(2)}°${externalSelection.longitude >= 0 ? "BT" : "BB"}`,
-      shakemap: externalSelection.shakemap,
-    };
+    const targetIndex = quakes.findIndex((q) => q.eventId === externalSelection.eventId);
 
-    selectedEventIdRef.current = externalSelection.eventId;
-    lastExternalSelectionIdRef.current = externalSelection.eventId;
+    const quake: QuakeItem =
+      targetIndex >= 0
+        ? quakes[targetIndex]
+        : {
+            eventId: externalSelection.eventId,
+            latitude: externalSelection.latitude,
+            longitude: externalSelection.longitude,
+            distanceKm: externalSelection.distanceKm,
+            magnitude: externalSelection.magnitude,
+            wilayah: externalSelection.lokasi,
+            tanggal: externalSelection.tanggal,
+            jam: externalSelection.jam,
+            kedalaman: externalSelection.kedalaman,
+            felt: externalSelection.felt,
+            latText: `${Math.abs(externalSelection.latitude).toFixed(2)}°${externalSelection.latitude < 0 ? "LS" : "LU"}`,
+            lonText: `${Math.abs(externalSelection.longitude).toFixed(2)}°${externalSelection.longitude >= 0 ? "BT" : "BB"}`,
+            shakemap: externalSelection.shakemap,
+          };
+
+    selectedEventIdRef.current = quake.eventId;
 
     if (targetIndex >= 0) {
-      setTemporarySelection(null);
+      setOverrideQuake(null);
       setSelectedIndex(targetIndex);
-      openCard();
-      mapRef.current?.animateToRegion(
-        {
-          latitude: targetQuake.latitude,
-          longitude: targetQuake.longitude,
-          latitudeDelta: 2,
-          longitudeDelta: 2,
-        },
-        800,
-      );
+    } else {
+      setSelectedIndex(null);
+      setOverrideQuake(quake);
+    }
+
+    flyToAndOpen(quake);
+    onListSelectionHandled?.();
+  }, [externalSelection, isActive, quakes, flyToAndOpen, onListSelectionHandled]);
+
+  // ── selectedListEventId (direct list row tap) ─────────────────────────────
+
+  useEffect(() => {
+    if (!selectedListEventId || quakes.length === 0) return;
+    const targetIndex = quakes.findIndex((q) => q.eventId === selectedListEventId);
+    if (targetIndex < 0) {
       onListSelectionHandled?.();
       return;
     }
-
-    setSelectedIndex(null);
-    setTemporarySelection(targetQuake);
-    openCard();
-    mapRef.current?.animateToRegion(
-      {
-        latitude: targetQuake.latitude,
-        longitude: targetQuake.longitude,
-        latitudeDelta: 2,
-        longitudeDelta: 2,
-      },
-      800,
-    );
+    const quake = quakes[targetIndex];
+    selectedEventIdRef.current = quake.eventId;
+    setOverrideQuake(null);
+    setSelectedIndex(targetIndex);
+    flyToAndOpen(quake);
     onListSelectionHandled?.();
-  }, [externalSelection, onListSelectionHandled, openCard, quakes]);
+  }, [selectedListEventId, quakes, flyToAndOpen, onListSelectionHandled]);
+
+  // ── List data callback ─────────────────────────────────────────────────────
 
   useEffect(() => {
     onListDataChange?.(listItems);
   }, [listItems, onListDataChange]);
 
-  useEffect(() => {
-    if (!selectedListEventId || quakes.length === 0) return;
-    const targetIndex = quakes.findIndex(
-      (quake) => quake.eventId === selectedListEventId,
-    );
-    if (targetIndex < 0) {
-      onListSelectionHandled?.();
-      return;
-    }
-
-    const targetQuake = quakes[targetIndex];
-    selectedEventIdRef.current = targetQuake.eventId;
-    setTemporarySelection(null);
-    setSelectedIndex(targetIndex);
-    openCard();
-    mapRef.current?.animateToRegion(
-      {
-        latitude: targetQuake.latitude,
-        longitude: targetQuake.longitude,
-        latitudeDelta: 2,
-        longitudeDelta: 2,
-      },
-      500,
-    );
-    onListSelectionHandled?.();
-  }, [onListSelectionHandled, openCard, quakes, selectedListEventId]);
+  // ── Polling ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!isActive) return;
     isMountedRef.current = true;
 
-    async function fetchLatestQuake(silent = true): Promise<boolean> {
+    async function fetchQuakes(silent = true): Promise<boolean> {
       if (isFetching.current) return false;
       isFetching.current = true;
-
-      const startTime = Date.now();
       if (!silent) onLoadingChange?.(true);
 
       try {
-        let app;
-        try {
-          app = getApp();
-        } catch (appError: any) {
-          throw new Error(
-            "Firebase app not initialized - ensure google-services.json is configured",
-          );
-        }
-
+        const app = getApp();
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
-        const refStart = Date.now();
-        let snapshot = await get(ref(db, `${DB_PATH}/items`));
-        if (!snapshot.exists()) {
-          snapshot = await get(ref(db, DB_PATH));
-        }
+        const snapshot = await get(ref(db, DB_PATH));
+        if (!snapshot.exists() || !isMountedRef.current) return false;
 
-        if (!snapshot.exists()) {
-          return false;
-        }
-
-        const dbData = snapshot.val();
-        if (!dbData || typeof dbData !== "object") {
-          return false;
-        }
-
-        const convertStart = Date.now();
-        const itemsNode = dbData?.items ?? dbData;
-        const candidates = Array.isArray(itemsNode)
-          ? itemsNode
-          : itemsNode && typeof itemsNode === "object"
-            ? (Object.values(itemsNode) as any[])
+        const raw = snapshot.val();
+        const candidates: any[] = Array.isArray(raw)
+          ? raw
+          : raw && typeof raw === "object"
+            ? Object.values(raw)
             : [];
-        const convertTime = Date.now() - convertStart;
 
         if (candidates.length === 0) return false;
 
-        const sortStart = Date.now();
-        const sorted = [...candidates].sort((a: any, b: any) => {
-          const keyA = String(
-            a?.eventid ??
-              a?.eventId ??
-              a?.timesent ??
-              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
-          );
-          const keyB = String(
-            b?.eventid ??
-              b?.eventId ??
-              b?.timesent ??
-              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
-          );
-          return keyB.localeCompare(keyA);
-        });
-        const sortTime = Date.now() - sortStart;
-
-        const normalizeStart = Date.now();
-        const normalized = sorted
-          .map((candidate, index): QuakeItem | null => {
-            const parseWithHemisphere = (
-              value: unknown,
-              negativeToken: string,
-              positiveToken: string,
-            ) => {
-              const raw = String(value ?? "").trim();
-              if (!raw) return NaN;
-
-              const numeric = parseFloat(raw.replace(",", "."));
-              if (isNaN(numeric)) return NaN;
-
-              const upper = raw.toUpperCase();
-              if (upper.includes(negativeToken)) return -Math.abs(numeric);
-              if (upper.includes(positiveToken)) return Math.abs(numeric);
-              return numeric;
-            };
-
-            const coordStr = String(candidate?.point?.coordinates ?? "");
-            const [lonStr, latStr] = coordStr.split(",");
-
-            let latitude = parseWithHemisphere(latStr, "LS", "LU");
-            let longitude = parseWithHemisphere(lonStr, "BB", "BT");
-
-            if (isNaN(latitude)) {
-              latitude = parseWithHemisphere(candidate?.latitude, "LS", "LU");
-            }
-            if (isNaN(latitude)) {
-              latitude = parseWithHemisphere(candidate?.lat, "LS", "LU");
-            }
-            if (isNaN(latitude)) {
-              latitude = parseWithHemisphere(
-                candidate?.coordinates?.latitude,
-                "LS",
-                "LU",
-              );
-            }
-
-            if (isNaN(longitude)) {
-              longitude = parseWithHemisphere(candidate?.longitude, "BB", "BT");
-            }
-            if (isNaN(longitude)) {
-              longitude = parseWithHemisphere(candidate?.lon, "BB", "BT");
-            }
-            if (isNaN(longitude)) {
-              longitude = parseWithHemisphere(
-                candidate?.coordinates?.longitude,
-                "BB",
-                "BT",
-              );
-            }
-
-            if (isNaN(latitude) || isNaN(longitude)) return null;
-
-            const absLat = Math.abs(latitude).toFixed(2);
-            const absLon = Math.abs(longitude).toFixed(2);
-            const distanceKm = haversineDistanceKm(
-              REFERENCE_LOCATION.latitude,
-              REFERENCE_LOCATION.longitude,
-              latitude,
-              longitude,
-            ).toFixed(1);
-
-            const eventId = String(
-              candidate?.eventId ??
-                candidate?.id ??
-                candidate?.eventid ??
-                `${candidate?.tanggal ?? ""}-${candidate?.jam ?? ""}-${index}`,
-            );
-
-            return {
-              eventId,
-              latitude,
-              longitude,
-              distanceKm,
-              magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-              wilayah: String(
-                candidate?.wilayah ??
-                  candidate?.area ??
-                  candidate?.lokasi ??
-                  candidate?.place ??
-                  "",
-              ),
-              tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
-              jam: String(candidate?.jam ?? candidate?.time ?? ""),
-              kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
-              felt: String(candidate?.felt ?? ""),
-              latText: `${absLat}\u00B0${latitude < 0 ? "LS" : "LU"}`,
-              lonText: `${absLon}\u00B0${longitude >= 0 ? "BT" : "BB"}`,
-              shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
-            };
+        const normalized = candidates
+          .sort((a, b) => {
+            const keyA = String(a?.eventid ?? a?.eventId ?? a?.timesent ?? `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`);
+            const keyB = String(b?.eventid ?? b?.eventId ?? b?.timesent ?? `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`);
+            return keyB.localeCompare(keyA);
           })
-          .filter((item): item is QuakeItem => Boolean(item))
+          .reduce<QuakeItem[]>((acc, candidate, index) => {
+            const item = buildQuakeItem(candidate, index, haversineDistanceKm);
+            if (item) acc.push(item);
+            return acc;
+          }, [])
           .slice(0, MAX_POINTS);
-        const normalizeTime = Date.now() - normalizeStart;
 
         if (normalized.length === 0) return false;
 
-        const signature = normalized.map((item) => item.eventId).join("|");
+        const signature = normalized.map((q) => q.eventId).join("|");
+        if (signature === dataSignatureRef.current) return false;
+        dataSignatureRef.current = signature;
 
-        if (signature === latestDataSignature.current) {
-          return false;
+        const foundIndex = selectedEventIdRef.current
+          ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
+          : -1;
+
+        if (overrideQuake && foundIndex >= 0) {
+          setOverrideQuake(null);
         }
-        latestDataSignature.current = signature;
-
-        let foundIndex = -1;
-        if (selectedEventIdRef.current) {
-          foundIndex = normalized.findIndex(
-            (item) => item.eventId === selectedEventIdRef.current,
-          );
-        }
-
-        const currentTemporarySelection = temporarySelectionRef.current;
-        const hasTemporarySelection =
-          currentTemporarySelection?.eventId !== undefined &&
-          currentTemporarySelection.eventId === selectedEventIdRef.current;
-        const keepTemporarySelection = hasTemporarySelection && foundIndex < 0;
 
         setQuakes(normalized);
 
-        if (keepTemporarySelection) {
-          setSelectedIndex(null);
-          return true;
+        // Only touch selection when card is open — prevents reopening after dismiss
+        if (!showCardRef.current) return true;
+
+        if (foundIndex >= 0) {
+          setSelectedIndex(foundIndex);
         }
 
-        const nextSelectedIndex = foundIndex >= 0 ? foundIndex : 0;
-        const focusQuake = normalized[nextSelectedIndex];
-        selectedEventIdRef.current = focusQuake?.eventId ?? null;
-        setTemporarySelection(null);
-        setSelectedIndex(nextSelectedIndex);
-
-        if (!focusQuake) {
-          return true;
-        }
-
-        const animStart = Date.now();
-        if (isFirstLoad.current) {
+        if (isFirstLoad.current && normalized[0]) {
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
             {
-              latitude: focusQuake.latitude,
-              longitude: focusQuake.longitude,
-              latitudeDelta: 2,
-              longitudeDelta: 2,
+              latitude: normalized[0].latitude - 0.15,
+              longitude: normalized[0].longitude,
+              latitudeDelta: 2.5,
+              longitudeDelta: 2.5,
             },
             800,
           );
-        } else {
-          mapRef.current?.animateToRegion(
-            {
-              latitude: focusQuake.latitude,
-              longitude: focusQuake.longitude,
-              latitudeDelta: 2,
-              longitudeDelta: 2,
-            },
-            600,
-          );
         }
-        const animTime = Date.now() - animStart;
 
         return true;
-      } catch (e) {
+      } catch {
         return false;
       } finally {
         if (!silent) onLoadingChange?.(false);
@@ -613,36 +536,28 @@ export function GempaDirasakanHistoryContent({
     }
 
     function clearPollTimer() {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
+      if (pollTimerRef.current) { clearTimeout(pollTimerRef.current); pollTimerRef.current = null; }
     }
 
     function scheduleNextPoll(changed: boolean) {
       if (!isMountedRef.current) return;
-
       pollDelayRef.current = changed
         ? MIN_POLL_MS
         : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
-
       clearPollTimer();
       pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
     }
 
     async function runPollingLoop() {
-      if (!isMountedRef.current) return;
-      const changed = await fetchLatestQuake(true);
+      if (!isMountedRef.current || !isActive) return;
+      const changed = await fetchQuakes(true);
       scheduleNextPoll(changed);
     }
 
-    fetchLatestQuake(!isActive).then((changed) => {
-      if (!isMountedRef.current) return;
-      scheduleNextPoll(changed);
-    });
+    fetchQuakes(false).then(scheduleNextPoll);
 
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && isActive) {
+      if (state === "active" && isMountedRef.current && isActive) {
         pollDelayRef.current = MIN_POLL_MS;
         clearPollTimer();
         runPollingLoop();
@@ -656,158 +571,69 @@ export function GempaDirasakanHistoryContent({
     };
   }, [isActive, onLoadingChange]);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <View style={styles.container}>
       <EarthquakeMap
         mapRef={mapRef}
         markerCoordinates={markerCoordinates}
         temporaryMarkerCoordinate={
-          temporarySelection && selectedIndex === null
+          overrideQuake && selectedIndex === null
             ? {
-                latitude: temporarySelection.latitude,
-                longitude: temporarySelection.longitude,
-                magnitude: temporarySelection.magnitude,
-                depth: temporarySelection.kedalaman,
+                latitude: overrideQuake.latitude,
+                longitude: overrideQuake.longitude,
+                magnitude: overrideQuake.magnitude,
+                depth: overrideQuake.kedalaman,
               }
             : null
         }
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
         isCardOpen={showCard}
-        // --- PERBAIKAN: Mengirim hasil ukur layout ke map
-        cardHeight={cardHeight}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
 
-      {showCard && selectedQuake && (
+      {showCard && activeQuake && (
         <Animated.View
-          // --- PERBAIKAN: Mengukur tinggi aktual dari konten card
-          onLayout={(event) => {
-            const { height } = event.nativeEvent.layout;
-            if (height > 0) setCardHeight(height);
-          }}
-          style={[
-            styles.locationCard,
-            { transform: [{ translateY }], opacity },
-          ]}
+          style={[styles.locationCard, { transform: [{ translateY }], opacity }]}
         >
+          {/* Drag handle */}
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
-          <View
-            style={{
-              width: 40,
-              height: 5,
-              backgroundColor: "#CBD5E1",
-              borderRadius: 3,
-              alignSelf: "center",
-              marginTop: 8,
-              marginBottom: 12,
-            }}
-          />
+
+          {/* Stats row */}
           <View style={styles.statsTopRow}>
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="triangle-wave"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{selectedQuake.magnitude}</Text>
-              <Text style={styles.statTopLabel}>Magnitudo</Text>
-            </View>
+            <StatItem icon="triangle-wave" value={activeQuake.magnitude} label="Magnitudo" />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons name="rss" size={20} color="#0369A1" />
-              <Text style={styles.statTopValue}>{selectedQuake.kedalaman}</Text>
-              <Text style={styles.statTopLabel}>Kedalaman</Text>
-            </View>
+            <StatItem icon="rss" value={activeQuake.kedalaman} label="Kedalaman" />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{selectedQuake.latText}</Text>
-              <Text style={styles.statTopLabel}>LS</Text>
-            </View>
+            <StatItem icon="compass-outline" value={activeQuake.latText} label="LS" />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{selectedQuake.lonText}</Text>
-              <Text style={styles.statTopLabel}>BT</Text>
-            </View>
+            <StatItem icon="compass-outline" value={activeQuake.lonText} label="BT" />
           </View>
 
           <View style={styles.separator} />
 
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="location"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
+          <DetailItem icon="location" label="Lokasi Gempa :" value={activeQuake.wilayah} />
+          <DetailItem
+            icon="time-outline"
+            label="Waktu :"
+            value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
+          />
+          <DetailItem icon="walk-outline" label="Jarak :" value={`${activeQuake.distanceKm} km`} />
+          {!!activeQuake.felt && (
+            <DetailItem
+              icon="alert-circle-outline"
+              label="Wilayah Dirasakan (Skala MMI) :"
+              value={activeQuake.felt}
             />
-            <View>
-              <Text style={styles.infoLabel}>Lokasi Gempa :</Text>
-              <Text style={styles.infoValue}>{selectedQuake.wilayah}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>Waktu :</Text>
-              <Text style={styles.infoValue}>
-                {selectedQuake.tanggal}, {selectedQuake.jam}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="walk-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>Jarak :</Text>
-              <Text style={styles.infoValue}>
-                {selectedQuake.distanceKm} km
-              </Text>
-            </View>
-          </View>
-          {!!selectedQuake.felt && (
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={18}
-                color="#1E6F9F"
-                style={styles.infoIcon}
-              />
-              <View style={styles.infoTextFlex}>
-                <Text style={styles.infoLabel}>
-                  Wilayah Dirasakan (Skala MMI) :
-                </Text>
-                <Text style={styles.infoValue}>{selectedQuake.felt}</Text>
-              </View>
-            </View>
           )}
 
           <TouchableOpacity
-            style={[
-              styles.simulasiBtn,
-              !shakeMapUrl && styles.simulasiBtnDisabled,
-            ]}
+            style={[styles.simulasiBtn, !shakeMapUrl && styles.simulasiBtnDisabled]}
             activeOpacity={0.8}
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}
@@ -817,18 +643,15 @@ export function GempaDirasakanHistoryContent({
         </Animated.View>
       )}
 
+      {/* ShakeMap modal */}
       <Modal visible={shakeMapVisible} transparent animationType="slide">
         <View style={styles.modalOverlayBottom}>
-          <View
-            style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}
-          >
+          <View style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}>
             <View style={styles.handleBar} />
             <View style={styles.modalHeaderBottom}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-                <Text style={styles.modalSubtitle}>
-                  Sumber data: BMKG ShakeMap
-                </Text>
+                <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setShakeMapVisible(false)}

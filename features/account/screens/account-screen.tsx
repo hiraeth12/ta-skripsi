@@ -7,6 +7,7 @@ import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  InteractionManager,
   Modal,
   Pressable,
   Switch,
@@ -33,9 +34,16 @@ export default function Account() {
   const [isToggleProcessing, setIsToggleProcessing] = useState(false);
   const [profile, setProfile] = useState<ProfileData>(ACCOUNT_PROFILE);
   const [loading, setLoading] = useState(true);
+  const [isRenderReady, setIsRenderReady] = useState(false);
 
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifStatus, setNotifStatus] = useState(true);
+
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setIsRenderReady(true);
+    });
+  }, []);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -113,7 +121,7 @@ export default function Account() {
     }
   };
 
-  if (loading) {
+  if (loading || !isRenderReady) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
         {/* Header Profil */}

@@ -5,20 +5,26 @@ import { getApp } from "@/config/firebase-init";
 import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuth } from "@react-native-firebase/auth";
 import {
   get,
   getDatabase,
   limitToLast,
-  onValue,
   query,
   ref,
 } from "@react-native-firebase/database";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Animated,
   FlatList,
   Text,
   TouchableOpacity,
@@ -30,7 +36,17 @@ import {
 } from "./components";
 import styles from "./styles/history-screen";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
+const ITEM_HEIGHT = 74;
+
+const TAB_CACHE: Record<EarthquakeTab, string> = {
+  "GEMPA DIRASAKAN": CACHE_KEYS.DIRASAKAN_HISTORY ?? "dirasakan_history",
+  "GEMPA TERDETEKSI": CACHE_KEYS.TERDETEKSI_HISTORY,
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type ListItem = {
   id: string;
@@ -47,6 +63,226 @@ type ListItem = {
   felt: string;
   shakemap?: string | null;
 };
+
+type HaversineFn = (a: number, b: number, c: number, d: number) => number;
+
+// ─── Normalize helpers ────────────────────────────────────────────────────────
+
+function normalizeDirasakan(
+  rawData: unknown,
+  userLat: number,
+  userLon: number,
+  haversine: HaversineFn,
+): ListItem[] {
+  const candidates: any[] = Array.isArray(rawData)
+    ? rawData
+    : rawData && typeof rawData === "object"
+      ? Object.values(rawData as object)
+      : [];
+
+  return candidates
+    .sort((a, b) =>
+      String(b?.eventid ?? b?.timesent ?? "").localeCompare(
+        String(a?.eventid ?? a?.timesent ?? ""),
+      ),
+    )
+    .reduce<ListItem[]>((acc, candidate, index) => {
+      const coordStr = String(candidate?.point?.coordinates ?? "");
+      const [lonStr, latStr] = coordStr.split(",");
+      const latitude = parseFloat(
+        String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(",", "."),
+      );
+      const longitude = parseFloat(
+        String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(",", "."),
+      );
+      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
+
+      acc.push({
+        id: String(candidate?.eventid ?? candidate?.eventId ?? `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`),
+        latitude,
+        longitude,
+        magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
+        lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
+        waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
+        jarak: `${haversine(userLat, userLon, latitude, longitude).toFixed(1)} km dari lokasi Anda`,
+        distanceKm: haversine(userLat, userLon, latitude, longitude).toFixed(1),
+        tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
+        jam: String(candidate?.time ?? candidate?.jam ?? ""),
+        kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
+        felt: String(candidate?.felt ?? ""),
+        shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
+      });
+      return acc;
+    }, [])
+    .slice(0, 30);
+}
+
+function normalizeTerdeteksi(
+  rawData: unknown,
+  userLat: number,
+  userLon: number,
+  haversine: HaversineFn,
+): ListItem[] {
+  const nodeArray: any[] = Array.isArray(rawData)
+    ? rawData
+    : rawData && typeof rawData === "object"
+      ? Object.values(rawData as object)
+      : [];
+
+  return [...nodeArray]
+    .sort((a, b) =>
+      String(b?.time ?? b?.properties?.time ?? "").localeCompare(
+        String(a?.time ?? a?.properties?.time ?? ""),
+      ),
+    )
+    .reduce<ListItem[]>((acc, item, index) => {
+      const coords = item?.geometry?.coordinates || item?.coordinates;
+      const longitude = parseFloat(String(item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0] ?? ""));
+      const latitude = parseFloat(String(item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? ""));
+      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
+
+      const props = item?.properties ?? item;
+      const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
+      const jamFromTime = (jamRaw ?? "").split(".")[0];
+      const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
+
+      acc.push({
+        id: String(props?.eventid ?? props?.eventId ?? `${props?.time ?? ""}-${latitude}-${longitude}-${index}`),
+        latitude,
+        longitude,
+        magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
+        lokasi: String(props?.lokasi ?? props?.place ?? props?.area ?? ""),
+        waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
+        jarak: `${distanceKm} km dari lokasi Anda`,
+        distanceKm,
+        tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
+        jam: String(props?.jam ?? jamFromTime ?? ""),
+        kedalaman: String(props?.kedalaman ?? props?.depth ?? ""),
+        felt: String(props?.felt ?? props?.fase ?? ""),
+      });
+      return acc;
+    }, [])
+    .slice(0, 30);
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [shimmer]);
+
+  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
+
+  return (
+    <Animated.View
+      style={{
+        opacity,
+        backgroundColor: "#FFFFFF",
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+        marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        height: ITEM_HEIGHT - 8,
+      }}
+    >
+      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#CBD5E1", marginRight: 10 }} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={{ height: 12, width: "70%", backgroundColor: "#CBD5E1", borderRadius: 4 }} />
+        <View style={{ height: 10, width: "50%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
+        <View style={{ height: 9, width: "85%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
+      </View>
+    </Animated.View>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
+      {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+    </View>
+  );
+}
+
+// ─── List card ────────────────────────────────────────────────────────────────
+
+const EarthquakeListItem = ({
+  item,
+  onPress,
+}: {
+  item: ListItem;
+  onPress: (item: ListItem) => void;
+}) => {
+  const magValue = parseFloat(item.magnitude);
+  const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => onPress(item)}
+      style={{
+        backgroundColor: "#FFFFFF",
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+        marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        height: ITEM_HEIGHT - 8,
+      }}
+    >
+      <View
+        style={{
+          backgroundColor: magColor,
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          justifyContent: "center",
+          alignItems: "center",
+          marginRight: 10,
+        }}
+      >
+        <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>{item.magnitude}</Text>
+        <Text style={{ color: "#FFF", fontSize: 8 }}>Mag</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: "#0F172A", fontWeight: "bold", fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+          {item.lokasi || "-"}
+        </Text>
+        <Text style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>
+          {item.tanggal} • {item.jam}
+        </Text>
+        <Text style={{ color: "#64748B", fontSize: 10 }} numberOfLines={1}>
+          Kedalaman: {item.kedalaman} • {item.distanceKm} km dari Anda
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function asSingle(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+function roundCoord(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function History() {
   const router = useRouter();
@@ -70,80 +306,44 @@ export default function History() {
     selectedShakemap?: string;
   }>();
 
-  function asSingle(value?: string | string[]) {
-    if (Array.isArray(value)) return value[0] ?? "";
-    return value ?? "";
-  }
-
   const tabParam = asSingle(searchParams.tab);
   const initialTab: EarthquakeTab =
     tabParam === "terdeteksi" ? "GEMPA TERDETEKSI" : "GEMPA DIRASAKAN";
 
+  // ── State ──────────────────────────────────────────────────────────────────
+
   const [activeTab, setActiveTab] = useState<EarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
-  const [hasMountedDirasakan] = useState(true);
-  const [hasMountedTerdeteksi] = useState(true);
-
-  // ==========================================
-  // STATE LIST GEMPA (Langsung Muncul di Awal)
-  // ==========================================
-  const [isListVisible, setIsListVisible] = useState(
-    !asSingle(searchParams.selectedEventId),
-  );
+  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
+  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
+  const [isListVisible, setIsListVisible] = useState(!asSingle(searchParams.selectedEventId));
   const [items, setItems] = useState<ListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
-  const [userLocation, setUserLocation] = useState<{
-    lat: number;
-    lon: number;
-  }>({
-    lat: -6.9175,
-    lon: 107.6191,
+  const [userLocation, setUserLocation] = useState({
+    lat: roundCoord(-6.9175),
+    lon: roundCoord(107.6191),
   });
 
-  const clearSelectionParams = useCallback(() => {
-    router.setParams({
-      tab: undefined,
-      selectedEventId: undefined,
-      selectedLatitude: undefined,
-      selectedLongitude: undefined,
-      selectedMagnitude: undefined,
-      selectedLocation: undefined,
-      selectedWaktu: undefined,
-      selectedJarak: undefined,
-      selectedDistanceKm: undefined,
-      selectedTanggal: undefined,
-      selectedJam: undefined,
-      selectedKedalaman: undefined,
-      selectedFelt: undefined,
-      selectedShakemap: undefined,
-    });
-  }, [router]);
+  // ── Tab param sync ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const incomingTab = asSingle(searchParams.tab);
-    if (incomingTab === "terdeteksi") {
-      setActiveTab("GEMPA TERDETEKSI");
-    } else if (incomingTab === "dirasakan") {
-      setActiveTab("GEMPA DIRASAKAN");
-    }
+    const incoming = asSingle(searchParams.tab);
+    if (incoming === "terdeteksi") setActiveTab("GEMPA TERDETEKSI");
+    else if (incoming === "dirasakan") setActiveTab("GEMPA DIRASAKAN");
   }, [searchParams.tab]);
+
+  // ── External selection ────────────────────────────────────────────────────
 
   const externalSelection = useMemo(() => {
     const eventId = asSingle(searchParams.selectedEventId);
     const latitude = parseFloat(asSingle(searchParams.selectedLatitude));
     const longitude = parseFloat(asSingle(searchParams.selectedLongitude));
-
-    if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      return null;
-    }
+    if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
 
     const tanggal = asSingle(searchParams.selectedTanggal);
     const jam = asSingle(searchParams.selectedJam);
     const waktu = asSingle(searchParams.selectedWaktu);
-    const [fallbackJam, fallbackTanggal] = waktu
-      .split("•")
-      .map((part) => part.trim());
-
+    const [fallbackJam, fallbackTanggal] = waktu.split("•").map((p) => p.trim());
     const distanceKm =
       asSingle(searchParams.selectedDistanceKm) ||
       asSingle(searchParams.selectedJarak).replace(/[^0-9.,]/g, "") ||
@@ -164,10 +364,29 @@ export default function History() {
     };
   }, [searchParams]);
 
+  const clearSelectionParams = useCallback(() => {
+    router.setParams({
+      tab: undefined, selectedEventId: undefined, selectedLatitude: undefined,
+      selectedLongitude: undefined, selectedMagnitude: undefined, selectedLocation: undefined,
+      selectedWaktu: undefined, selectedJarak: undefined, selectedDistanceKm: undefined,
+      selectedTanggal: undefined, selectedJam: undefined, selectedKedalaman: undefined,
+      selectedFelt: undefined, selectedShakemap: undefined,
+    });
+  }, [router]);
+
+  // ── Tab handlers ───────────────────────────────────────────────────────────
+
   const handleAppTabPress = useCallback((tab: EarthquakeTab) => {
+    // FIX: Clear stale externalSelection params when switching tabs.
+    // Without this, the params persist in the URL and when the content component
+    // for the newly-active tab mounts/activates it reads the old params and calls
+    // openCard() again even though the user already dismissed the card.
+    clearSelectionParams();
     setActiveTab(tab);
     setIsListVisible(true);
-  }, []);
+    if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
+    else setHasMountedTerdeteksi(true);
+  }, [clearSelectionParams]);
 
   const handleExternalSelectionHandled = useCallback(() => {
     clearSelectionParams();
@@ -176,278 +395,144 @@ export default function History() {
   const handleFilterPress = useCallback(() => {
     router.push({
       pathname: "/main-menu/filter-gempa-screen",
-      params: {
-        tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
-      },
+      params: { tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi" },
     });
   }, [activeTab, router]);
 
-  // ==========================================
-  // FETCH LOKASI & DATA LIST
-  // ==========================================
+  // ── User location ─────────────────────────────────────────────────────────
+
   useEffect(() => {
     let isMounted = true;
-    async function loadUserLocationOnce() {
+    async function load() {
       try {
         const app = getApp();
-        const auth = getAuth(app);
-        const user = auth.currentUser;
-        if (!user || !isMounted) return;
-
-        const db = DATABASE_URL
-          ? getDatabase(app, DATABASE_URL)
-          : getDatabase(app);
-        const userRef = ref(db, `/users/${user.uid}`);
-        const snapshot = await get(userRef);
-        const userData = snapshot.val();
-
-        const lat = parseFloat(String(userData?.latitude ?? ""));
-        const lon = parseFloat(String(userData?.longitude ?? ""));
-        if (!isNaN(lat) && !isNaN(lon)) {
-          setUserLocation({ lat, lon });
+        const user = getAuth(app).currentUser;
+        if (!user) return;
+        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+        const snap = await get(ref(db, `/users/${user.uid}`));
+        const data = snap.val();
+        const lat = parseFloat(String(data?.latitude ?? ""));
+        const lon = parseFloat(String(data?.longitude ?? ""));
+        if (!isNaN(lat) && !isNaN(lon) && isMounted) {
+          setUserLocation({ lat: roundCoord(lat), lon: roundCoord(lon) });
         }
-      } catch {}
+      } catch { }
     }
-    void loadUserLocationOnce();
-    return () => {
-      isMounted = false;
-    };
+    void load();
+    return () => { isMounted = false; };
   }, []);
+
+  // ── Cache-first fetch ─────────────────────────────────────────────────────
 
   useEffect(() => {
     let isMounted = true;
-    let unsubscribe: (() => void) | undefined;
+    const cacheKey = TAB_CACHE[activeTab];
+    const isDir = activeTab === "GEMPA DIRASAKAN";
 
-    function setupRealtimeListener() {
-      setListLoading(true);
-      const app = getApp();
-      const db = DATABASE_URL
-        ? getDatabase(app, DATABASE_URL)
-        : getDatabase(app);
+    async function fetchData() {
+      // Phase 1: serve cache immediately
+      try {
+        const raw = await AsyncStorage.getItem(cacheKey);
+        if (raw && isMounted) {
+          const cached: ListItem[] = JSON.parse(raw);
+          if (cached.length > 0) {
+            setItems(cached);
+            setListLoading(false);
+          }
+        }
+      } catch { }
 
-      if (activeTab === "GEMPA DIRASAKAN") {
+      // Phase 2: one-shot Firebase fetch
+      try {
+        const app = getApp();
+        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
         const dataQuery = query(
-          ref(db, "gempa_dirasakan/items"),
-          limitToLast(80),
+          ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
+          limitToLast(35),
         );
-        let initialLoad = true;
-        unsubscribe = onValue(
-          dataQuery,
-          (snapshot) => {
-            const rawData = snapshot.exists() ? snapshot.val() : null;
-            const candidates = Array.isArray(rawData)
-              ? rawData
-              : rawData && typeof rawData === "object"
-                ? Object.values(rawData)
-                : [];
+        const snapshot = await get(dataQuery);
+        if (!snapshot.exists() || !isMounted) return;
 
-            const normalized = candidates
-              .sort((a: any, b: any) =>
-                String(b?.eventid ?? b?.timesent ?? "").localeCompare(
-                  String(a?.eventid ?? a?.timesent ?? ""),
-                ),
-              )
-              .map((candidate: any, index): ListItem | null => {
-                const coordStr = String(candidate?.point?.coordinates ?? "");
-                const [lonStr, latStr] = coordStr.split(",");
-                const latitude = parseFloat(
-                  String(
-                    candidate?.latitude ?? candidate?.lat ?? latStr ?? "",
-                  ).replace(",", "."),
-                );
-                const longitude = parseFloat(
-                  String(
-                    candidate?.longitude ?? candidate?.lon ?? lonStr ?? "",
-                  ).replace(",", "."),
-                );
-                if (Number.isNaN(latitude) || Number.isNaN(longitude))
-                  return null;
+        const normalized = isDir
+          ? normalizeDirasakan(snapshot.val(), userLocation.lat, userLocation.lon, haversineDistanceKm)
+          : normalizeTerdeteksi(snapshot.val(), userLocation.lat, userLocation.lon, haversineDistanceKm);
 
-                const distanceKm = haversineDistanceKm(
-                  userLocation.lat,
-                  userLocation.lon,
-                  latitude,
-                  longitude,
-                ).toFixed(1);
-                const eventId = String(
-                  candidate?.eventid ??
-                    candidate?.eventId ??
-                    `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
-                );
+        AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
+        setCacheData(cacheKey, normalized);
 
-                return {
-                  id: eventId,
-                  latitude,
-                  longitude,
-                  magnitude: String(
-                    candidate?.magnitude ?? candidate?.mag ?? "",
-                  ),
-                  lokasi: String(
-                    candidate?.area ??
-                      candidate?.wilayah ??
-                      candidate?.lokasi ??
-                      "",
-                  ),
-                  waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
-                  jarak: `${distanceKm} km dari lokasi Anda`,
-                  distanceKm,
-                  tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
-                  jam: String(candidate?.time ?? candidate?.jam ?? ""),
-                  kedalaman: String(
-                    candidate?.depth ?? candidate?.kedalaman ?? "",
-                  ),
-                  felt: String(candidate?.felt ?? ""),
-                  shakemap: candidate?.shakemap
-                    ? String(candidate.shakemap)
-                    : null,
-                };
-              })
-              .filter((item): item is ListItem => Boolean(item))
-              .slice(0, 30);
-
-            if (isMounted) {
-              setItems(normalized);
-              if (initialLoad) {
-                setListLoading(false);
-                initialLoad = false;
-              }
-            }
-          },
-          () => {
-            if (isMounted && initialLoad) setListLoading(false);
-          },
-        );
-      } else {
-        const dataQuery = query(
-          ref(db, "gempa_terdeteksi/items"),
-          limitToLast(150),
-        );
-        let initialLoad = true;
-        unsubscribe = onValue(
-          dataQuery,
-          (snapshot) => {
-            const rawData = snapshot.exists() ? snapshot.val() : null;
-            const nodeArray = Array.isArray(rawData)
-              ? rawData
-              : rawData && typeof rawData === "object"
-                ? Object.values(rawData)
-                : [];
-
-            const sorted = [...nodeArray].sort((a: any, b: any) => {
-              const tA = String(a?.time ?? a?.properties?.time ?? "");
-              const tB = String(b?.time ?? b?.properties?.time ?? "");
-              return tB.localeCompare(tA);
-            });
-
-            const normalized = sorted
-              .map((item: any, index): ListItem | null => {
-                const coords = item?.geometry?.coordinates || item?.coordinates;
-                const longitude = parseFloat(
-                  String(
-                    item?.longitude ??
-                      item?.lon ??
-                      coords?.longitude ??
-                      coords?.[0] ??
-                      "",
-                  ),
-                );
-                const latitude = parseFloat(
-                  String(
-                    item?.latitude ??
-                      item?.lat ??
-                      coords?.latitude ??
-                      coords?.[1] ??
-                      "",
-                  ),
-                );
-                if (Number.isNaN(latitude) || Number.isNaN(longitude))
-                  return null;
-
-                const props = item?.properties ?? item;
-                const [tanggalFromTime, jamRaw] = String(
-                  props?.time ?? "",
-                ).split(" ");
-                const jamFromTime = (jamRaw ?? "").split(".")[0];
-                const distanceKm = haversineDistanceKm(
-                  userLocation.lat,
-                  userLocation.lon,
-                  latitude,
-                  longitude,
-                ).toFixed(1);
-                const eventId = String(
-                  props?.eventid ??
-                    props?.eventId ??
-                    `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
-                );
-
-                return {
-                  id: eventId,
-                  latitude,
-                  longitude,
-                  magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
-                  lokasi: String(
-                    props?.lokasi ?? props?.place ?? props?.area ?? "",
-                  ),
-                  waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
-                  jarak: `${distanceKm} km dari lokasi Anda`,
-                  distanceKm,
-                  tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
-                  jam: String(props?.jam ?? jamFromTime ?? ""),
-                  kedalaman: String(props?.kedalaman ?? props?.depth ?? ""),
-                  felt: String(props?.felt ?? props?.fase ?? ""),
-                };
-              })
-              .filter((item): item is ListItem => Boolean(item))
-              .slice(0, 30);
-
-            setCacheData(CACHE_KEYS.TERDETEKSI_HISTORY, normalized);
-            if (isMounted) {
-              setItems(normalized);
-              if (initialLoad) {
-                setListLoading(false);
-                initialLoad = false;
-              }
-            }
-          },
-          () => {
-            if (isMounted && initialLoad) setListLoading(false);
-          },
-        );
+        if (isMounted) {
+          setItems(normalized);
+          setListLoading(false);
+        }
+      } catch {
+        if (isMounted) setListLoading(false);
       }
     }
 
-    setupRealtimeListener();
-
-    return () => {
-      isMounted = false;
-      if (unsubscribe) unsubscribe();
-    };
+    // Keep stale items visible while loading — no blank flash
+    setListLoading(true);
+    void fetchData();
+    return () => { isMounted = false; };
   }, [activeTab, userLocation.lat, userLocation.lon]);
 
-  function openHistoryForItem(item: ListItem) {
-    router.setParams({
-      tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
-      selectedEventId: item.id,
-      selectedLatitude: String(item.latitude),
-      selectedLongitude: String(item.longitude),
-      selectedMagnitude: item.magnitude,
-      selectedLocation: item.lokasi,
-      selectedWaktu: item.waktu,
-      selectedJarak: item.jarak,
-      selectedDistanceKm: item.distanceKm,
-      selectedTanggal: item.tanggal,
-      selectedJam: item.jam,
-      selectedKedalaman: item.kedalaman,
-      selectedFelt: item.felt,
-      selectedShakemap: item.shakemap ?? "",
-    });
-    // SEMBUNYIKAN LIST SAAT GEMPA DITEKAN AGAR MAP FULL
-    setIsListVisible(false);
-  }
+  // ── List item press → fly to marker ──────────────────────────────────────
+  // Sets params which the content component reads as externalSelection.
+  // The content component then calls flyToAndOpen (fly → 300ms delay → card slides up).
 
-  // ==========================================
-  // TOP CONTROLS (BALIK KE STYLE ASLIMU)
-  // ==========================================
+  const openHistoryForItem = useCallback(
+    (item: ListItem) => {
+      router.setParams({ selectedEventId: undefined });
+      setTimeout(() => {
+        router.setParams({
+          tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
+          selectedEventId: item.id,
+          selectedLatitude: String(item.latitude),
+          selectedLongitude: String(item.longitude),
+          selectedMagnitude: item.magnitude,
+          selectedLocation: item.lokasi,
+          selectedWaktu: item.waktu,
+          selectedJarak: item.jarak,
+          selectedDistanceKm: item.distanceKm,
+          selectedTanggal: item.tanggal,
+          selectedJam: item.jam,
+          selectedKedalaman: item.kedalaman,
+          selectedFelt: item.felt,
+          selectedShakemap: item.shakemap ?? "",
+        });
+      }, 0);
+      // Hide list immediately so map is full screen during fly-in
+      setIsListVisible(false);
+    },
+    [activeTab, router],
+  );
+
+  // ── FlatList helpers ──────────────────────────────────────────────────────
+
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index }),
+    [],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ListItem }) => (
+      <EarthquakeListItem item={item} onPress={openHistoryForItem} />
+    ),
+    [openHistoryForItem],
+  );
+
+  const keyExtractor = useCallback((item: ListItem) => item.id, []);
+
+  const listEmpty = useMemo(
+    () => (
+      <Text style={{ color: "#E6F4FF", textAlign: "center", marginTop: 10, fontSize: 12 }}>
+        Data gempa belum tersedia.
+      </Text>
+    ),
+    [],
+  );
+
+  // ── Tab bar ───────────────────────────────────────────────────────────────
+
   const tabBar = useMemo(
     () => (
       <View style={styles.topControls}>
@@ -456,30 +541,19 @@ export default function History() {
           onTabPress={handleAppTabPress}
           disabled={loading}
         />
-
         <View style={styles.designSection}>
           <View style={styles.periodChip}>
             <Text style={styles.periodChipText}>Oktober 2025 • Jawa Barat</Text>
           </View>
-
           <View style={styles.actionRow}>
-            {/* Spacer kosong biar FILTER tetep nempel mentok di kanan */}
             <View style={{ flex: 1 }} />
-
             <TouchableOpacity
-              style={[
-                styles.sidePill,
-                styles.sidePillRight,
-                styles.sidePillRightContent,
-              ]}
+              style={[styles.sidePill, styles.sidePillRight, styles.sidePillRightContent]}
               activeOpacity={0.85}
               onPress={handleFilterPress}
             >
-              {/* Ikon diganti jadi options sesuai permintaan */}
               <Ionicons name="options" size={17} color="#FFFFFF" />
-              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
-                FILTER
-              </Text>
+              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>FILTER</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -491,13 +565,11 @@ export default function History() {
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <View style={styles.container}>
-      {/* ==========================================
-          AREA PETA
-          Jika list terlihat, peta mentok di 40% dari bawah.
-          Jika list hilang, peta full screen (bottom: 0).
-          ========================================== */}
+      {/* Map occupies full screen when list hidden, 60% when list visible */}
       <View
         style={{
           position: "absolute",
@@ -509,10 +581,7 @@ export default function History() {
       >
         {hasMountedDirasakan && (
           <View
-            style={[
-              styles.tabPane,
-              activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane,
-            ]}
+            style={[styles.tabPane, activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane]}
             pointerEvents={activeTab === "GEMPA DIRASAKAN" ? "auto" : "none"}
           >
             <GempaDirasakanHistoryContent
@@ -520,6 +589,7 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
+              // When card is dismissed → restore the list panel
               onCardClose={() => setIsListVisible(true)}
               onCardOpen={() => setIsListVisible(false)}
               isActive={dirasakanActive}
@@ -529,10 +599,7 @@ export default function History() {
 
         {hasMountedTerdeteksi && (
           <View
-            style={[
-              styles.tabPane,
-              activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane,
-            ]}
+            style={[styles.tabPane, activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane]}
             pointerEvents={activeTab === "GEMPA TERDETEKSI" ? "auto" : "none"}
           >
             <GempaTerdeteksiHistoryContent
@@ -548,10 +615,7 @@ export default function History() {
         )}
       </View>
 
-      {/* ==========================================
-          AREA LIST BAWAH
-          Tinggi fix 40%. Muncul kalau isListVisible = true
-          ========================================== */}
+      {/* Bottom list panel — 40% height, hidden when card is open */}
       {isListVisible && (
         <View
           style={{
@@ -570,125 +634,29 @@ export default function History() {
             zIndex: 10,
           }}
         >
-          {/* Header List */}
           <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-            <Text
-              style={{
-                color: "#FFFFFF",
-                fontWeight: "bold",
-                fontSize: 14,
-                textAlign: "center",
-              }}
-            >
-              {activeTab === "GEMPA DIRASAKAN"
-                ? "Gempa Dirasakan Terbaru"
-                : "Gempa Terdeteksi Terbaru"}
+            <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
+              {activeTab === "GEMPA DIRASAKAN" ? "Gempa Dirasakan Terbaru" : "Gempa Terdeteksi Terbaru"}
             </Text>
           </View>
 
-          <FlatList
-            data={items}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
-            maxToRenderPerBatch={10}
-            renderItem={({ item }) => {
-              const magValue = parseFloat(item.magnitude);
-              const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
-
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => openHistoryForItem(item)}
-                  style={{
-                    backgroundColor: "#FFFFFF",
-                    borderRadius: 8,
-                    paddingHorizontal: 10,
-                    paddingVertical: 10,
-                    marginBottom: 8,
-                    flexDirection: "row",
-                    alignItems: "center",
-                  }}
-                >
-                  {/* Bubble Magnitude */}
-                  <View
-                    style={{
-                      backgroundColor: magColor,
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      justifyContent: "center",
-                      alignItems: "center",
-                      marginRight: 10,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: "#FFF",
-                        fontWeight: "bold",
-                        fontSize: 14,
-                      }}
-                    >
-                      {item.magnitude}
-                    </Text>
-                    <Text style={{ color: "#FFF", fontSize: 8 }}>Mag</Text>
-                  </View>
-
-                  {/* Kolom Informasi Teks */}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        color: "#0F172A",
-                        fontWeight: "bold",
-                        fontSize: 13,
-                        marginBottom: 2,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {item.lokasi || "-"}
-                    </Text>
-                    <Text
-                      style={{
-                        color: "#475569",
-                        fontSize: 11,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {item.tanggal} • {item.jam}
-                    </Text>
-                    <Text
-                      style={{ color: "#64748B", fontSize: 10 }}
-                      numberOfLines={1}
-                    >
-                      Kedalaman: {item.kedalaman} • {item.distanceKm} km dari
-                      Anda
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            }}
-            ListHeaderComponent={
-              listLoading ? (
-                <View style={{ alignItems: "center", marginTop: 10 }}>
-                  <ActivityIndicator color="#E6F4FF" />
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              !listLoading ? (
-                <Text
-                  style={{
-                    color: "#E6F4FF",
-                    textAlign: "center",
-                    marginTop: 10,
-                    fontSize: 12,
-                  }}
-                >
-                  Data gempa belum tersedia.
-                </Text>
-              ) : null
-            }
-          />
+          {listLoading && items.length === 0 ? (
+            <SkeletonList />
+          ) : (
+            <FlatList
+              data={items}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              getItemLayout={getItemLayout}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={8}
+              initialNumToRender={6}
+              windowSize={3}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
+              ListEmptyComponent={listEmpty}
+            />
+          )}
         </View>
       )}
     </View>

@@ -4,17 +4,17 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  AppState,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    AppState,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import EarthquakeMap from "@/components/earthquake-map";
@@ -25,12 +25,15 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
-const MIN_POLL_MS = 10_000;
-const MAX_POLL_MS = 60_000;
+const MIN_POLL_MS = 30_000;  // was 10_000
+const MAX_POLL_MS = 120_000; // was 60_000
 const REFERENCE_LOCATION = {
   latitude: -6.9175,
   longitude: 107.6191,
 };
+
+// Module-level singleton — not recreated on every poll
+const xmlParser = new XMLParser({ ignoreAttributes: false });
 
 function getMagnitudeScaleFactor(magnitude: number): number {
   const deltaMagnitude = magnitude - 5;
@@ -87,6 +90,7 @@ export default function GempaDirasakan({
   const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
+  const showCardRef = useRef(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const latestEventId = useRef<string | null>(null);
@@ -150,7 +154,10 @@ export default function GempaDirasakan({
               duration: 150,
               useNativeDriver: true,
             }),
-          ]).start(() => setShowCard(false));
+          ]).start(() => {
+            showCardRef.current = false;
+            setShowCard(false);
+          });
         } else {
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
@@ -174,6 +181,7 @@ export default function GempaDirasakan({
     translateY.setValue(600);
     opacity.setValue(0);
     btnOpacity.setValue(0);
+    showCardRef.current = true;
     setShowCard(true);
     Animated.parallel([
       Animated.spring(translateY, {
@@ -195,7 +203,8 @@ export default function GempaDirasakan({
   }
 
   function dismissCard(callback?: () => void) {
-    if (showCard) {
+    if (showCardRef.current) {
+      showCardRef.current = false;
       Animated.parallel([
         Animated.timing(translateY, {
           toValue: 600,
@@ -241,8 +250,7 @@ export default function GempaDirasakan({
           latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
           globalIdentifier = String(parsedJson?.identifier ?? "");
         } catch {
-          const parser = new XMLParser({ ignoreAttributes: false });
-          const parsedXml = parser.parse(raw);
+          const parsedXml = xmlParser.parse(raw);
           const infoRaw = parsedXml?.alert?.info;
           latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
           globalIdentifier = String(parsedXml?.alert?.identifier ?? "");
@@ -285,18 +293,20 @@ export default function GempaDirasakan({
             latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
             lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
           });
+
+          const region = {
+            latitude,
+            longitude,
+            latitudeDelta: 2,
+            longitudeDelta: 2,
+          };
+          mapRef.current?.animateToRegion(
+            region,
+            isFirstLoad.current ? 800 : 600,
+          );
+          isFirstLoad.current = false;
         }
-        const region = {
-          latitude,
-          longitude,
-          latitudeDelta: 2,
-          longitudeDelta: 2,
-        };
-        mapRef.current?.animateToRegion(
-          region,
-          isFirstLoad.current ? 800 : 600,
-        );
-        isFirstLoad.current = false;
+
         return !isSameEvent;
       } catch (error) {
         if (
@@ -342,7 +352,7 @@ export default function GempaDirasakan({
     }
     fetchLatestQuake(false).then(scheduleNextPoll);
     const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
+      if (state === "active" && isMountedRef.current && isActive) { // ← add isActive
         pollDelayRef.current = MIN_POLL_MS;
         clearPollTimer();
         runPollingLoop();
@@ -365,11 +375,11 @@ export default function GempaDirasakan({
         markerCoordinate={
           latestQuake
             ? {
-                latitude: latestQuake.latitude,
-                longitude: latestQuake.longitude,
-                magnitude: latestQuake.magnitude,
-                depth: latestQuake.kedalaman,
-              }
+              latitude: latestQuake.latitude,
+              longitude: latestQuake.longitude,
+              magnitude: latestQuake.magnitude,
+              depth: latestQuake.kedalaman,
+            }
             : null
         }
         onMapPress={() => dismissCard()}

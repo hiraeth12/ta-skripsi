@@ -526,16 +526,9 @@ const EarthquakeMap = memo(
         coordinate: c,
         index: i,
       }));
-      if (!shouldTrackViewport || !hasMeasuredViewport) return all;
-      return all.filter((m) =>
-        isCoordinateInBounds(m.coordinate, viewportBounds),
-      );
-    }, [
-      markerCoordinates,
-      viewportBounds,
-      hasMeasuredViewport,
-      shouldTrackViewport,
-    ]);
+      // Render semua marker langsung dengan mengembalikan array `all`
+      return all;
+    }, [markerCoordinates]);
 
     return (
       <View style={styles.container}>
@@ -544,6 +537,9 @@ const EarthquakeMap = memo(
           style={styles.map}
           styleURL="mapbox://styles/mapbox/streets-v12"
           scaleBarEnabled={false}
+          attributionEnabled={false}
+          logoEnabled={false}
+          compassEnabled={false}
           onPress={() => {
             if (isMenuOpen) setIsMenuOpen(false);
             onMapPress?.();
@@ -736,45 +732,46 @@ const EarthquakeMap = memo(
           ))}
         </Mapbox.MapView>
 
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.menuOverlay,
-            // --- PERBAIKAN: Jika card terbuka dan kita sudah tahu tingginya, geser ke tinggi card + 16px rongga
-            isCardOpen && cardHeight > 0 && { bottom: cardHeight + 16 },
-          ]}
-        >
-          {isMenuOpen && (
-            <View style={styles.menuPanel}>
-              <View style={styles.menuRow}>
-                <Text style={styles.menuLabel}>Tampilkan patahan</Text>
-                <Switch
-                  value={showFaultLines}
-                  onValueChange={setShowFaultLines}
-                  trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
-                />
-              </View>
-              <View style={styles.menuRow}>
-                <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
-                <Switch
-                  value={showSeismicSensors}
-                  onValueChange={setShowSeismicSensors}
-                  trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
-                />
-              </View>
-            </View>
-          )}
-          <Pressable
-            style={styles.menuButton}
-            onPress={() => setIsMenuOpen(!isMenuOpen)}
+        {!isCardOpen && (
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.menuOverlay,
+              isCardOpen && cardHeight > 0 && { bottom: cardHeight + 16 },
+            ]}
           >
-            <View style={styles.menuIcon}>
-              <View style={styles.menuBar} />
-              <View style={styles.menuBar} />
-              <View style={styles.menuBar} />
-            </View>
-          </Pressable>
-        </View>
+            {isMenuOpen && (
+              <View style={styles.menuPanel}>
+                <View style={styles.menuRow}>
+                  <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+                  <Switch
+                    value={showFaultLines}
+                    onValueChange={setShowFaultLines}
+                    trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
+                  />
+                </View>
+                <View style={styles.menuRow}>
+                  <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+                  <Switch
+                    value={showSeismicSensors}
+                    onValueChange={setShowSeismicSensors}
+                    trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
+                  />
+                </View>
+              </View>
+            )}
+            <Pressable
+              style={styles.menuButton}
+              onPress={() => setIsMenuOpen(!isMenuOpen)}
+            >
+              <View style={styles.menuIcon}>
+                <View style={styles.menuBar} />
+                <View style={styles.menuBar} />
+                <View style={styles.menuBar} />
+              </View>
+            </Pressable>
+          </View>
+        )}
       </View>
     );
   },

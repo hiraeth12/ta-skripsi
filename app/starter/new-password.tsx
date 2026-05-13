@@ -1,9 +1,9 @@
-import { styles } from "../../features/starter/styles/new-password-styles";
 import AuthButton from "@/components/auth-button";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -13,10 +13,37 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { resetPasswordWithToken } from "../../features/starter/services/auth-service";
+import { styles } from "../../features/starter/styles/new-password-styles";
 
 export default function NewPassword() {
+  const { email, resetToken } = useLocalSearchParams<{ email: string; resetToken: string }>();
   const [secure, setSecure] = useState(true);
   const [secureConfirm, setSecureConfirm] = useState(true);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (password.length < 6) {
+      Alert.alert("Error", "Kata sandi harus terdiri dari minimal 6 karakter.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Kata sandi tidak cocok.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await resetPasswordWithToken(email || "", resetToken || "", password);
+      router.push("/starter/success-new-password");
+    } catch (error) {
+      Alert.alert("Error", "Gagal menyimpan kata sandi baru.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -51,6 +78,8 @@ export default function NewPassword() {
             placeholderTextColor="#999"
             secureTextEntry={secure}
             style={styles.passwordInput}
+            value={password}
+            onChangeText={setPassword}
           />
           <TouchableOpacity onPress={() => setSecure(!secure)}>
             <Ionicons
@@ -68,6 +97,8 @@ export default function NewPassword() {
             placeholderTextColor="#999"
             secureTextEntry={secureConfirm}
             style={styles.passwordInput}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
           />
           <TouchableOpacity onPress={() => setSecureConfirm(!secureConfirm)}>
             <Ionicons
@@ -79,8 +110,9 @@ export default function NewPassword() {
         </View>
 
         <AuthButton
-          title="Simpan Kata Sandi Baru"
-          onPress={() => router.push("/starter/success-new-password")}
+          title={isLoading ? "Menyimpan..." : "Simpan Kata Sandi Baru"}
+          onPress={handleResetPassword}
+          disabled={isLoading}
         />
       </ScrollView>
     </KeyboardAvoidingView>

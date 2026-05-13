@@ -11,9 +11,9 @@ import {
   ref,
 } from "@react-native-firebase/database";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  Animated,
   FlatList,
   Text,
   TouchableOpacity,
@@ -41,6 +41,98 @@ type ListItem = {
   shakemap?: string | null;
 };
 
+// ---------------------------------------------------------------------------
+// SkeletonCard – a single placeholder row with a looping shimmer animation
+// ---------------------------------------------------------------------------
+function SkeletonCard() {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [shimmer]);
+
+  const opacity = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.7],
+  });
+
+  return (
+    <Animated.View
+      style={[skeletonStyles.card, { opacity }]}
+    >
+      {/* Magnitude bubble placeholder */}
+      <View style={skeletonStyles.bubble} />
+
+      {/* Text lines placeholder */}
+      <View style={skeletonStyles.infoColumn}>
+        <View style={[skeletonStyles.line, skeletonStyles.lineWide]} />
+        <View style={[skeletonStyles.line, skeletonStyles.lineMid]} />
+        <View style={[skeletonStyles.line, skeletonStyles.lineNarrow]} />
+      </View>
+
+      {/* Chevron placeholder */}
+      <View style={skeletonStyles.chevron} />
+    </Animated.View>
+  );
+}
+
+const SKELETON_COUNT = 8;
+
+const skeletonStyles = {
+  card: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginVertical: 5,
+    padding: 14,
+    gap: 12,
+  },
+  bubble: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    flexShrink: 0,
+  },
+  infoColumn: {
+    flex: 1,
+    gap: 7,
+  },
+  line: {
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  lineWide: { width: "80%" as const },
+  lineMid: { width: "55%" as const },
+  lineNarrow: { width: "40%" as const },
+  chevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    flexShrink: 0,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Main screen
+// ---------------------------------------------------------------------------
 export default function ListGempaPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
@@ -301,14 +393,10 @@ export default function ListGempaPage() {
 
   return (
     <View style={styles.container}>
-      {/* KUNCI PERBAIKAN ANIMASI: 
-        Memaksa animasi selalu "slide_from_left" (masuk dari kiri) 
-        tidak peduli mode apa yang sedang aktif.
-      */}
       <Stack.Screen
         options={{
           headerShown: false,
-          animation: "slide_from_left", // Selalu muncul dari kiri ke kanan
+          animation: "slide_from_left",
           presentation: "transparentModal",
         }}
       />
@@ -324,52 +412,54 @@ export default function ListGempaPage() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.itemCard}>
-            <View style={styles.magnitudeBubble}>
-              <Text style={styles.magnitudeText}>{item.magnitude || "-"}</Text>
-              <Text style={styles.magnitudeLabel}>Mag</Text>
-            </View>
+      {/* Show skeletons while loading, real list once data arrives */}
+      {loading ? (
+        <FlatList
+          data={Array.from({ length: SKELETON_COUNT }, (_, i) => i)}
+          keyExtractor={(i) => `skeleton-${i}`}
+          renderItem={() => <SkeletonCard />}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={false}
+        />
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.itemCard}>
+              <View style={styles.magnitudeBubble}>
+                <Text style={styles.magnitudeText}>{item.magnitude || "-"}</Text>
+                <Text style={styles.magnitudeLabel}>Mag</Text>
+              </View>
 
-            <View style={styles.infoColumn}>
-              <Text style={styles.locationText} numberOfLines={2}>
-                {item.lokasi || "-"}
-              </Text>
-              <Text style={styles.timeText}>{item.waktu || "-"}</Text>
-              <Text style={styles.distanceText}>{item.jarak}</Text>
-            </View>
+              <View style={styles.infoColumn}>
+                <Text style={styles.locationText} numberOfLines={2}>
+                  {item.lokasi || "-"}
+                </Text>
+                <Text style={styles.timeText}>{item.waktu || "-"}</Text>
+                <Text style={styles.distanceText}>{item.jarak}</Text>
+              </View>
 
-            <TouchableOpacity
-              style={styles.itemAction}
-              activeOpacity={0.85}
-              onPress={() => openHistoryForItem(item)}
-            >
-              <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          loading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#E6F4FF" />
-              <Text style={styles.loadingText}>Memuat data gempa...</Text>
+              <TouchableOpacity
+                style={styles.itemAction}
+                activeOpacity={0.85}
+                onPress={() => openHistoryForItem(item)}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
-          ) : null
-        }
-        ListEmptyComponent={
-          !loading ? (
+          )}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
             <Text style={styles.emptyText}>Data gempa belum tersedia.</Text>
-          ) : null
-        }
-        maxToRenderPerBatch={15}
-        updateCellsBatchingPeriod={50}
-        removeClippedSubviews={true}
-      />
+          }
+          maxToRenderPerBatch={15}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={true}
+        />
+      )}
     </View>
   );
 }

@@ -1,8 +1,8 @@
 import AuthButton from "@/components/auth-button";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { styles } from "../../features/starter/styles/verify-code-styles";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -12,11 +12,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { verifyOtpCode } from "../../features/starter/services/auth-service";
+import { styles } from "../../features/starter/styles/verify-code-styles";
 
 export default function VerifyCode() {
   const router = useRouter();
+  const { email } = useLocalSearchParams<{ email: string }>();
   const [code, setCode] = useState(["", "", "", ""]);
   const [timer, setTimer] = useState(30);
+  const [isLoading, setIsLoading] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
 
   // Timer Countdown Logic
@@ -52,6 +56,27 @@ export default function VerifyCode() {
     }
   };
 
+  const handleVerify = async () => {
+    const combinedCode = code.join("");
+    if (combinedCode.length < 4) {
+      Alert.alert("Input Tidak Valid", "Silakan masukkan kode 4 digit.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const resetToken = await verifyOtpCode(email || "", combinedCode);
+      router.push({
+        pathname: "/starter/new-password",
+        params: { email, resetToken },
+      });
+    } catch (error) {
+      Alert.alert("Error", "Kode OTP salah atau kedaluwarsa.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -76,7 +101,7 @@ export default function VerifyCode() {
         <Text style={styles.title}>Verifikasi Alamat Email</Text>
         <Text style={styles.subtitle}>
           Kode verifikasi telah dikirim ke:{"\n"}
-          <Text style={styles.emailText}>email@gmail.com</Text>
+          <Text style={styles.emailText}>{email || "email@gmail.com"}</Text>
         </Text>
 
         <View style={styles.otpContainer}>
@@ -107,8 +132,9 @@ export default function VerifyCode() {
         </View>
 
         <AuthButton
-          title="Konfirmasi Kode"
-          onPress={() => router.push("/starter/new-password")}
+          title={isLoading ? "Memverifikasi..." : "Konfirmasi Kode"}
+          onPress={handleVerify}
+          disabled={isLoading}
         />
 
         <TouchableOpacity
