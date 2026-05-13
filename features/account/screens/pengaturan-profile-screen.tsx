@@ -12,12 +12,17 @@ import {
   View,
 } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
-import { ACCOUNT_PROFILE, fetchProfileFromFirebase, ProfileData } from "../data/profile";
+import {
+  ACCOUNT_PROFILE,
+  fetchProfileFromFirebase,
+  ProfileData,
+} from "../data/profile";
 import { styles } from "./styles/pengaturan-profil.styles";
 
 export default function PengaturanProfil() {
   const router = useRouter();
-  const [headerProfile, setHeaderProfile] = useState<ProfileData>(ACCOUNT_PROFILE);
+  const [headerProfile, setHeaderProfile] =
+    useState<ProfileData>(ACCOUNT_PROFILE);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -42,7 +47,9 @@ export default function PengaturanProfil() {
         const firebaseProfile = await fetchProfileFromFirebase();
         setHeaderProfile(firebaseProfile);
 
-        const [firstName = "", ...rest] = (firebaseProfile.name || "").split(" ");
+        const [firstName = "", ...rest] = (firebaseProfile.name || "").split(
+          " ",
+        );
         const lastName = rest.join(" ");
         const nextProfile = {
           namaDepan: firstName,
@@ -124,29 +131,29 @@ export default function PengaturanProfil() {
           contentContainerStyle={styles.scrollContent}
         >
           <View style={styles.inputCard}>
-              <View style={styles.inputArea}>
-                <Text style={styles.label}>Nama Depan</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tempForm.namaDepan}
-                  onChangeText={(txt) =>
-                    setTempForm({ ...tempForm, namaDepan: txt })
-                  }
-                  selectionColor="#1E6F9F"
-                />
-              </View>
+            <View style={styles.inputArea}>
+              <Text style={styles.label}>Nama Depan</Text>
+              <TextInput
+                style={styles.input}
+                value={tempForm.namaDepan}
+                onChangeText={(txt) =>
+                  setTempForm({ ...tempForm, namaDepan: txt })
+                }
+                selectionColor="#1E6F9F"
+              />
+            </View>
 
-              <View style={styles.inputArea}>
-                <Text style={styles.label}>Nama Belakang</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tempForm.namaBelakang}
-                  onChangeText={(txt) =>
-                    setTempForm({ ...tempForm, namaBelakang: txt })
-                  }
-                  selectionColor="#1E6F9F"
-                />
-              </View>
+            <View style={styles.inputArea}>
+              <Text style={styles.label}>Nama Belakang</Text>
+              <TextInput
+                style={styles.input}
+                value={tempForm.namaBelakang}
+                onChangeText={(txt) =>
+                  setTempForm({ ...tempForm, namaBelakang: txt })
+                }
+                selectionColor="#1E6F9F"
+              />
+            </View>
 
             <View style={styles.buttonWrapper}>
               <TouchableOpacity
