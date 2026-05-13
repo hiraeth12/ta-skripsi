@@ -2,16 +2,29 @@ import EarthquakeMap from "@/components/earthquake-map";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { get, getDatabase, ref } from "@react-native-firebase/database";
+import {
+  endAt,
+  get,
+  getDatabase,
+  limitToLast,
+  orderByChild,
+  query,
+  ref,
+  startAt,
+} from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, AppState, PanResponder, Text, View } from "react-native";
+import { Animated, PanResponder, Text, View } from "react-native";
+import {
+  buildTerdeteksiTimeRange,
+  getNowYearMonth,
+  matchesTerdeteksiMonth,
+  normalizeFilterMonths,
+} from "../utils/filter";
 import styles from "./styles/gempa-terdeteksi-content";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DB_PATH = "gempa_terdeteksi/items";
-const MIN_POLL_MS = 30_000;
-const MAX_POLL_MS = 120_000;
 const MAX_POINTS = 20;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,6 +74,8 @@ type Props = {
   onCardOpen?: () => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
+  filterYear?: number;
+  filterMonths?: number[];
 };
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
@@ -136,15 +151,24 @@ export function GempaTerdeteksiHistoryContent({
   onCardOpen,
   externalSelection,
   isActive = true,
+  filterYear,
+  filterMonths,
 }: Props) {
+  const now = useMemo(() => new Date(), []);
+  const fallback = getNowYearMonth(now);
+  const effectiveYear = Number.isFinite(filterYear) ? filterYear! : fallback.year;
+  const effectiveMonths = useMemo(
+    () => normalizeFilterMonths(filterMonths ?? [fallback.month], effectiveYear, "terdeteksi", now),
+    [effectiveYear, fallback.month, filterMonths, now],
+  );
+  const ranges = useMemo(
+    () => effectiveMonths.map((month) => ({ month, ...buildTerdeteksiTimeRange(effectiveYear, month) })),
+    [effectiveMonths, effectiveYear],
+  );
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [showCard, setShowCard] = useState(false);
-
-  // Single source of truth for what's displayed in the card.
-  // `selectedIndex` points into `quakes[]`; when the event isn't in the list
-  // (external selection / not-yet-loaded), `overrideQuake` holds the data.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
@@ -155,11 +179,8 @@ export function GempaTerdeteksiHistoryContent({
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const dataSignatureRef = useRef<string | null>(null);
-  const isFetching = useRef(false);
   const isFirstLoad = useRef(true);
   const isMountedRef = useRef(true);
-  const pollDelayRef = useRef(MIN_POLL_MS);
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animation values
   const translateY = useRef(new Animated.Value(600)).current;
@@ -235,10 +256,6 @@ export function GempaTerdeteksiHistoryContent({
     [translateY, opacity, onCardClose],
   );
 
-  // ── Fly-to-marker ──────────────────────────────────────────────────────────
-  // Flies camera first, then slides card up after a short delay so the
-  // two animations don't fight each other.
-
   const flyToAndOpen = useCallback(
     (quake: QuakeItem, delay = 0) => {
       mapRef.current?.animateToRegion(
@@ -312,7 +329,6 @@ export function GempaTerdeteksiHistoryContent({
     [onPressMarker],
   );
 
-  // ── Hide card when tab goes inactive ──────────────────────────────────────
 
   useEffect(() => {
     if (!isActive) {
@@ -324,13 +340,9 @@ export function GempaTerdeteksiHistoryContent({
       setOverrideQuake(null);
       selectedEventIdRef.current = null;
       lastExternalIdRef.current = null;
-      
+
     }
   }, [isActive, translateY, opacity]);
-
-  // ── External selection (from history list row press) ─────────────────────
-  // Uses overrideQuake when the event isn't in the current quakes[] array.
-  // As soon as quakes[] refreshes and contains it, overrideQuake is cleared.
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
@@ -400,131 +412,119 @@ export function GempaTerdeteksiHistoryContent({
     if (!isActive) return;
     isMountedRef.current = true;
 
-    async function fetchQuakes(silent = true): Promise<boolean> {
-      if (isFetching.current) return false;
-      isFetching.current = true;
-      if (!silent) onLoadingChange?.(true);
+    const app = getApp();
+    const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+    const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
-      try {
-        const app = getApp();
-        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
-        let snapshot = await get(ref(db, DB_PATH));
-        if (!snapshot.exists()) {
-          snapshot = await get(ref(db, "gempa_terdeteksi"));
-        }
-        if (!snapshot.exists() || !isMountedRef.current) return false;
+    const runFetch = async () => {
+      const snapshots = await Promise.all(
+        ranges.map(async (rangeItem) =>
+          get(
+            query(
+              ref(db, DB_PATH),
+              orderByChild("time"),
+              startAt(rangeItem.start),
+              endAt(rangeItem.end),
+              limitToLast(20),
+            ),
+          ),
+        ),
+      );
 
+      if (!isMountedRef.current) return;
+      if (!snapshots.some((snapshot) => snapshot?.exists?.())) {
+        dataSignatureRef.current = null;
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
+      }
+
+      const candidates: any[] = snapshots.flatMap((snapshot) => {
+        if (!snapshot?.exists?.()) return [];
         const raw = snapshot.val();
         const itemsNode = raw?.items ?? raw;
-        const candidates: any[] = Array.isArray(itemsNode)
+        return Array.isArray(itemsNode)
           ? itemsNode
           : itemsNode && typeof itemsNode === "object"
             ? Object.values(itemsNode)
             : [];
+      });
 
-        if (candidates.length === 0) return false;
+      if (candidates.length === 0) {
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
+      }
 
-        const normalized = [...candidates]
-          .sort((a, b) =>
-            String(b?.time ?? b?.jam ?? "").localeCompare(
-              String(a?.time ?? a?.jam ?? ""),
+      const merged = [...candidates]
+        .filter((candidate) =>
+          effectiveMonths.some((month) =>
+            matchesTerdeteksiMonth(
+              candidate?.time ?? candidate?.properties?.time ?? candidate?.tanggal,
+              effectiveYear,
+              month,
             ),
-          )
-          .reduce<QuakeItem[]>((acc, item, index) => {
-            const built = buildQuakeItem(item, index);
-            if (built) acc.push(built);
-            return acc;
-          }, [])
-          .slice(0, MAX_POINTS);
+          ),
+        )
+        .sort((a, b) =>
+          String(b?.time ?? b?.jam ?? "").localeCompare(
+            String(a?.time ?? a?.jam ?? ""),
+          ),
+        );
 
-        if (normalized.length === 0) return false;
-
-        // Skip re-render if data is identical
-        const signature = normalized.map((q) => q.eventId).join("|");
-        if (signature === dataSignatureRef.current) return false;
-        dataSignatureRef.current = signature;
-
-        // Resolve selected index in new data
-        const foundIndex = selectedEventIdRef.current
-          ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
-          : -1;
-
-        // If the override quake is now in the list, clear the override
-        if (overrideQuake && foundIndex >= 0) {
-          setOverrideQuake(null);
-        }
-
-        setQuakes(normalized);
-
-        // Only touch selection when the card is actually open.
-        // If the card is closed, selectedEventIdRef is null (cleared in dismissCard),
-        // so we never accidentally reopen the card by falling back to index 0.
-        if (!showCardRef.current) return true;
-
-        if (foundIndex >= 0) {
-          setSelectedIndex(foundIndex);
-        }
-
-        // On very first load, fly to the first quake
-        if (isFirstLoad.current && normalized[0]) {
-          isFirstLoad.current = false;
-          mapRef.current?.animateToRegion(
-            {
-              latitude: normalized[0].latitude,
-              longitude: normalized[0].longitude,
-              latitudeDelta: 2,
-              longitudeDelta: 2,
-            },
-            800,
-          );
-        }
-
-        return true;
-      } catch {
-        return false;
-      } finally {
-        if (!silent) onLoadingChange?.(false);
-        isFetching.current = false;
+      // Deduplicate by event id while preserving order
+      const seen = new Set<string>();
+      const normalized: QuakeItem[] = [];
+      for (const item of merged) {
+        const built = buildQuakeItem(item, normalized.length);
+        if (!built) continue;
+        const k = String(built.eventId ?? "");
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        normalized.push(built);
+        if (normalized.length >= MAX_POINTS) break;
       }
-    }
 
-    function clearPollTimer() {
-      if (pollTimerRef.current) { clearTimeout(pollTimerRef.current); pollTimerRef.current = null; }
-    }
-
-    function scheduleNextPoll(changed: boolean) {
-      if (!isMountedRef.current) return;
-      pollDelayRef.current = changed
-        ? MIN_POLL_MS
-        : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
-      clearPollTimer();
-      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
-    }
-
-    async function runPollingLoop() {
-      if (!isMountedRef.current || !isActive) return;
-      const changed = await fetchQuakes(true);
-      scheduleNextPoll(changed);
-    }
-
-    fetchQuakes(false).then(scheduleNextPoll);
-
-    const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && isMountedRef.current && isActive) {
-        pollDelayRef.current = MIN_POLL_MS;
-        clearPollTimer();
-        runPollingLoop();
+      const signature = normalized.map((q) => q.eventId).join("|");
+      if (signature === dataSignatureRef.current) {
+        onLoadingChange?.(false);
+        return;
       }
-    });
+      dataSignatureRef.current = signature;
+
+      const foundIndex = selectedEventIdRef.current
+        ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
+        : -1;
+
+      if (overrideQuake && foundIndex >= 0) setOverrideQuake(null);
+
+      setQuakes(normalized);
+      onLoadingChange?.(false);
+
+      if (!showCardRef.current) return;
+      if (foundIndex >= 0) setSelectedIndex(foundIndex);
+
+      if (isFirstLoad.current && normalized[0]) {
+        isFirstLoad.current = false;
+        mapRef.current?.animateToRegion(
+          {
+            latitude: normalized[0].latitude,
+            longitude: normalized[0].longitude,
+            latitudeDelta: 2,
+            longitudeDelta: 2,
+          },
+          800,
+        );
+      }
+    };
+
+    void runFetch();
 
     return () => {
       isMountedRef.current = false;
-      clearPollTimer();
-      appStateSub.remove();
     };
-  }, [isActive, onLoadingChange]);
+  }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
