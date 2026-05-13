@@ -1,7 +1,8 @@
-import { styles } from "../../features/starter/styles/forgot-password-styles";
 import AuthButton from "@/components/auth-button";
 import { router } from "expo-router";
+import React, { useState } from "react";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -10,8 +11,30 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { sendResetOtp } from "../../features/starter/services/auth-service";
+import { styles } from "../../features/starter/styles/forgot-password-styles";
 
 export default function ForgotPassword() {
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSendOtp = async () => {
+    if (!email.includes("@")) {
+      Alert.alert("Input Tidak Valid", "Silakan masukkan alamat email yang valid.");
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      await sendResetOtp(email);
+      router.push({ pathname: "/starter/verify-code", params: { email } });
+    } catch (error) {
+      Alert.alert("Error", "Gagal mengirim OTP.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -51,13 +74,16 @@ export default function ForgotPassword() {
             autoCapitalize="none"
             selectionColor="#1E6F9F" // Diselaraskan dengan kursor biru di VerifyCode
             style={styles.input}
+            value={email}
+            onChangeText={setEmail}
           />
         </View>
 
         <View style={styles.buttonWrapper}>
           <AuthButton
-            title="Kirim Kode Verifikasi"
-            onPress={() => router.push("/starter/verify-code")}
+            title={isLoading ? "Mengirim..." : "Kirim Kode Verifikasi"}
+            onPress={handleSendOtp}
+            disabled={isLoading}
           />
         </View>
       </ScrollView>

@@ -20,6 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json",
       "package": "com.anonymous.myApp"
     },
     "web": {
@@ -28,6 +29,7 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-firebase/app",
       [
         "expo-splash-screen",
         {

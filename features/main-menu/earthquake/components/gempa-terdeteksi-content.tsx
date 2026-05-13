@@ -4,12 +4,12 @@ import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  PanResponder,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    PanResponder,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
@@ -42,6 +42,7 @@ export default function GempaTerdeteksi({
   const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
+  const showCardRef = useRef(false);
   const networkErrorShownRef = useRef(false);
   const mapRef = useRef<MapViewType | null>(null);
   const translateY = useRef(new Animated.Value(600)).current;
@@ -75,7 +76,10 @@ export default function GempaTerdeteksi({
               duration: 150,
               useNativeDriver: true,
             }),
-          ]).start(() => setShowCard(false));
+          ]).start(() => {
+            showCardRef.current = false;
+            setShowCard(false);
+          });
         } else {
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
@@ -99,6 +103,7 @@ export default function GempaTerdeteksi({
     translateY.setValue(600);
     opacity.setValue(0);
     btnOpacity.setValue(0);
+    showCardRef.current = true;
     setShowCard(true);
     Animated.parallel([
       Animated.spring(translateY, {
@@ -120,7 +125,8 @@ export default function GempaTerdeteksi({
   }
 
   function dismissCard(callback?: () => void) {
-    if (showCard) {
+    if (showCardRef.current) {
+      showCardRef.current = false;
       Animated.parallel([
         Animated.timing(translateY, {
           toValue: 600,
@@ -146,8 +152,15 @@ export default function GempaTerdeteksi({
     }
   }
 
+  const hasFetchedRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (!isActive) return;
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    abortRef.current = new AbortController();
 
     async function fetchLatestQuake() {
       onLoadingChange?.(true);
@@ -156,7 +169,7 @@ export default function GempaTerdeteksi({
           return;
         }
         const url = `${API_URL.trim()}${Date.now()}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: abortRef.current?.signal });
         const data = await res.json();
 
         const features = data?.features;
@@ -198,6 +211,7 @@ export default function GempaTerdeteksi({
           800,
         );
       } catch (e) {
+        if ((e as Error).name === "AbortError") return;
         if (!networkErrorShownRef.current && e instanceof TypeError && (e as Error).message.includes('Network')) {
           networkErrorShownRef.current = true;
           Alert.alert(
@@ -212,6 +226,7 @@ export default function GempaTerdeteksi({
     }
 
     fetchLatestQuake();
+    return () => abortRef.current?.abort();
   }, [isActive, onLoadingChange]);
 
   return (

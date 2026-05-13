@@ -93,5 +93,10 @@ export default function Earthquake() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   tabPane: { flex: 1 },
-  hiddenPane: { display: "none" },
+  hiddenPane: {
+    opacity: 0,
+    position: "absolute",
+    zIndex: -1,
+    pointerEvents: "none", // already handled by parent but belt-and-suspenders
+  },
 });

@@ -95,18 +95,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     gap: 12,
   },
-  btnBatal: {
+  btnReset: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#A5B4FC",
+    borderColor: "#67E8F9",
     alignItems: "center",
   },
-  btnBatalText: {
-    color: "#E0E7FF",
+  btnResetText: {
+    color: "#CFFAFE",
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   btnSimpan: {
     flex: 1,
