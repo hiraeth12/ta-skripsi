@@ -8,11 +8,14 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuth } from "@react-native-firebase/auth";
 import {
+  endAt,
   get,
   getDatabase,
   limitToLast,
+  orderByChild,
   query,
   ref,
+  startAt,
 } from "@react-native-firebase/database";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,6 +28,7 @@ import {
 } from "react";
 import {
   Animated,
+  Easing,
   FlatList,
   Text,
   TouchableOpacity,
@@ -35,6 +39,19 @@ import {
   GempaTerdeteksiHistoryContent,
 } from "./components";
 import styles from "./styles/history-screen";
+import {
+  buildDirasakanDateRange,
+  buildTerdeteksiTimeRange,
+  clampYearMonth,
+  getNowYearMonth,
+  matchesDirasakanMonth,
+  matchesTerdeteksiMonth,
+  MONTH_NAMES_ID,
+  normalizeFilterMonths,
+  parseFilterMonthsParam,
+  serializeFilterMonths,
+  type HistoryTabKey,
+} from "./utils/filter";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -291,6 +308,9 @@ export default function History() {
 
   const searchParams = useLocalSearchParams<{
     tab?: string;
+    filterYear?: string;
+    filterMonth?: string;
+    filterMonths?: string;
     selectedEventId?: string;
     selectedLatitude?: string;
     selectedLongitude?: string;
@@ -309,6 +329,7 @@ export default function History() {
   const tabParam = asSingle(searchParams.tab);
   const initialTab: EarthquakeTab =
     tabParam === "terdeteksi" ? "GEMPA TERDETEKSI" : "GEMPA DIRASAKAN";
+  const now = useMemo(() => new Date(), []);
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -316,13 +337,59 @@ export default function History() {
   const [loading, setLoading] = useState(false);
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
   const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
-  const [isListVisible, setIsListVisible] = useState(!asSingle(searchParams.selectedEventId));
+  // Panel animation: 0 = slid in (visible), LIST_PANEL_HEIGHT% = slid out (hidden)
+  const LIST_PANEL_HEIGHT_PCT = 40; // must match the panel's height below
+  const listPanelSlide = useRef(
+    new Animated.Value(asSingle(searchParams.selectedEventId) ? 1 : 0),
+  ).current;
+
+  const showListPanel = useCallback(() => {
+    Animated.timing(listPanelSlide, {
+      toValue: 0,
+      duration: 400,
+      easing: Easing.out(Easing.bezier(0.16, 1, 0.3, 1)), // smoother deceleration
+      useNativeDriver: false, // drives a % height — can't use native driver for layout props
+    }).start();
+  }, [listPanelSlide]);
+
+  const hideListPanel = useCallback(() => {
+    Animated.timing(listPanelSlide, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.inOut(Easing.ease), // smooth accel/decel
+      useNativeDriver: false,
+    }).start();
+  }, [listPanelSlide]);
   const [items, setItems] = useState<ListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
+  const [isOpeningFilter, setIsOpeningFilter] = useState(false);
   const [userLocation, setUserLocation] = useState({
     lat: roundCoord(-6.9175),
     lon: roundCoord(107.6191),
   });
+  const rawYear = Number.parseInt(asSingle(searchParams.filterYear), 10);
+  const rawMonth = Number.parseInt(asSingle(searchParams.filterMonth), 10);
+  const rawMonthsParam = asSingle(searchParams.filterMonths);
+  const rawMonths = useMemo(
+    () => parseFilterMonthsParam(rawMonthsParam),
+    [rawMonthsParam],
+  );
+  const effectiveFilter = useMemo(() => {
+    const fallback = getNowYearMonth(now);
+    const base = {
+      year: Number.isFinite(rawYear) ? rawYear : fallback.year,
+      month: Number.isFinite(rawMonth) ? rawMonth : fallback.month,
+    };
+    const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+    return clampYearMonth(base, tabKey, now);
+  }, [activeTab, now, rawMonth, rawYear]);
+  const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+  const effectiveMonths = useMemo(() => {
+    const baseMonths = rawMonths.length > 0
+      ? rawMonths
+      : [effectiveFilter.month];
+    return normalizeFilterMonths(baseMonths, effectiveFilter.year, tabKey, now);
+  }, [effectiveFilter.month, effectiveFilter.year, now, rawMonths, tabKey]);
 
   // ── Tab param sync ─────────────────────────────────────────────────────────
 
@@ -383,21 +450,35 @@ export default function History() {
     // openCard() again even though the user already dismissed the card.
     clearSelectionParams();
     setActiveTab(tab);
-    setIsListVisible(true);
+    showListPanel();
     if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
     else setHasMountedTerdeteksi(true);
-  }, [clearSelectionParams]);
+  }, [clearSelectionParams, showListPanel]);
 
   const handleExternalSelectionHandled = useCallback(() => {
     clearSelectionParams();
   }, [clearSelectionParams]);
 
   const handleFilterPress = useCallback(() => {
+    if (isOpeningFilter) return;
+    setIsOpeningFilter(true);
     router.push({
       pathname: "/main-menu/filter-gempa-screen",
-      params: { tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi" },
+      params: {
+        tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
+        filterYear: String(effectiveFilter.year),
+        filterMonth: String(effectiveMonths[0]),
+        filterMonths: serializeFilterMonths(effectiveMonths),
+        returnTo: "history",
+      },
     });
-  }, [activeTab, router]);
+  }, [activeTab, effectiveFilter.year, effectiveMonths, isOpeningFilter, router]);
+
+  useEffect(() => {
+    if (isFocused) {
+      setIsOpeningFilter(false);
+    }
+  }, [isFocused]);
 
   // ── User location ─────────────────────────────────────────────────────────
 
@@ -426,8 +507,9 @@ export default function History() {
 
   useEffect(() => {
     let isMounted = true;
-    const cacheKey = TAB_CACHE[activeTab];
+    const cacheKey = `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
     const isDir = activeTab === "GEMPA DIRASAKAN";
+    const orderField = isDir ? "date" : "time";
 
     async function fetchData() {
       // Phase 1: serve cache immediately
@@ -446,16 +528,63 @@ export default function History() {
       try {
         const app = getApp();
         const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
-        const dataQuery = query(
-          ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
-          limitToLast(35),
+        const snapshots = await Promise.all(
+          effectiveMonths.map(async (month) => {
+            const range = isDir
+              ? buildDirasakanDateRange(effectiveFilter.year, month)
+              : buildTerdeteksiTimeRange(effectiveFilter.year, month);
+            const dataQuery = query(
+              ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
+              orderByChild(orderField),
+              startAt(range.start),
+              endAt(range.end),
+              limitToLast(35),
+            );
+            return get(dataQuery);
+          }),
         );
-        const snapshot = await get(dataQuery);
-        if (!snapshot.exists() || !isMounted) return;
+        if (!isMounted) return;
+        const hasAnyData = snapshots.some((snapshot) => snapshot.exists());
+        if (!hasAnyData) {
+          setItems([]);
+          setListLoading(false);
+          return;
+        }
 
-        const normalized = isDir
-          ? normalizeDirasakan(snapshot.val(), userLocation.lat, userLocation.lon, haversineDistanceKm)
-          : normalizeTerdeteksi(snapshot.val(), userLocation.lat, userLocation.lon, haversineDistanceKm);
+        const combinedRaw: unknown[] = [];
+        snapshots.forEach((snapshot) => {
+          if (!snapshot.exists()) return;
+          const value = snapshot.val();
+          const arr = Array.isArray(value)
+            ? value
+            : value && typeof value === "object"
+              ? Object.values(value)
+              : [];
+          combinedRaw.push(...arr);
+        });
+
+        const mergedNormalized = isDir
+          ? normalizeDirasakan(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm)
+          : normalizeTerdeteksi(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm);
+
+        const filtered = mergedNormalized.filter((item) =>
+          effectiveMonths.some((month) =>
+            isDir
+              ? matchesDirasakanMonth(item.tanggal, effectiveFilter.year, month)
+              : matchesTerdeteksiMonth(item.tanggal, effectiveFilter.year, month),
+          ),
+        );
+
+        // Deduplicate by id while preserving order
+        const seen = new Set<string>();
+        const normalized: typeof filtered = [];
+        for (const it of filtered) {
+          const key = String(it.id ?? "");
+          if (!key) continue;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          normalized.push(it);
+        }
 
         AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
         setCacheData(cacheKey, normalized);
@@ -473,7 +602,7 @@ export default function History() {
     setListLoading(true);
     void fetchData();
     return () => { isMounted = false; };
-  }, [activeTab, userLocation.lat, userLocation.lon]);
+  }, [activeTab, effectiveFilter.year, effectiveMonths, userLocation.lat, userLocation.lon]);
 
   // ── List item press → fly to marker ──────────────────────────────────────
   // Sets params which the content component reads as externalSelection.
@@ -498,12 +627,15 @@ export default function History() {
           selectedKedalaman: item.kedalaman,
           selectedFelt: item.felt,
           selectedShakemap: item.shakemap ?? "",
+          filterYear: String(effectiveFilter.year),
+          filterMonth: String(effectiveMonths[0]),
+          filterMonths: serializeFilterMonths(effectiveMonths),
         });
       }, 0);
-      // Hide list immediately so map is full screen during fly-in
-      setIsListVisible(false);
+      // Slide list panel away so map is full screen during fly-in
+      hideListPanel();
     },
-    [activeTab, router],
+    [activeTab, effectiveFilter.year, effectiveMonths, router, hideListPanel],
   );
 
   // ── FlatList helpers ──────────────────────────────────────────────────────
@@ -543,7 +675,9 @@ export default function History() {
         />
         <View style={styles.designSection}>
           <View style={styles.periodChip}>
-            <Text style={styles.periodChipText}>Oktober 2025 • Jawa Barat</Text>
+            <Text style={styles.periodChipText}>
+              {effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} {effectiveFilter.year}
+            </Text>
           </View>
           <View style={styles.actionRow}>
             <View style={{ flex: 1 }} />
@@ -551,6 +685,7 @@ export default function History() {
               style={[styles.sidePill, styles.sidePillRight, styles.sidePillRightContent]}
               activeOpacity={0.85}
               onPress={handleFilterPress}
+              disabled={isOpeningFilter}
             >
               <Ionicons name="options" size={17} color="#FFFFFF" />
               <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>FILTER</Text>
@@ -559,7 +694,7 @@ export default function History() {
         </View>
       </View>
     ),
-    [activeTab, handleAppTabPress, handleFilterPress, loading],
+    [activeTab, effectiveFilter.year, effectiveMonths, handleAppTabPress, handleFilterPress, isOpeningFilter, loading],
   );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
@@ -569,14 +704,17 @@ export default function History() {
 
   return (
     <View style={styles.container}>
-      {/* Map occupies full screen when list hidden, 60% when list visible */}
-      <View
+      {/* Map occupies 60% when list visible, full screen when hidden */}
+      <Animated.View
         style={{
           position: "absolute",
           top: 0,
           left: 0,
           right: 0,
-          bottom: isListVisible ? "40%" : 0,
+          bottom: listPanelSlide.interpolate({
+            inputRange: [0, 1],
+            outputRange: ["40%", "0%"]
+          }),
         }}
       >
         {hasMountedDirasakan && (
@@ -589,9 +727,11 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              // When card is dismissed → restore the list panel
-              onCardClose={() => setIsListVisible(true)}
-              onCardOpen={() => setIsListVisible(false)}
+              // When card is dismissed → slide the list panel back in
+              onCardClose={() => showListPanel()}
+              onCardOpen={() => hideListPanel()}
+              filterYear={effectiveFilter.year}
+              filterMonths={effectiveMonths}
               isActive={dirasakanActive}
             />
           </View>
@@ -607,33 +747,41 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              onCardClose={() => setIsListVisible(true)}
-              onCardOpen={() => setIsListVisible(false)}
+              onCardClose={() => showListPanel()}
+              onCardOpen={() => hideListPanel()}
+              filterYear={effectiveFilter.year}
+              filterMonths={effectiveMonths}
               isActive={terdeteksiActive}
             />
           </View>
         )}
-      </View>
+      </Animated.View>
 
-      {/* Bottom list panel — 40% height, hidden when card is open */}
-      {isListVisible && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: "40%",
-            backgroundColor: "#0C4A6E",
-            paddingTop: 12,
-            elevation: 10,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            zIndex: 10,
-          }}
-        >
+      {/* Bottom list panel — slides up from bottom over the map */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "40%",
+          backgroundColor: "#0C4A6E",
+          paddingTop: 12,
+          elevation: 10,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          zIndex: 10,
+          // Translate the panel down by its own height (100%) when hidden
+          transform: [{
+            translateY: listPanelSlide.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 500], // large enough to be off-screen
+            }),
+          }],
+        }}
+      >
           <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
             <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
               {activeTab === "GEMPA DIRASAKAN" ? "Gempa Dirasakan Terbaru" : "Gempa Terdeteksi Terbaru"}
@@ -657,8 +805,7 @@ export default function History() {
               ListEmptyComponent={listEmpty}
             />
           )}
-        </View>
-      )}
+        </Animated.View>
     </View>
   );
 }

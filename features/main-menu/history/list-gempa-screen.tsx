@@ -4,22 +4,38 @@ import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import { getAuth } from "@react-native-firebase/auth";
 import {
-  get,
-  getDatabase,
-  limitToLast,
-  query,
-  ref,
+    endAt,
+    get,
+    getDatabase,
+    limitToLast,
+    orderByChild,
+    query,
+    ref,
+    startAt,
 } from "@react-native-firebase/database";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    FlatList,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import styles from "./styles/list-gempa-screen";
+import {
+    buildDirasakanDateRange,
+    buildTerdeteksiTimeRange,
+    clampYearMonth,
+    getNowYearMonth,
+    matchesDirasakanMonth,
+    matchesTerdeteksiMonth,
+    MONTH_NAMES_ID,
+    normalizeFilterMonths,
+    parseFilterMonthsParam,
+    serializeFilterMonths,
+    type HistoryTabKey,
+} from "./utils/filter";
 
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 
@@ -135,9 +151,35 @@ const skeletonStyles = {
 // ---------------------------------------------------------------------------
 export default function ListGempaPage() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{
+    tab?: string;
+    filterYear?: string;
+    filterMonth?: string;
+    filterMonths?: string;
+  }>();
   const mode: ListMode =
     params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const now = useMemo(() => new Date(), []);
+  const rawYear = Number.parseInt(String(params.filterYear ?? ""), 10);
+  const rawMonth = Number.parseInt(String(params.filterMonth ?? ""), 10);
+  const rawMonths = useMemo(
+    () => parseFilterMonthsParam(String(params.filterMonths ?? "")),
+    [params.filterMonths],
+  );
+  const effectiveFilter = useMemo(() => {
+    const fallback = getNowYearMonth(now);
+    const base = {
+      year: Number.isFinite(rawYear) ? rawYear : fallback.year,
+      month: Number.isFinite(rawMonth) ? rawMonth : fallback.month,
+    };
+    const tabKey: HistoryTabKey = mode === "terdeteksi" ? "terdeteksi" : "dirasakan";
+    return clampYearMonth(base, tabKey, now);
+  }, [mode, now, rawMonth, rawYear]);
+  const tabKey: HistoryTabKey = mode === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const effectiveMonths = useMemo(() => {
+    const baseMonths = rawMonths.length > 0 ? rawMonths : [effectiveFilter.month];
+    return normalizeFilterMonths(baseMonths, effectiveFilter.year, tabKey, now);
+  }, [effectiveFilter.month, effectiveFilter.year, now, rawMonths, tabKey]);
   const { haversineDistanceKm } = useHaversine();
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,19 +191,21 @@ export default function ListGempaPage() {
     lon: 107.6191,
   });
 
-  const title = useMemo(
-    () =>
-      mode === "dirasakan"
-        ? "List Gempa Dirasakan • Jawa Barat"
-        : "List Gempa Terdeteksi • Jawa Barat",
-    [mode],
-  );
+  const title = useMemo(() => {
+    const period = `${effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} ${effectiveFilter.year}`;
+    return mode === "dirasakan"
+      ? `List Gempa Dirasakan • ${period}`
+      : `List Gempa Terdeteksi • ${period}`;
+  }, [effectiveFilter.year, effectiveMonths, mode]);
 
   function openHistoryForItem(item: ListItem) {
     router.push({
       pathname: "/main-menu/history",
       params: {
         tab: mode,
+        filterYear: String(effectiveFilter.year),
+        filterMonth: String(effectiveMonths[0]),
+        filterMonths: serializeFilterMonths(effectiveMonths),
         selectedEventId: item.id,
         selectedLatitude: String(item.latitude),
         selectedLongitude: String(item.longitude),
@@ -221,21 +265,46 @@ export default function ListGempaPage() {
           ? getDatabase(app, DATABASE_URL)
           : getDatabase(app);
 
-        if (mode === "dirasakan") {
-          const snapshot = await get(
-            query(ref(db, "gempa_dirasakan/items"), limitToLast(80)),
-          );
-          const rawData = snapshot.exists() ? snapshot.val() : null;
-          const candidates = Array.isArray(rawData)
-            ? rawData
-            : rawData && typeof rawData === "object"
-              ? Object.values(rawData)
-              : [];
+        const cacheKey = `${CACHE_KEYS.TERDETEKSI_HISTORY}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
 
-          const normalized = candidates
+        if (mode === "dirasakan") {
+          const snapshots = await Promise.all(
+            effectiveMonths.map(async (month) => {
+              const range = buildDirasakanDateRange(effectiveFilter.year, month);
+              return get(
+                query(
+                  ref(db, "gempa_dirasakan/items"),
+                  orderByChild("date"),
+                  startAt(range.start),
+                  endAt(range.end),
+                  limitToLast(80),
+                ),
+              );
+            }),
+          );
+          const candidates = snapshots.flatMap((snapshot) => {
+            if (!snapshot.exists()) return [];
+            const rawData = snapshot.val();
+            return Array.isArray(rawData)
+              ? rawData
+              : rawData && typeof rawData === "object"
+                ? Object.values(rawData)
+                : [];
+          });
+
+          const mergedNormalized = candidates
             .sort((a: any, b: any) =>
               String(b?.eventid ?? b?.timesent ?? "").localeCompare(
                 String(a?.eventid ?? a?.timesent ?? ""),
+              ),
+            )
+            .filter((candidate: any) =>
+              effectiveMonths.some((month) =>
+                matchesDirasakanMonth(
+                  candidate?.date ?? candidate?.tanggal,
+                  effectiveFilter.year,
+                  month,
+                ),
               ),
             )
             .map((candidate: any, index): ListItem | null => {
@@ -296,25 +365,59 @@ export default function ListGempaPage() {
             .filter((item): item is ListItem => Boolean(item))
             .slice(0, 30);
 
-          if (isMounted) setItems(normalized);
+          // Deduplicate normalized by id
+          const seen = new Set<string>();
+          const unique: ListItem[] = [];
+          for (const it of normalized) {
+            const k = String(it.id ?? "");
+            if (!k) continue;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            unique.push(it);
+          }
+
+          if (isMounted) setItems(unique);
         } else {
-          const snapshot = await get(
-            query(ref(db, "gempa_terdeteksi/items"), limitToLast(150)),
+          const snapshots = await Promise.all(
+            effectiveMonths.map(async (month) => {
+              const range = buildTerdeteksiTimeRange(effectiveFilter.year, month);
+              return get(
+                query(
+                  ref(db, "gempa_terdeteksi/items"),
+                  orderByChild("time"),
+                  startAt(range.start),
+                  endAt(range.end),
+                  limitToLast(150),
+                ),
+              );
+            }),
           );
-          const rawData = snapshot.exists() ? snapshot.val() : null;
-          const nodeArray = Array.isArray(rawData)
-            ? rawData
-            : rawData && typeof rawData === "object"
-              ? Object.values(rawData)
-              : [];
+          const nodeArray = snapshots.flatMap((snapshot) => {
+            if (!snapshot.exists()) return [];
+            const rawData = snapshot.val();
+            return Array.isArray(rawData)
+              ? rawData
+              : rawData && typeof rawData === "object"
+                ? Object.values(rawData)
+                : [];
+          });
 
           const sorted = [...nodeArray].sort((a: any, b: any) => {
             const tA = String(a?.time ?? a?.properties?.time ?? "");
             const tB = String(b?.time ?? b?.properties?.time ?? "");
             return tB.localeCompare(tA);
+          }).filter((item: any) => {
+            const props = item?.properties ?? item;
+            return effectiveMonths.some((month) =>
+              matchesTerdeteksiMonth(
+                props?.time ?? props?.tanggal,
+                effectiveFilter.year,
+                month,
+              ),
+            );
           });
 
-          const normalized = sorted
+          const mergedNorm = sorted
             .map((item: any, index): ListItem | null => {
               const coords = item?.geometry?.coordinates || item?.coordinates;
               const longitude = parseFloat(
@@ -375,8 +478,18 @@ export default function ListGempaPage() {
             .filter((item): item is ListItem => Boolean(item))
             .slice(0, 30);
 
-          setCacheData(CACHE_KEYS.TERDETEKSI_HISTORY, normalized);
-          if (isMounted) setItems(normalized);
+          const normalized = mergedNorm.filter((item): item is ListItem => Boolean(item)).slice(0, 30);
+          const seen2 = new Set<string>();
+          const unique2: ListItem[] = [];
+          for (const it of normalized) {
+            const k = String(it.id ?? "");
+            if (!k) continue;
+            if (seen2.has(k)) continue;
+            seen2.add(k);
+            unique2.push(it);
+          }
+          setCacheData(cacheKey, unique2);
+          if (isMounted) setItems(unique2);
         }
       } catch {
         if (isMounted) setItems([]);
@@ -389,7 +502,7 @@ export default function ListGempaPage() {
     return () => {
       isMounted = false;
     };
-  }, [haversineDistanceKm, mode, userLocation.lat, userLocation.lon]);
+  }, [effectiveFilter.year, effectiveMonths, haversineDistanceKm, mode, userLocation.lat, userLocation.lon]);
 
   return (
     <View style={styles.container}>

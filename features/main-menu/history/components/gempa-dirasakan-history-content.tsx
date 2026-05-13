@@ -3,20 +3,34 @@ import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { get, getDatabase, ref } from "@react-native-firebase/database";
+import {
+    endAt,
+    get,
+    getDatabase,
+    orderByChild,
+    query,
+    ref,
+    startAt,
+} from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
-  AppState,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View
+    Animated,
+    AppState,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
+import {
+    buildDirasakanDateRange,
+    getNowYearMonth,
+    matchesDirasakanMonth,
+    normalizeFilterMonths,
+} from "../utils/filter";
 import styles from "./styles/gempa-dirasakan-history-content";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -79,6 +93,10 @@ type Props = {
   onCardOpen?: () => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
+  filterYear?: number;
+  filterMonths?: number[];
+  /** Called by parent when this tab is switched TO — triggers fly-in to newest quake */
+  onTabActivate?: (flyToNewest: () => void) => void;
 };
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
@@ -174,8 +192,22 @@ export function GempaDirasakanHistoryContent({
   onCardOpen,
   externalSelection,
   isActive = true,
+  filterYear,
+  filterMonths,
+  onTabActivate,
 }: Props) {
   const { haversineDistanceKm } = useHaversine();
+  const now = useMemo(() => new Date(), []);
+  const fallback = getNowYearMonth(now);
+  const effectiveYear = Number.isFinite(filterYear) ? filterYear! : fallback.year;
+  const effectiveMonths = useMemo(
+    () => normalizeFilterMonths(filterMonths ?? [fallback.month], effectiveYear, "dirasakan", now),
+    [effectiveYear, fallback.month, filterMonths, now],
+  );
+  const ranges = useMemo(
+    () => effectiveMonths.map((month) => ({ month, ...buildDirasakanDateRange(effectiveYear, month) })),
+    [effectiveMonths, effectiveYear],
+  );
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -380,8 +412,30 @@ export function GempaDirasakanHistoryContent({
       setOverrideQuake(null);
       selectedEventIdRef.current = null; // FIX
       lastExternalIdRef.current = null;  // FIX: so re-activating tab doesn't block same-item re-open
+      isFirstLoad.current = true;    // Re-arm fly-in for next activation
     }
   }, [isActive, translateY, opacity]);
+
+  // ── Fly to newest quake when tab becomes active ────────────────────────────
+
+  useEffect(() => {
+    if (!isActive) return;
+    // If data is already loaded, fly immediately; otherwise isFirstLoad handles it
+    if (quakes.length === 0) return;
+    const newest = quakes[0];
+    mapRef.current?.animateToRegion(
+      {
+        latitude: newest.latitude - 0.15,
+        longitude: newest.longitude,
+        latitudeDelta: 2.5,
+        longitudeDelta: 2.5,
+      },
+      800,
+    );
+    isFirstLoad.current = false;
+  // Only re-run when isActive flips to true — not on every quakes change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   // ── External selection (from history list row press) ─────────────────────
 
@@ -465,24 +519,50 @@ export function GempaDirasakanHistoryContent({
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
-        const snapshot = await get(ref(db, DB_PATH));
-        if (!snapshot.exists() || !isMountedRef.current) return false;
+        const snapshots = await Promise.all(
+          ranges.map(async (rangeItem) =>
+            get(
+              query(
+                ref(db, DB_PATH),
+                orderByChild("date"),
+                startAt(rangeItem.start),
+                endAt(rangeItem.end),
+              ),
+            ),
+          ),
+        );
+        if (!isMountedRef.current) return false;
+        if (!snapshots.some((snapshot) => snapshot.exists())) {
+          dataSignatureRef.current = null;
+          setQuakes([]);
+          return false;
+        }
 
-        const raw = snapshot.val();
-        const candidates: any[] = Array.isArray(raw)
-          ? raw
-          : raw && typeof raw === "object"
-            ? Object.values(raw)
-            : [];
+        const candidates: any[] = snapshots.flatMap((snapshot) => {
+          if (!snapshot.exists()) return [];
+          const raw = snapshot.val();
+          return Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === "object"
+              ? Object.values(raw)
+              : [];
+        });
 
         if (candidates.length === 0) return false;
 
-        const normalized = candidates
+        const merged = candidates
           .sort((a, b) => {
             const keyA = String(a?.eventid ?? a?.eventId ?? a?.timesent ?? `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`);
             const keyB = String(b?.eventid ?? b?.eventId ?? b?.timesent ?? `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`);
             return keyB.localeCompare(keyA);
           })
+          .filter((candidate) =>
+            effectiveMonths.some((month) => matchesDirasakanMonth(
+              candidate?.tanggal ?? candidate?.date,
+              effectiveYear,
+              month,
+            )),
+          )
           .reduce<QuakeItem[]>((acc, candidate, index) => {
             const item = buildQuakeItem(candidate, index, haversineDistanceKm);
             if (item) acc.push(item);
@@ -490,7 +570,19 @@ export function GempaDirasakanHistoryContent({
           }, [])
           .slice(0, MAX_POINTS);
 
-        if (normalized.length === 0) return false;
+        if (merged.length === 0) return false;
+
+        // Deduplicate by eventId preserving order
+        const seen = new Set<string>();
+        const normalized: QuakeItem[] = [];
+        for (const q of merged) {
+          const k = String(q.eventId ?? "");
+          if (!k) continue;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          normalized.push(q);
+          if (normalized.length >= MAX_POINTS) break;
+        }
 
         const signature = normalized.map((q) => q.eventId).join("|");
         if (signature === dataSignatureRef.current) return false;
@@ -506,13 +598,6 @@ export function GempaDirasakanHistoryContent({
 
         setQuakes(normalized);
 
-        // Only touch selection when card is open — prevents reopening after dismiss
-        if (!showCardRef.current) return true;
-
-        if (foundIndex >= 0) {
-          setSelectedIndex(foundIndex);
-        }
-
         if (isFirstLoad.current && normalized[0]) {
           isFirstLoad.current = false;
           mapRef.current?.animateToRegion(
@@ -524,6 +609,13 @@ export function GempaDirasakanHistoryContent({
             },
             800,
           );
+        }
+
+        // Only touch selection when card is open — prevents reopening after dismiss
+        if (!showCardRef.current) return true;
+
+        if (foundIndex >= 0) {
+          setSelectedIndex(foundIndex);
         }
 
         return true;
@@ -569,7 +661,7 @@ export function GempaDirasakanHistoryContent({
       clearPollTimer();
       appStateSub.remove();
     };
-  }, [isActive, onLoadingChange]);
+  }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

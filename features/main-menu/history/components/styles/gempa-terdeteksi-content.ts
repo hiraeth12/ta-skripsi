@@ -56,6 +56,47 @@ const styles = StyleSheet.create({
   infoTextFlex: { flex: 1 },
   infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
   infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
+
+  latestQuakePill: {
+    position: "absolute",
+    bottom: 24,           // adjust to sit above your bottom tab bar
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 10,
+  },
+
+  latestQuakePillMag: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0369A1",
+  },
+
+  latestQuakePillSep: {
+    fontSize: 13,
+    color: "#94A3B8",
+  },
+  latestQuakePillLoc: {
+    flex: 1,
+    fontSize: 13,
+    color: "#1E293B",
+  },
+  latestQuakePillTime: {
+    fontSize: 12,
+    color: "#64748B",
+    marginLeft: 4,
+  },
 });
 
 export default styles;
