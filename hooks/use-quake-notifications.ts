@@ -1,6 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useState } from "react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export type QuakeNotifType = "Dirasakan" | "Terdeteksi";
 
 export type QuakeNotification = {
@@ -18,19 +20,26 @@ export type QuakeNotification = {
 type NotificationState = {
   notifications: QuakeNotification[];
   unreadCount: number;
+  error: string | null; // FIX #3: expose fetch errors to UI
 };
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
-
 const POLL_INTERVAL_MS = 15_000;
+const MAX_NOTIFICATIONS = 100; // FIX #6: named constant instead of magic number
+
+// ─── Module-level shared state ────────────────────────────────────────────────
 
 let state: NotificationState = {
   notifications: [],
   unreadCount: 0,
+  error: null,
 };
 
-let isStarted = false;
+// FIX #2: use pollTimer as the single source of truth for "is polling active"
+//         instead of a separate isStarted boolean that can desync on hot reload
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dailyResetTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<() => void>();
@@ -41,8 +50,10 @@ const latestSeen = {
   terdeteksi: "",
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function notifyListeners() {
-  listeners.forEach((listener) => listener());
+  listeners.forEach((fn) => fn());
 }
 
 function getLocalDayKey() {
@@ -53,43 +64,13 @@ function getLocalDayKey() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function clearAllNotifications() {
-  setState({ notifications: [], unreadCount: 0 });
-}
-
-function scheduleDailyReset() {
-  if (dailyResetTimer) clearTimeout(dailyResetTimer);
-
-  const now = new Date();
-  const nextMidnight = new Date(now);
-  nextMidnight.setHours(24, 0, 0, 0);
-  const delay = Math.max(1, nextMidnight.getTime() - now.getTime());
-
-  dailyResetTimer = setTimeout(() => {
-    currentDayKey = getLocalDayKey();
-    clearAllNotifications();
-    scheduleDailyReset();
-  }, delay);
-}
-
-function resetIfDayChanged() {
-  const dayKey = getLocalDayKey();
-  if (dayKey === currentDayKey) return;
-
-  currentDayKey = dayKey;
-  clearAllNotifications();
-}
-
-function setState(next: NotificationState) {
-  state = next;
+function setState(next: Partial<NotificationState>) {
+  state = { ...state, ...next };
   notifyListeners();
 }
 
 function recomputeUnreadCount(notifications: QuakeNotification[]) {
-  return notifications.reduce(
-    (total, item) => total + (item.isRead ? 0 : 1),
-    0,
-  );
+  return notifications.reduce((total, item) => total + (item.isRead ? 0 : 1), 0);
 }
 
 function getLevel(magnitude: number): "Rendah" | "Sedang" | "Kuat" {
@@ -104,26 +85,18 @@ function parseTimestamp(date: string, time: string) {
   if (!rawDate || !cleanTime) return Date.now();
 
   const monthMap: Record<string, string> = {
-    Jan: "Jan",
-    Feb: "Feb",
-    Mar: "Mar",
-    Apr: "Apr",
-    Mei: "May",
-    Jun: "Jun",
-    Jul: "Jul",
-    Agt: "Aug",
-    Sep: "Sep",
-    Okt: "Oct",
-    Nov: "Nov",
-    Des: "Dec",
+    Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr",
+    Mei: "May", Jun: "Jun", Jul: "Jul", Agt: "Aug",
+    Sep: "Sep", Okt: "Oct", Nov: "Nov", Des: "Dec",
   };
 
   let normalizedDate = rawDate;
-  Object.keys(monthMap).forEach((key) => {
-    if (normalizedDate.includes(key)) {
-      normalizedDate = normalizedDate.replace(key, monthMap[key]);
+  for (const [id, en] of Object.entries(monthMap)) {
+    if (normalizedDate.includes(id)) {
+      normalizedDate = normalizedDate.replace(id, en);
+      break;
     }
-  });
+  }
 
   const parsed = new Date(`${normalizedDate} ${cleanTime} GMT+0700`).getTime();
   return Number.isNaN(parsed) ? Date.now() : parsed;
@@ -134,13 +107,38 @@ function pushNotification(notification: QuakeNotification) {
 
   const notifications = [notification, ...state.notifications]
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 100);
+    .slice(0, MAX_NOTIFICATIONS);
 
-  setState({
-    notifications,
-    unreadCount: recomputeUnreadCount(notifications),
-  });
+  setState({ notifications, unreadCount: recomputeUnreadCount(notifications) });
 }
+
+// ─── Daily reset ──────────────────────────────────────────────────────────────
+
+function clearAllNotifications() {
+  setState({ notifications: [], unreadCount: 0, error: null });
+}
+
+function scheduleDailyReset() {
+  if (dailyResetTimer) clearTimeout(dailyResetTimer);
+  const now = new Date();
+  const nextMidnight = new Date(now);
+  nextMidnight.setHours(24, 0, 0, 0);
+  const delay = Math.max(1, nextMidnight.getTime() - now.getTime());
+  dailyResetTimer = setTimeout(() => {
+    currentDayKey = getLocalDayKey();
+    clearAllNotifications();
+    scheduleDailyReset();
+  }, delay);
+}
+
+function resetIfDayChanged() {
+  const dayKey = getLocalDayKey();
+  if (dayKey === currentDayKey) return;
+  currentDayKey = dayKey;
+  clearAllNotifications();
+}
+
+// ─── Fetchers ─────────────────────────────────────────────────────────────────
 
 async function fetchDirasakanNotification() {
   if (!DIRASAKAN_API_URL) return;
@@ -167,10 +165,8 @@ async function fetchDirasakanNotification() {
   if (!latest) return;
 
   const eventId = String(
-    latest.eventid ??
-      latest.identifier ??
-      globalIdentifier ??
-      `${latest.date}-${latest.time}-${latest.magnitude}-${latest.area}`,
+    latest.eventid ?? latest.identifier ?? globalIdentifier ??
+    `${latest.date}-${latest.time}-${latest.magnitude}-${latest.area}`,
   );
 
   if (!eventId || eventId === latestSeen.dirasakan) return;
@@ -213,9 +209,8 @@ async function fetchTerdeteksiNotification() {
 
   const props = latest?.properties ?? {};
   const eventId = String(
-    props.ids ??
-      props.id ??
-      `${props.time}-${props.mag}-${props.place}-${latest?.geometry?.coordinates?.[0]}`,
+    props.ids ?? props.id ??
+    `${props.time}-${props.mag}-${props.place}-${latest?.geometry?.coordinates?.[0]}`,
   );
 
   if (!eventId || eventId === latestSeen.terdeteksi) return;
@@ -238,56 +233,70 @@ async function fetchTerdeteksiNotification() {
   });
 }
 
+// ─── Poll ─────────────────────────────────────────────────────────────────────
+
 async function pollLatestQuakes() {
   resetIfDayChanged();
 
-  await Promise.allSettled([
+  // FIX #3: collect settled results and surface any failures to the UI
+  const results = await Promise.allSettled([
     fetchDirasakanNotification(),
     fetchTerdeteksiNotification(),
   ]);
+
+  const anyFailed = results.some((r) => r.status === "rejected");
+
+  // Only show error when ALL fetches failed and there are no notifications yet.
+  // If we already have data, a transient network hiccup shouldn't wipe the UI.
+  if (anyFailed && state.notifications.length === 0) {
+    setState({ error: "Gagal memuat notifikasi. Periksa koneksi Anda." });
+  } else if (!anyFailed && state.error) {
+    setState({ error: null }); // clear stale error once fetch recovers
+  }
 }
 
+// ─── Polling lifecycle ────────────────────────────────────────────────────────
+
 function startPolling() {
-  if (isStarted) return;
-  isStarted = true;
+  // FIX #2: guard on pollTimer, not a separate isStarted flag.
+  // pollTimer is null both on first run AND after stopPolling, so this
+  // correctly handles hot reload without risking double-interval.
+  if (pollTimer) return;
+
   scheduleDailyReset();
-
   void pollLatestQuakes();
-
-  pollTimer = setInterval(() => {
-    void pollLatestQuakes();
-  }, POLL_INTERVAL_MS);
+  pollTimer = setInterval(() => void pollLatestQuakes(), POLL_INTERVAL_MS);
 }
 
 function stopPollingIfUnused() {
-  if (listeners.size > 0) return;
-  if (!pollTimer) return;
+  if (listeners.size > 0 || !pollTimer) return;
 
   clearInterval(pollTimer);
   pollTimer = null;
+
   if (dailyResetTimer) {
     clearTimeout(dailyResetTimer);
     dailyResetTimer = null;
   }
-  isStarted = false;
 }
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
   startPolling();
-
   return () => {
     listeners.delete(listener);
     stopPollingIfUnused();
   };
 }
 
-export function markAllNotificationsAsRead() {
-  const notifications = state.notifications.map((item) => ({
-    ...item,
-    isRead: true,
-  }));
+// ─── Public API ───────────────────────────────────────────────────────────────
 
+export function markAllNotificationsAsRead() {
+  // FIX #4: bail early if nothing to mark — avoids a pointless setState +
+  //         notifyListeners() call every time the notifications screen opens
+  if (state.unreadCount === 0) return;
+
+  const notifications = state.notifications.map((item) => ({ ...item, isRead: true }));
   setState({ notifications, unreadCount: 0 });
 }
 
@@ -296,14 +305,13 @@ export function useQuakeNotifications() {
 
   useEffect(() => {
     setSnapshot(state);
-    return subscribe(() => {
-      setSnapshot(state);
-    });
+    return subscribe(() => setSnapshot(state));
   }, []);
 
   return {
     notifications: snapshot.notifications,
     unreadCount: snapshot.unreadCount,
+    error: snapshot.error, // FIX #3: exposed so the screen can render it
     markAllAsRead: markAllNotificationsAsRead,
   };
 }

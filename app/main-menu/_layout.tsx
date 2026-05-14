@@ -1,4 +1,5 @@
 import BottomNav from "@/components/ui/navigation";
+import { ProfileProvider } from "@/features/account/profile-context";
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, usePathname, useRouter } from "expo-router";
@@ -65,38 +66,40 @@ export default function MainLayout() {
   }, [pathname, router]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoRow}>
-        <Image
-          source={require("../../assets/images/SeismoTrack_2-removebg-preview.png")}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
+    <ProfileProvider>
+      <View style={styles.container}>
+        <View style={styles.logoRow}>
+          <Image
+            source={require("../../assets/images/SeismoTrack_2-removebg-preview.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
 
-        <TouchableOpacity
-          style={styles.notification}
-          onPress={handleOpenNotifications}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="notifications-outline" size={22} color="#fff" />
-          {unreadCount > 0 && <View style={styles.unreadDot} />}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.notification}
+            onPress={handleOpenNotifications}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#fff" />
+            {unreadCount > 0 && <View style={styles.unreadDot} />}
+          </TouchableOpacity>
+        </View>
+
+        {/* SCREEN CONTENT */}
+        <View style={{ flex: 1 }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: "none",
+              freezeOnBlur: true,
+            }}
+          />
+        </View>
+
+        {/* BOTTOM NAV - Akan menerima active="NONE" jika di halaman notifikasi */}
+        <BottomNav active={activeTab} onChange={handleTabChange} />
       </View>
-
-      {/* SCREEN CONTENT */}
-      <View style={{ flex: 1 }}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "none",
-            freezeOnBlur: true,
-          }}
-        />
-      </View>
-
-      {/* BOTTOM NAV - Akan menerima active="NONE" jika di halaman notifikasi */}
-      <BottomNav active={activeTab} onChange={handleTabChange} />
-    </View>
+    </ProfileProvider>
   );
 }
 

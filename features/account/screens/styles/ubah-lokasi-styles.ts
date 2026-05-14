@@ -207,6 +207,14 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  btnGPSLoading: {
+    opacity: 0.75,
+  },
+  gpsButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
 });
 
 

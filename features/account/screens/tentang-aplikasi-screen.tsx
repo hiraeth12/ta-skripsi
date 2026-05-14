@@ -1,32 +1,12 @@
-// TentangAplikasi.tsx
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
-import { ACCOUNT_PROFILE, fetchProfileFromFirebase, ProfileData } from "../data/profile";
-
-// Import styles yang sudah dipisah
+import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/tentang-aplikasi.styles";
 
 export default function TentangAplikasi() {
   const router = useRouter();
-  const [profile, setProfile] = useState<ProfileData>(ACCOUNT_PROFILE);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch profile from Firebase on mount
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const firebaseProfile = await fetchProfileFromFirebase();
-        setProfile(firebaseProfile);
-      } catch {
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProfile();
-  }, []);
+  const { profile } = useProfileContext(); // ← no local fetch
 
   return (
     <ProfilePageLayout
@@ -36,34 +16,33 @@ export default function TentangAplikasi() {
       headerLocation={profile.location}
       headerInitials={profile.initials}
     >
-      {/* Kartu Informasi Aplikasi */}
-      <View style={styles.infoCard}>
-        <Image
-          source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
-          style={styles.appLogo}
-          resizeMode="contain"
-        />
+      <View style={styles.mainContentContainer}>
+        <View style={styles.infoCard}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <Image source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")} style={styles.appLogo} resizeMode="contain" />
 
-        <Text style={styles.description}>
-          SeismoTrack adalah aplikasi informasi gempa bumi real-time untuk
-          wilayah Jawa Barat.
-        </Text>
+            <Text style={styles.description}>
+              <Text style={{ fontWeight: "bold" }}>SeismoTrack</Text> adalah platform pemantauan aktivitas seismik mutakhir yang dirancang khusus untuk memetakan data gempa bumi secara real-time di seluruh wilayah Indonesia.
+            </Text>
+            <Text style={styles.description}>
+              Aplikasi ini hadir sebagai solusi mitigasi bencana dini, memberikan kemudahan bagi masyarakat untuk mengakses informasi parameter gempa seperti magnitudo, kedalaman, dan koordinat secara instan.
+            </Text>
+            <Text style={styles.description}>
+              Fitur unggulan kami mencakup sistem notifikasi alarm otomatis berbasis lokasi (GPS). Saat ini, fitur peringatan dini dioptimalkan khusus untuk wilayah <Text style={{ fontWeight: "bold" }}>Jawa Barat</Text> guna memastikan akurasi data yang lebih presisi.
+            </Text>
+            <Text style={styles.description}>
+              Seluruh data yang disajikan bersumber langsung dari <Text style={{ fontWeight: "bold" }}>BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)</Text> sebagai otoritas resmi, sehingga informasi yang Anda terima terjamin keakuratannya.
+            </Text>
 
-        <Text style={styles.description}>
-          Data gempa bersumber dari BMKG dan dapat disesuaikan dengan lokasi
-          pengguna melalui mode GPS.
-        </Text>
-
-        <View style={styles.versionContainer}>
-          <Text style={styles.versionLabel}>Versi: 1.0</Text>
+            <Image source={require("@/assets/images/logo-bmkg-2010.png")} style={[styles.appLogo, { marginTop: 10 }]} resizeMode="contain" />
+            <View style={styles.versionContainer}>
+              <Text style={styles.versionLabel}>Versi: 1.0.0</Text>
+            </View>
+          </ScrollView>
         </View>
       </View>
 
-      {/* Tombol Kembali (Opsional, agar user mudah navigasi) */}
-      <TouchableOpacity
-        style={styles.btnBack}
-        onPress={() => router.back()}
-      >
+      <TouchableOpacity style={styles.btnBack} onPress={() => router.back()}>
         <Text style={styles.btnTextBack}>Kembali</Text>
       </TouchableOpacity>
     </ProfilePageLayout>

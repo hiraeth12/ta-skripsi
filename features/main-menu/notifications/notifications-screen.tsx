@@ -1,30 +1,28 @@
-import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
+import { useQuakeNotifications, type QuakeNotification } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
-import {
-  FlatList,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/notifications-screen.styles";
 
-const NotifCard = ({ item, onPress }: any) => {
+// ─── NotifCard ────────────────────────────────────────────────────────────────
+
+// FIX #5: typed with QuakeNotification instead of any
+type NotifCardProps = {
+  item: QuakeNotification;
+  onPress: () => void;
+};
+
+const NotifCard = ({ item, onPress }: NotifCardProps) => {
   const isDirasakan = item.type === "Dirasakan";
 
   return (
-    <TouchableOpacity
-      style={styles.notifCard}
-      activeOpacity={0.7}
-      onPress={onPress}
-    >
+    <TouchableOpacity style={styles.notifCard} activeOpacity={0.7} onPress={onPress}>
       <View style={styles.notifContent}>
         <View style={styles.textWrapper}>
           <Text style={styles.notifTitle}>
             {isDirasakan ? "Gempa Dirasakan" : "Gempa Terdeteksi"}
           </Text>
-          {/* Mapping properti: magnitude, location, date, time */}
           <Text style={styles.notifSubTitle}>
             M {item.magnitude} – {item.location}
           </Text>
@@ -32,12 +30,7 @@ const NotifCard = ({ item, onPress }: any) => {
             {item.date} • {item.time}
           </Text>
         </View>
-        <View
-          style={[
-            styles.badge,
-            isDirasakan ? styles.badgeRed : styles.badgeGreen,
-          ]}
-        >
+        <View style={[styles.badge, isDirasakan ? styles.badgeRed : styles.badgeGreen]}>
           <Text style={styles.badgeText}>
             {isDirasakan ? "Dirasakan" : "Tidak dirasakan"}
           </Text>
@@ -47,23 +40,24 @@ const NotifCard = ({ item, onPress }: any) => {
   );
 };
 
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function Notifikasi() {
   const router = useRouter();
-  const { notifications, markAllAsRead } = useQuakeNotifications();
+  const { notifications, unreadCount, error, markAllAsRead } = useQuakeNotifications();
 
+  // FIX #4: guard against calling markAllAsRead when nothing is unread,
+  //         preventing a needless setState + re-render on every screen open
   useEffect(() => {
-    markAllAsRead();
-  }, [markAllAsRead]);
+    if (unreadCount > 0) markAllAsRead();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally run once on mount
 
   return (
     <View style={styles.container}>
       <View style={styles.menuContainer}>
         <View style={styles.menuContent}>
           <View style={styles.titleRow}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{ marginRight: 15 }}
-            >
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.sectionTitle}>Notifikasi Terbaru</Text>
@@ -81,17 +75,17 @@ export default function Notifikasi() {
                   router.push({
                     pathname: "/main-menu/earthquake",
                     params: {
-                      tab:
-                        item.type === "Dirasakan"
-                          ? "GEMPA DIRASAKAN"
-                          : "GEMPA TERDETEKSI",
+                      tab: item.type === "Dirasakan" ? "GEMPA DIRASAKAN" : "GEMPA TERDETEKSI",
                     },
                   })
                 }
               />
             )}
+            // FIX #3: show the actual error message instead of the generic empty text
             ListEmptyComponent={() => (
-              <Text style={styles.emptyText}>Belum ada notifikasi.</Text>
+              <Text style={styles.emptyText}>
+                {error ?? "Belum ada notifikasi."}
+              </Text>
             )}
           />
         </View>
