@@ -740,36 +740,44 @@ const EarthquakeMap = memo(
               isCardOpen && cardHeight > 0 && { bottom: cardHeight + 16 },
             ]}
           >
-            {isMenuOpen && (
-              <View style={styles.menuPanel}>
-                <View style={styles.menuRow}>
-                  <Text style={styles.menuLabel}>Tampilkan patahan</Text>
-                  <Switch
-                    value={showFaultLines}
-                    onValueChange={setShowFaultLines}
-                    trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
-                  />
+            <Image
+              source={require("../assets/images/logo-bmkg-2010.png")}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+
+            <View style={styles.menuActions}>
+              {isMenuOpen && (
+                <View style={styles.menuPanel}>
+                  <View style={styles.menuRow}>
+                    <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+                    <Switch
+                      value={showFaultLines}
+                      onValueChange={setShowFaultLines}
+                      trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
+                    />
+                  </View>
+                  <View style={styles.menuRow}>
+                    <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+                    <Switch
+                      value={showSeismicSensors}
+                      onValueChange={setShowSeismicSensors}
+                      trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
+                    />
+                  </View>
                 </View>
-                <View style={styles.menuRow}>
-                  <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
-                  <Switch
-                    value={showSeismicSensors}
-                    onValueChange={setShowSeismicSensors}
-                    trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
-                  />
+              )}
+              <Pressable
+                style={styles.menuButton}
+                onPress={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                <View style={styles.menuIcon}>
+                  <View style={styles.menuBar} />
+                  <View style={styles.menuBar} />
+                  <View style={styles.menuBar} />
                 </View>
-              </View>
-            )}
-            <Pressable
-              style={styles.menuButton}
-              onPress={() => setIsMenuOpen(!isMenuOpen)}
-            >
-              <View style={styles.menuIcon}>
-                <View style={styles.menuBar} />
-                <View style={styles.menuBar} />
-                <View style={styles.menuBar} />
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
           </View>
         )}
       </View>
@@ -803,9 +811,19 @@ const styles = StyleSheet.create({
   menuOverlay: {
     position: "absolute",
     bottom: 16,
+    left: 12,
     right: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "flex-end",
     zIndex: 20,
+  },
+  brandLogo: {
+    width: 40,
+    height: 40,
+  },
+  menuActions: {
+    alignItems: "flex-end",
   },
   menuButton: {
     width: 40,

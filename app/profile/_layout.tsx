@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, usePathname, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ProfileProvider } from "@/features/account/profile-context";
 
 export default function MainLayout() {
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function MainLayout() {
           resizeMode="contain"
         />
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.notification}
           onPress={handleOpenNotifications}
           activeOpacity={0.7}
@@ -52,12 +53,14 @@ export default function MainLayout() {
 
       {/* SCREEN CONTENT */}
       <View style={{ flex: 1 }}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "fade",
-          }}
-        />
+        <ProfileProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: "fade",
+            }}
+          />
+        </ProfileProvider>
       </View>
 
       {/* BOTTOM NAV */}

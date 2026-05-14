@@ -50,7 +50,11 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
   },
-  menuContent: { paddingHorizontal: 20, paddingTop: 20, flex: 1 },
+  menuContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    flex: 1,
+  },
   titleRow: { marginBottom: 15 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 
@@ -133,6 +137,26 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   infoButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
+  backItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    height: 60,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+
+  backText: {
+    fontSize: 16,
+    color: "#1E6F9F",
+    fontWeight: "600",
+  }
 });
-
-
