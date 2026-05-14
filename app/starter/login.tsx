@@ -62,7 +62,6 @@ export default function Login() {
     }
 
     setIsSubmitting(true);
-    const startedAt = Date.now();
 
     try {
       const app = getApp();
@@ -72,16 +71,12 @@ export default function Login() {
         trimmedEmail,
         trimmedPassword,
       );
-      
-      // Save FCM token for push notifications (with timeout - don't block navigation)
+
+      // Fire-and-forget — don't block navigation on token save
       if (result.user?.uid) {
-        try {
-          await saveFcmTokenToDatabase(result.user.uid);
-        } catch {
-          // Don't throw - login should succeed even if token save fails
-        }
+        saveFcmTokenToDatabase(result.user.uid).catch(() => {});
       }
-      
+
       router.replace("/starter/ask-location");
     } catch (e) {
       const error = e as { code?: string; message?: string };
@@ -115,7 +110,7 @@ export default function Login() {
           placeholder="email@gmail.com"
           placeholderTextColor="#999"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => setEmail(v.trimStart())}
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
@@ -129,6 +124,9 @@ export default function Login() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={secure}
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="password"
             style={styles.passwordInput}
           />
           <TouchableOpacity onPress={() => setSecure(!secure)}>

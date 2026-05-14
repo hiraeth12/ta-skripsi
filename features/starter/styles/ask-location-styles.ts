@@ -94,4 +94,27 @@ export const styles = StyleSheet.create({
   },
   locName: { fontSize: 16, fontWeight: "bold", color: "#333" },
   locDesc: { fontSize: 12, color: "#888", marginTop: 2 },
+
+  gpsButton: {
+  backgroundColor: "#1E6F9F",
+  borderRadius: 12,
+  paddingVertical: 14,
+  paddingHorizontal: 24,
+  width: "100%",
+  alignItems: "center",
+},
+gpsButtonLoading: {
+  backgroundColor: "#155a80",
+  opacity: 0.9,
+},
+gpsButtonInner: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+},
+gpsButtonText: {
+  color: "#ffffff",
+  fontSize: 16,
+  fontWeight: "600",
+},
 });

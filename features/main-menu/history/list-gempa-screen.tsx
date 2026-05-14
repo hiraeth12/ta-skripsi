@@ -1,3 +1,6 @@
+//Unused Files safe to delete i guess 
+
+
 import { getApp } from "@/config/firebase-init";
 import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useHaversine } from "@/hooks/use-haversine";

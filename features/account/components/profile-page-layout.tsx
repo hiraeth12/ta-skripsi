@@ -26,9 +26,10 @@ export default function ProfilePageLayout({
       <View style={styles.headerSection}>
         <View style={styles.avatarCircle}>
           <Text style={styles.avatarText}>{headerInitials}</Text>
-          <TouchableOpacity style={styles.editBadge}>
+          {/* Future Updates : able to change photo profiles ! */}
+          {/* <TouchableOpacity style={styles.editBadge}>
             <MaterialCommunityIcons name="camera" size={14} color="#fff" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <Text style={styles.userName}>{headerName}</Text>

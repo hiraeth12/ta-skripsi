@@ -14,13 +14,15 @@
     "sync:gempa-dirasakan:full": "node scripts/db-gempa-dirasakan-history-cli.js",
     "sync:gempa-dirasakan:latest": "node scripts/sync-latest-gempa-dirasakan-history.js",
     "sync:gempa-dirasakan:latest:watch": "node scripts/sync-latest-gempa-dirasakan-history.js 60000",
+    "check:gempa-dirasakan:eventids": "node scripts/check-gempa-dirasakan-eventids.js",
     "sync:gempa-terdeteksi:history": "node scripts/db-gempa-terdeteksi-history.js",
     "sync:gempa-terdeteksi:history:watch": "node scripts/db-gempa-terdeteksi-history.js 15000",
     "sync:scheduler": "node scripts/scheduler.js",
     "sync:verify": "node scripts/verify-sync.js",
     "sync:check-order": "node scripts/check-order.js",
     "monitor:notifications": "node scripts/monitor-gempa-notifications.js",
-    "test:notification": "node scripts/test-notification.js"
+    "test:notification": "node scripts/test-notification.js",
+    "sort:gempa-dirasakan": "node scripts/sort-gempa-dirasakan.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
