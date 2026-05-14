@@ -28,25 +28,15 @@ function findNearestLocation(
   gpsLat: number,
   gpsLon: number,
   locations: any[],
-  haversineDistanceKm: (lat1: number, lon1: number, lat2: number, lon2: number) => number
+  haversineDistanceKm: (lat1: number, lon1: number, lat2: number, lon2: number) => number,
 ) {
   if (!locations || locations.length === 0) return null;
 
   let nearest = locations[0];
-  let minDistance = haversineDistanceKm(
-    gpsLat,
-    gpsLon,
-    nearest.latitude,
-    nearest.longitude,
-  );
+  let minDistance = haversineDistanceKm(gpsLat, gpsLon, nearest.latitude, nearest.longitude);
 
   for (let i = 1; i < locations.length; i++) {
-    const distance = haversineDistanceKm(
-      gpsLat,
-      gpsLon,
-      locations[i].latitude,
-      locations[i].longitude,
-    );
+    const distance = haversineDistanceKm(gpsLat, gpsLon, locations[i].latitude, locations[i].longitude);
     if (distance < minDistance) {
       minDistance = distance;
       nearest = locations[i];
@@ -63,6 +53,7 @@ export default function AskLocation() {
   const [allLocations, setAllLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState("Sedang mencari lokasi GPS Anda...");
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
 
@@ -73,20 +64,16 @@ export default function AskLocation() {
         if (!dbUrl) throw new Error("Database URL not configured");
 
         const response = await fetch(`${dbUrl}/locations.json`);
-        if (!response.ok)
-          throw new Error(`Failed to fetch: ${response.status}`);
+        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
 
         const data = await response.json();
-        // Convert object keyed by id to array
-        const locationsArray = Object.entries(data || {}).map(
-          ([id, location]: any) => ({
-            id,
-            name: location.name || "",
-            desc: location.alt_name || location.name || "",
-            latitude: location.latitude,
-            longitude: location.longitude,
-          }),
-        );
+        const locationsArray = Object.entries(data || {}).map(([id, location]: any) => ({
+          id,
+          name: location.name || "",
+          desc: location.alt_name || location.name || "",
+          latitude: location.latitude,
+          longitude: location.longitude,
+        }));
         setAllLocations(locationsArray);
       } catch {
         setAllLocations([]);
@@ -100,62 +87,52 @@ export default function AskLocation() {
 
   const handleUseGPS = async () => {
     setGpsLoading(true);
+    setGpsMessage("Meminta izin akses lokasi...");
+
     try {
-      // Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission Ditolak",
           "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
         );
-        setGpsLoading(false);
         return;
       }
 
-      // Get current location
+      setGpsMessage("Sedang menentukan posisi Anda...");
+
+      // Balanced is significantly faster than High for this use case
+      // (finding nearest village — centimeter precision is not needed)
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
       });
 
       const { latitude, longitude } = location.coords;
 
-      // Find nearest location from database
       const nearestLocation = findNearestLocation(
         latitude,
         longitude,
         allLocations,
-        haversineDistanceKm
+        haversineDistanceKm,
       );
       const locationName = nearestLocation?.name || "Lokasi GPS";
 
-      // Update user location in database with GPS coordinates
-      try {
-        const app = getApp();
-        const authInstance = getAuth(app);
-        const currentUser = authInstance.currentUser;
-
-        if (currentUser) {
-          const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-          const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-
-          await update(ref(database, `users/${currentUser.uid}`), {
-            latitude: latitude.toFixed(6),
-            longitude: longitude.toFixed(6),
-            locationName: locationName,
-            locationUpdatedAt: new Date().toISOString(),
-          });
-        }
-      } catch {
-        // Don't block navigation if DB update fails
+      // Fire-and-forget — DB update no longer blocks navigation
+      const app = getApp();
+      const currentUser = getAuth(app).currentUser;
+      if (currentUser) {
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        update(ref(database, `users/${currentUser.uid}`), {
+          latitude: latitude.toFixed(6),
+          longitude: longitude.toFixed(6),
+          locationName,
+          locationUpdatedAt: new Date().toISOString(),
+        }).catch(() => {});
       }
 
-      // Navigate to home
-      await new Promise((resolve) => {
-        setTimeout(() => {
-          router.push("/main-menu/home");
-          resolve(null);
-        }, 500);
-      });
+      // Navigate immediately — no artificial delay
+      router.push("/main-menu/home");
     } catch {
       Alert.alert(
         "Error",
@@ -174,37 +151,25 @@ export default function AskLocation() {
 
   const handleSelect = async (item: any) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
-
-    // Update user location in database with selected location coordinates
-    try {
-      const app = getApp();
-      const authInstance = getAuth(app);
-      const currentUser = authInstance.currentUser;
-
-      if (currentUser) {
-        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-
-        await update(ref(database, `users/${currentUser.uid}`), {
-          latitude: item.latitude.toFixed(6),
-          longitude: item.longitude.toFixed(6),
-          locationName: item.name,
-          locationUpdatedAt: new Date().toISOString(),
-        });
-      }
-    } catch {
-    }
-
     setModalVisible(false);
     setQuery("");
 
-    // Navigate to home after location is saved
-    await new Promise((resolve) => {
-      setTimeout(() => {
-        router.push("/main-menu/home");
-        resolve(null);
-      }, 500);
-    });
+    // Fire-and-forget — DB update no longer blocks navigation
+    const app = getApp();
+    const currentUser = getAuth(app).currentUser;
+    if (currentUser) {
+      const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+      const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+      update(ref(database, `users/${currentUser.uid}`), {
+        latitude: item.latitude.toFixed(6),
+        longitude: item.longitude.toFixed(6),
+        locationName: item.name,
+        locationUpdatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
+    // Navigate immediately — no artificial delay
+    router.push("/main-menu/home");
   };
 
   return (
@@ -254,21 +219,32 @@ export default function AskLocation() {
 
         <Text style={styles.orText}>Atau deteksi otomatis</Text>
 
+        {/* GPS Button with inline loading indicator */}
         <View style={styles.buttonWrapper}>
-          <AuthButton
-            title={gpsLoading ? "Mencari lokasi..." : "Gunakan GPS"}
+          <TouchableOpacity
+            style={[
+              styles.gpsButton,
+              gpsLoading && styles.gpsButtonLoading,
+            ]}
             onPress={handleUseGPS}
             disabled={gpsLoading}
-          />
-          {gpsLoading && (
-            <ActivityIndicator
-              size="small"
-              color="#1E6F9F"
-              style={{ marginTop: 10 }}
-            />
-          )}
+            activeOpacity={0.8}
+          >
+            {gpsLoading ? (
+              <View style={styles.gpsButtonInner}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.gpsButtonText}>{gpsMessage}</Text>
+              </View>
+            ) : (
+              <View style={styles.gpsButtonInner}>
+                <Ionicons name="navigate" size={18} color="#ffffff" />
+                <Text style={styles.gpsButtonText}>Gunakan GPS</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* Location search bottom sheet */}
         <Modal
           animationType="slide"
           transparent={true}
@@ -328,4 +304,3 @@ export default function AskLocation() {
     </KeyboardAvoidingView>
   );
 }
-

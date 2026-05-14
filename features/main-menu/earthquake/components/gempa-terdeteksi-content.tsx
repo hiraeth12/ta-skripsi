@@ -1,15 +1,16 @@
+import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    Animated,
-    PanResponder,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  PanResponder,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
@@ -48,6 +49,14 @@ export default function GempaTerdeteksi({
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+
+  const showNetworkError = useCallback(() => {
+    if (networkErrorShownRef.current) return;
+    networkErrorShownRef.current = true;
+    setNetworkErrorModalVisible(true);
+  }, []);
+
 
   const panResponder = useRef(
     PanResponder.create({
@@ -212,13 +221,15 @@ export default function GempaTerdeteksi({
         );
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
-        if (!networkErrorShownRef.current && e instanceof TypeError && (e as Error).message.includes('Network')) {
-          networkErrorShownRef.current = true;
-          Alert.alert(
-            'Koneksi Jaringan',
-            'Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.',
-            [{ text: 'OK', onPress: () => { networkErrorShownRef.current = false; } }],
-          );
+
+        // Perbaikan: Hanya panggil satu metode untuk menampilkan error
+        if (
+          !networkErrorShownRef.current &&
+          e instanceof TypeError &&
+          (e as Error).message.includes('Network')
+        ) {
+          // Cukup panggil fungsi ini, karena di dalamnya sudah mengeset ref dan state
+          showNetworkError();
         }
       } finally {
         onLoadingChange?.(false);
@@ -227,7 +238,7 @@ export default function GempaTerdeteksi({
 
     fetchLatestQuake();
     return () => abortRef.current?.abort();
-  }, [isActive, onLoadingChange]);
+  }, [isActive, onLoadingChange, showNetworkError]);
 
   return (
     <View style={styles.container}>
@@ -237,11 +248,11 @@ export default function GempaTerdeteksi({
         markerCoordinate={
           latestQuake
             ? {
-                latitude: latestQuake.latitude,
-                longitude: latestQuake.longitude,
-                magnitude: latestQuake.magnitude,
-                depth: latestQuake.kedalaman,
-              }
+              latitude: latestQuake.latitude,
+              longitude: latestQuake.longitude,
+              magnitude: latestQuake.magnitude,
+              depth: latestQuake.kedalaman,
+            }
             : null
         }
         onMapPress={() => dismissCard()}
@@ -366,6 +377,14 @@ export default function GempaTerdeteksi({
           )}
         </Animated.View>
       )}
+
+      <NetworkErrorModal
+        visible={networkErrorModalVisible}
+        onClose={() => {
+          setNetworkErrorModalVisible(false);
+          networkErrorShownRef.current = false;
+        }}
+      />
     </View>
   );
 }

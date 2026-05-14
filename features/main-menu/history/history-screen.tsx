@@ -11,7 +11,6 @@ import {
   endAt,
   get,
   getDatabase,
-  limitToLast,
   orderByChild,
   query,
   ref,
@@ -130,8 +129,7 @@ function normalizeDirasakan(
         shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
       });
       return acc;
-    }, [])
-    .slice(0, 30);
+    }, []);
 }
 
 function normalizeTerdeteksi(
@@ -178,8 +176,7 @@ function normalizeTerdeteksi(
         felt: String(props?.felt ?? props?.fase ?? ""),
       });
       return acc;
-    }, [])
-    .slice(0, 30);
+    }, []);
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -538,7 +535,6 @@ export default function History() {
               orderByChild(orderField),
               startAt(range.start),
               endAt(range.end),
-              limitToLast(35),
             );
             return get(dataQuery);
           }),
