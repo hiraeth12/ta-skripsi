@@ -1,4 +1,4 @@
-import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
 import { useHaversine } from "@/hooks/use-haversine";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
@@ -9,7 +9,6 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -22,22 +21,36 @@ import {
   View,
 } from "react-native";
 import { styles } from "../../features/starter/styles/ask-location-styles";
-import CustomAlert from "@/components/ui/custom-alert";
 
 // Helper function to find nearest location
 function findNearestLocation(
   gpsLat: number,
   gpsLon: number,
   locations: any[],
-  haversineDistanceKm: (lat1: number, lon1: number, lat2: number, lon2: number) => number,
+  haversineDistanceKm: (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ) => number,
 ) {
   if (!locations || locations.length === 0) return null;
 
   let nearest = locations[0];
-  let minDistance = haversineDistanceKm(gpsLat, gpsLon, nearest.latitude, nearest.longitude);
+  let minDistance = haversineDistanceKm(
+    gpsLat,
+    gpsLon,
+    nearest.latitude,
+    nearest.longitude,
+  );
 
   for (let i = 1; i < locations.length; i++) {
-    const distance = haversineDistanceKm(gpsLat, gpsLon, locations[i].latitude, locations[i].longitude);
+    const distance = haversineDistanceKm(
+      gpsLat,
+      gpsLon,
+      locations[i].latitude,
+      locations[i].longitude,
+    );
     if (distance < minDistance) {
       minDistance = distance;
       nearest = locations[i];
@@ -54,7 +67,9 @@ export default function AskLocation() {
   const [allLocations, setAllLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsMessage, setGpsMessage] = useState("Sedang mencari lokasi GPS Anda...");
+  const [gpsMessage, setGpsMessage] = useState(
+    "Sedang mencari lokasi GPS Anda...",
+  );
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
 
@@ -80,16 +95,19 @@ export default function AskLocation() {
         if (!dbUrl) throw new Error("Database URL not configured");
 
         const response = await fetch(`${dbUrl}/locations.json`);
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`Failed to fetch: ${response.status}`);
 
         const data = await response.json();
-        const locationsArray = Object.entries(data || {}).map(([id, location]: any) => ({
-          id,
-          name: location.name || "",
-          desc: location.alt_name || location.name || "",
-          latitude: location.latitude,
-          longitude: location.longitude,
-        }));
+        const locationsArray = Object.entries(data || {}).map(
+          ([id, location]: any) => ({
+            id,
+            name: location.name || "",
+            desc: location.alt_name || location.name || "",
+            latitude: location.latitude,
+            longitude: location.longitude,
+          }),
+        );
         setAllLocations(locationsArray);
       } catch {
         setAllLocations([]);
@@ -108,15 +126,10 @@ export default function AskLocation() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-
         showCustomAlert(
           "Permission Ditolak!",
           "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
-          "error"
-        );
-        Alert.alert(
-          "Permission Ditolak",
-          "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
+          "error",
         );
         return;
       }
@@ -150,7 +163,7 @@ export default function AskLocation() {
           longitude: longitude.toFixed(6),
           locationName,
           locationUpdatedAt: new Date().toISOString(),
-        }).catch(() => { });
+        }).catch(() => {});
       }
 
       // Navigate immediately — no artificial delay
@@ -159,7 +172,7 @@ export default function AskLocation() {
       showCustomAlert(
         "Error",
         "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
-        "error"
+        "error",
       );
     } finally {
       setGpsLoading(false);
@@ -188,7 +201,7 @@ export default function AskLocation() {
         longitude: item.longitude.toFixed(6),
         locationName: item.name,
         locationUpdatedAt: new Date().toISOString(),
-      }).catch(() => { });
+      }).catch(() => {});
     }
 
     // Navigate immediately — no artificial delay
@@ -245,10 +258,7 @@ export default function AskLocation() {
         {/* GPS Button with inline loading indicator */}
         <View style={styles.buttonWrapper}>
           <TouchableOpacity
-            style={[
-              styles.gpsButton,
-              gpsLoading && styles.gpsButtonLoading,
-            ]}
+            style={[styles.gpsButton, gpsLoading && styles.gpsButtonLoading]}
             onPress={handleUseGPS}
             disabled={gpsLoading}
             activeOpacity={0.8}

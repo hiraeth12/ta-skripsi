@@ -1,6 +1,14 @@
-import notifee, { AndroidCategory, AndroidImportance, AndroidVisibility, EventType } from '@notifee/react-native';
+import notifee, {
+  AndroidCategory,
+  AndroidImportance,
+  AndroidVisibility,
+  EventType,
+} from "@notifee/react-native";
 import { getApp } from "@react-native-firebase/app";
-import { getMessaging, setBackgroundMessageHandler } from "@react-native-firebase/messaging";
+import {
+  getMessaging,
+  setBackgroundMessageHandler,
+} from "@react-native-firebase/messaging";
 
 let isBackgroundHandlerRegistered = false;
 const GEMPA_ALERT_CHANNEL_ID = "gempa_alert_channel_eqeva_v2";
@@ -27,16 +35,21 @@ export function registerFcmBackgroundHandler() {
 
     setBackgroundMessageHandler(messaging, async (remoteMessage) => {
       console.log("BACKGROUND HANDLER TRIGGERED", remoteMessage.data);
-      
+
       if (remoteMessage.data?.send_timestamp) {
-        const latency = (Date.now() - parseInt(remoteMessage.data.send_timestamp as string, 10)) / 1000;
-        console.log(`[LATENCY LOG] Notifikasi diterima dalam: ${latency.toFixed(3)} detik (Background)`);
+        const latency =
+          (Date.now() -
+            parseInt(remoteMessage.data.send_timestamp as string, 10)) /
+          1000;
+        console.log(
+          `[LATENCY LOG] Notifikasi diterima dalam: ${latency.toFixed(3)} detik (Background)`,
+        );
       }
 
       // Setup channel keamanan tinggi untuk Notifee
       const channelId = await notifee.createChannel({
         id: GEMPA_ALERT_CHANNEL_ID,
-        name: 'Peringatan Dini Gempa',
+        name: "Peringatan Dini Gempa",
         importance: AndroidImportance.HIGH,
         bypassDnd: true, // Melewati mode Do Not Disturb
         vibration: true,
@@ -46,22 +59,24 @@ export function registerFcmBackgroundHandler() {
 
       // Menampilkan Notifikasi Full-Screen yang "Membangunkan" HP
       await notifee.displayNotification({
-        title: (remoteMessage.data?.title as string) || 'Peringatan Gempa Bumiii!',
-        body: (remoteMessage.data?.body as string) || 'Telah terjadi gempa bumi.',
+        title:
+          (remoteMessage.data?.title as string) || "Peringatan Gempa Bumiii!",
+        body:
+          (remoteMessage.data?.body as string) || "Telah terjadi gempa bumi.",
         data: remoteMessage.data,
         android: {
           channelId,
           sound: GEMPA_ALERT_SOUND_NAME,
-          category: AndroidCategory.ALARM, 
-          visibility: AndroidVisibility.PUBLIC, 
+          category: AndroidCategory.ALARM,
+          visibility: AndroidVisibility.PUBLIC,
           importance: AndroidImportance.HIGH,
           pressAction: {
-            id: 'default',
-            launchActivity: 'default',
+            id: "default",
+            launchActivity: "default",
           },
           fullScreenAction: {
-            id: 'default', 
-            launchActivity: 'default',
+            id: "default",
+            launchActivity: "default",
           },
         },
       });
