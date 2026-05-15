@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../../features/starter/styles/ask-location-styles";
+import CustomAlert from "@/components/ui/custom-alert";
 
 // Helper function to find nearest location
 function findNearestLocation(
@@ -56,6 +57,21 @@ export default function AskLocation() {
   const [gpsMessage, setGpsMessage] = useState("Sedang mencari lokasi GPS Anda...");
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
+
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success",
+  });
+
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -92,6 +108,12 @@ export default function AskLocation() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
+
+        showCustomAlert(
+          "Permission Ditolak!",
+          "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
+          "error"
+        );
         Alert.alert(
           "Permission Ditolak",
           "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
@@ -128,15 +150,16 @@ export default function AskLocation() {
           longitude: longitude.toFixed(6),
           locationName,
           locationUpdatedAt: new Date().toISOString(),
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // Navigate immediately — no artificial delay
       router.push("/main-menu/home");
     } catch {
-      Alert.alert(
+      showCustomAlert(
         "Error",
         "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
+        "error"
       );
     } finally {
       setGpsLoading(false);
@@ -165,7 +188,7 @@ export default function AskLocation() {
         longitude: item.longitude.toFixed(6),
         locationName: item.name,
         locationUpdatedAt: new Date().toISOString(),
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     // Navigate immediately — no artificial delay
@@ -301,6 +324,14 @@ export default function AskLocation() {
           </View>
         </Modal>
       </ScrollView>
+
+      <CustomAlert
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
     </KeyboardAvoidingView>
   );
 }

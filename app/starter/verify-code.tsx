@@ -1,19 +1,18 @@
 import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
+} from "react-native"; // 2. Hapus import 'Alert' dan 'Platform' (karena Platform tidak terpakai)
 import { verifyOtpCode } from "../../features/starter/services/auth-service";
 import { styles } from "../../features/starter/styles/verify-code-styles";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function VerifyCode() {
   const router = useRouter();
@@ -22,6 +21,23 @@ export default function VerifyCode() {
   const [timer, setTimer] = useState(30);
   const [isLoading, setIsLoading] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
+
+  // 3. Tambahkan State untuk mengontrol Modal Custom
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success",
+  });
+
+  // 4. Tambahkan fungsi helper
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
 
   // Timer Countdown Logic
   useEffect(() => {
@@ -59,7 +75,12 @@ export default function VerifyCode() {
   const handleVerify = async () => {
     const combinedCode = code.join("");
     if (combinedCode.length < 4) {
-      Alert.alert("Input Tidak Valid", "Silakan masukkan kode 4 digit.");
+      // 5. Ganti Alert bawaan
+      showCustomAlert(
+        "Input Tidak Valid",
+        "Silakan masukkan kode 4 digit.",
+        "error"
+      );
       return;
     }
 
@@ -71,16 +92,25 @@ export default function VerifyCode() {
         params: { email, resetToken },
       });
     } catch (error) {
-      Alert.alert("Error", "Kode OTP salah atau kedaluwarsa.");
+      // 5. Ganti Alert bawaan
+      showCustomAlert(
+        "Verifikasi Gagal",
+        "Kode OTP salah atau kedaluwarsa.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      enableOnAndroid={true}
+      extraScrollHeight={24}
+      keyboardShouldPersistTaps="handled"
     >
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -156,6 +186,15 @@ export default function VerifyCode() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
-    </KeyboardAvoidingView>
+
+      {/* 6. Panggil Komponen CustomAlert di sini */}
+      <CustomAlert
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
+    </KeyboardAwareScrollView>
   );
 }

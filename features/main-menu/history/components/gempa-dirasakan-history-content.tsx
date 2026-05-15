@@ -15,7 +15,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
-    AppState,
     Dimensions,
     Image,
     Modal,
@@ -38,8 +37,6 @@ import styles from "./styles/gempa-dirasakan-history-content";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DB_PATH = "gempa_dirasakan/items";
-const MIN_POLL_MS = 30_000;
-const MAX_POLL_MS = 120_000;
 const MAX_POINTS = 20;
 const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
 
@@ -214,10 +211,6 @@ export function GempaDirasakanHistoryContent({
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [showCard, setShowCard] = useState(false);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
-
-  // Single source of truth for what's displayed in the card.
-  // `selectedIndex` points into `quakes[]`; when the event isn't in the list
-  // (external selection / not-yet-loaded), `overrideQuake` holds the data.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
@@ -228,11 +221,8 @@ export function GempaDirasakanHistoryContent({
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const dataSignatureRef = useRef<string | null>(null);
-  const isFetching = useRef(false);
   const isFirstLoad = useRef(true);
   const isMountedRef = useRef(true);
-  const pollDelayRef = useRef(MIN_POLL_MS);
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animation values
   const translateY = useRef(new Animated.Value(600)).current;
@@ -503,163 +493,126 @@ export function GempaDirasakanHistoryContent({
     onListDataChange?.(listItems);
   }, [listItems, onListDataChange]);
 
-  // ── Polling ────────────────────────────────────────────────────────────────
+  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!isActive) return;
     isMountedRef.current = true;
 
-    async function fetchQuakes(silent = true): Promise<boolean> {
-      if (isFetching.current) return false;
-      isFetching.current = true;
-      if (!silent) onLoadingChange?.(true);
+    const app = getApp();
+    const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+    const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
-      try {
-        const app = getApp();
-        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+    const runFetch = async () => {
+      onLoadingChange?.(true);
 
-        const snapshots = await Promise.all(
-          ranges.map(async (rangeItem) =>
-            get(
-              query(
-                ref(db, DB_PATH),
-                orderByChild("date"),
-                startAt(rangeItem.start),
-                endAt(rangeItem.end),
-              ),
+      const snapshots = await Promise.all(
+        ranges.map(async (rangeItem) =>
+          get(
+            query(
+              ref(db, DB_PATH),
+              orderByChild("date"),
+              startAt(rangeItem.start),
+              endAt(rangeItem.end),
             ),
           ),
-        );
-        if (!isMountedRef.current) return false;
-        if (!snapshots.some((snapshot) => snapshot.exists())) {
-          dataSignatureRef.current = null;
-          setQuakes([]);
-          return false;
-        }
+        ),
+      );
 
-        const candidates: any[] = snapshots.flatMap((snapshot) => {
-          if (!snapshot.exists()) return [];
-          const raw = snapshot.val();
-          return Array.isArray(raw)
-            ? raw
-            : raw && typeof raw === "object"
-              ? Object.values(raw)
-              : [];
-        });
-
-        if (candidates.length === 0) return false;
-
-        const merged = candidates
-          .sort((a, b) => {
-            const keyA = String(a?.eventid ?? a?.eventId ?? a?.timesent ?? `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`);
-            const keyB = String(b?.eventid ?? b?.eventId ?? b?.timesent ?? `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`);
-            return keyB.localeCompare(keyA);
-          })
-          .filter((candidate) =>
-            effectiveMonths.some((month) => matchesDirasakanMonth(
-              candidate?.tanggal ?? candidate?.date,
-              effectiveYear,
-              month,
-            )),
-          )
-          .reduce<QuakeItem[]>((acc, candidate, index) => {
-            const item = buildQuakeItem(candidate, index, haversineDistanceKm);
-            if (item) acc.push(item);
-            return acc;
-          }, [])
-          .slice(0, MAX_POINTS);
-
-        if (merged.length === 0) return false;
-
-        // Deduplicate by eventId preserving order
-        const seen = new Set<string>();
-        const normalized: QuakeItem[] = [];
-        for (const q of merged) {
-          const k = String(q.eventId ?? "");
-          if (!k) continue;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          normalized.push(q);
-          if (normalized.length >= MAX_POINTS) break;
-        }
-
-        const signature = normalized.map((q) => q.eventId).join("|");
-        if (signature === dataSignatureRef.current) return false;
-        dataSignatureRef.current = signature;
-
-        const foundIndex = selectedEventIdRef.current
-          ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
-          : -1;
-
-        if (overrideQuake && foundIndex >= 0) {
-          setOverrideQuake(null);
-        }
-
-        setQuakes(normalized);
-
-        if (isFirstLoad.current && normalized[0]) {
-          isFirstLoad.current = false;
-          mapRef.current?.animateToRegion(
-            {
-              latitude: normalized[0].latitude - 0.15,
-              longitude: normalized[0].longitude,
-              latitudeDelta: 2.5,
-              longitudeDelta: 2.5,
-            },
-            800,
-          );
-        }
-
-        // Only touch selection when card is open — prevents reopening after dismiss
-        if (!showCardRef.current) return true;
-
-        if (foundIndex >= 0) {
-          setSelectedIndex(foundIndex);
-        }
-
-        return true;
-      } catch {
-        return false;
-      } finally {
-        if (!silent) onLoadingChange?.(false);
-        isFetching.current = false;
-      }
-    }
-
-    function clearPollTimer() {
-      if (pollTimerRef.current) { clearTimeout(pollTimerRef.current); pollTimerRef.current = null; }
-    }
-
-    function scheduleNextPoll(changed: boolean) {
       if (!isMountedRef.current) return;
-      pollDelayRef.current = changed
-        ? MIN_POLL_MS
-        : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
-      clearPollTimer();
-      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
-    }
-
-    async function runPollingLoop() {
-      if (!isMountedRef.current || !isActive) return;
-      const changed = await fetchQuakes(true);
-      scheduleNextPoll(changed);
-    }
-
-    fetchQuakes(false).then(scheduleNextPoll);
-
-    const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && isMountedRef.current && isActive) {
-        pollDelayRef.current = MIN_POLL_MS;
-        clearPollTimer();
-        runPollingLoop();
+      if (!snapshots.some((snapshot) => snapshot?.exists?.())) {
+        dataSignatureRef.current = null;
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
       }
-    });
+
+      const candidates: any[] = snapshots.flatMap((snapshot) => {
+        if (!snapshot?.exists?.()) return [];
+        const raw = snapshot.val();
+        return Array.isArray(raw)
+          ? raw
+          : raw && typeof raw === "object"
+            ? Object.values(raw)
+            : [];
+      });
+
+      if (candidates.length === 0) {
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
+      }
+
+      const merged = candidates
+        .sort((a, b) => {
+          const keyA = String(a?.eventid ?? a?.eventId ?? a?.timesent ?? `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`);
+          const keyB = String(b?.eventid ?? b?.eventId ?? b?.timesent ?? `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`);
+          return keyB.localeCompare(keyA);
+        })
+        .filter((candidate) =>
+          effectiveMonths.some((month) => matchesDirasakanMonth(
+            candidate?.tanggal ?? candidate?.date,
+            effectiveYear,
+            month,
+          )),
+        )
+        .reduce<QuakeItem[]>((acc, candidate, index) => {
+          const item = buildQuakeItem(candidate, index, haversineDistanceKm);
+          if (item) acc.push(item);
+          return acc;
+        }, [])
+        .slice(0, MAX_POINTS);
+
+      // Deduplicate by eventId preserving order
+      const seen = new Set<string>();
+      const normalized: QuakeItem[] = [];
+      for (const q of merged) {
+        const k = String(q.eventId ?? "");
+        if (!k) continue;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        normalized.push(q);
+        if (normalized.length >= MAX_POINTS) break;
+      }
+
+      const signature = normalized.map((q) => q.eventId).join("|");
+      if (signature === dataSignatureRef.current) {
+        onLoadingChange?.(false);
+        return;
+      }
+      dataSignatureRef.current = signature;
+
+      const foundIndex = selectedEventIdRef.current
+        ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
+        : -1;
+
+      if (overrideQuake && foundIndex >= 0) setOverrideQuake(null);
+
+      setQuakes(normalized);
+      onLoadingChange?.(false);
+
+      if (isFirstLoad.current && normalized[0]) {
+        isFirstLoad.current = false;
+        mapRef.current?.animateToRegion(
+          {
+            latitude: normalized[0].latitude - 0.15,
+            longitude: normalized[0].longitude,
+            latitudeDelta: 2.5,
+            longitudeDelta: 2.5,
+          },
+          800,
+        );
+      }
+
+      // Only touch selection when card is open — prevents reopening after dismiss
+      if (!showCardRef.current) return;
+      if (foundIndex >= 0) setSelectedIndex(foundIndex);
+    };
+
+    void runFetch();
 
     return () => {
       isMountedRef.current = false;
-      clearPollTimer();
-      appStateSub.remove();
     };
   }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
 

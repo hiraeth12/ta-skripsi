@@ -1,25 +1,23 @@
 import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
 import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import {
-    createUserWithEmailAndPassword,
-    getAuth,
+  createUserWithEmailAndPassword,
+  getAuth,
 } from "@react-native-firebase/auth";
 import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView, 
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { styles } from "../../features/starter/styles/register-styles";
 
 const FIREBASE_DATABASE_URL =
@@ -40,8 +38,8 @@ export default function Register() {
     visible: false,
     title: "",
     message: "",
-    type: "error", // 'error' atau 'success'
-    onConfirm: null as (() => void) | null, // Fungsi untuk pindah halaman setelah sukses
+    type: "error" as "error" | "success",
+    onConfirm: null as (() => void) | null,
   });
 
   // Fungsi untuk menampilkan Custom Alert
@@ -105,21 +103,17 @@ export default function Register() {
       const database = FIREBASE_DATABASE_URL
         ? getDatabase(app, FIREBASE_DATABASE_URL)
         : getDatabase(app);
-      await set(ref(database, `users/${uid}`), {
-        email: trimmedEmail,
-        firstName: trimmedFirstName,
-        lastName: trimmedLastName,
-        createdAt: Date.now(),
-      });
 
-      // Save FCM token for push notifications (with timeout - don't block registration)
-      try {
-        await saveFcmTokenToDatabase(uid);
-      } catch {
-        // Don't throw - registration should succeed even if token save fails
-      }
+      await Promise.all([
+        set(ref(database, `users/${uid}`), {
+          email: trimmedEmail,
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
+          createdAt: Date.now(),
+        }),
+        saveFcmTokenToDatabase(uid).catch(() => {}),
+      ]);
 
-      // Munculkan alert sukses, jika ditekan tombol "Mengerti" akan lari ke /starter/login
       showCustomAlert(
         "Registrasi Berhasil",
         "Akun berhasil dibuat. Silakan login.",
@@ -137,14 +131,14 @@ export default function Register() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      enableOnAndroid={true}
+      extraScrollHeight={24}
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
         <Image
           style={styles.image}
           source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
@@ -230,9 +224,7 @@ export default function Register() {
         <View style={{ marginTop: 30 }}>
           <AuthButton
             title="Daftar"
-            onPress={() => {
-              handleRegister();
-            }}
+            onPress={handleRegister}
           />
         </View>
 
@@ -244,43 +236,17 @@ export default function Register() {
             Masuk
           </Text>
         </TouchableOpacity>
-      </ScrollView>
 
-      {/* Komponen Modal Alert Kustom */}
-      <Modal
+      {/* Gunakan Komponen yang sudah direusable di sini */}
+      <CustomAlert
         visible={modalConfig.visible}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.infoCard}>
-            <Ionicons
-              name={
-                modalConfig.type === "error"
-                  ? "alert-circle"
-                  : "checkmark-circle"
-              }
-              size={50}
-              color={modalConfig.type === "error" ? "#D9534F" : "#1E6F9F"}
-              style={styles.modalIcon}
-            />
-            <Text style={styles.infoTitle}>{modalConfig.title}</Text>
-            <Text style={styles.infoDesc}>{modalConfig.message}</Text>
-            <TouchableOpacity
-              style={styles.infoButton}
-              onPress={() => {
-                setModalConfig({ ...modalConfig, visible: false });
-                // Eksekusi fungsi onConfirm jika ada (misal pindah halaman)
-                if (modalConfig.onConfirm) {
-                  modalConfig.onConfirm();
-                }
-              }}
-            >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </KeyboardAvoidingView>
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        buttonText="Mengerti" 
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+        onConfirm={modalConfig.onConfirm}
+      />
+    </KeyboardAwareScrollView>
   );
 }

@@ -87,10 +87,7 @@ export default function GempaDirasakan({
   const showCardRef = useRef(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
-
-  // FIX 1: moved inside the component — was incorrectly declared at module level
   const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
-
   const latestEventId = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isFetching = useRef(false);
@@ -104,7 +101,7 @@ export default function GempaDirasakan({
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
 
-  // FIX 2: moved out of the catch block — hooks cannot be called inside callbacks or conditionally
+  
   const showNetworkError = useCallback(() => {
     if (networkErrorShownRef.current) return;
     networkErrorShownRef.current = true;
@@ -190,8 +187,8 @@ export default function GempaDirasakan({
     isMountedRef.current = true;
 
     type FetchResult = {
-      changed: boolean;   // true = new event detected
-      ok: boolean;        // false = network/parse error
+      changed: boolean;   
+      ok: boolean;        
       latitude?: number;
       longitude?: number;
     };
@@ -229,13 +226,12 @@ export default function GempaDirasakan({
         const longitude = parseFloat(lonStr);
         if (isNaN(latitude) || isNaN(longitude)) return { changed: false, ok: true };
 
-        // Connection just recovered — fly to current epicenter regardless of isSameEvent
+        
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
           isOfflineRef.current = false;
           networkErrorShownRef.current = false;
           setNetworkErrorModalVisible(false);
-          // Small delay so the modal close animation doesn't fight the map animation
           setTimeout(() => {
             mapRef.current?.animateToRegion(
               { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
@@ -266,7 +262,7 @@ export default function GempaDirasakan({
             lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
           });
 
-          // Only animate on new event (reconnect fly-in already handled above)
+          
           if (!wasOffline) {
             mapRef.current?.animateToRegion(
               { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
