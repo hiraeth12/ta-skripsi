@@ -195,9 +195,6 @@ export default function Home() {
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
   const { shareQuake } = useEarthquakeShare();
-
-  // ── State ────────────────────────────────────────────────────────────────────
-  // Initialize directly from cache — no loading flash for returning users
   const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
     () => getCachedData(CACHE_KEYS.DIRASAKAN) ?? null,
   );
@@ -272,7 +269,7 @@ export default function Home() {
         const userLon = parseFloat(userData.longitude);
         let locationName: string = userData.locationName || "Lokasi Saya";
 
-        // Nearest-location lookup — uses shared cachedLocationsData
+       
         if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
           const locData = await getLocationsData(database);
           if (locData) {
@@ -289,7 +286,6 @@ export default function Home() {
           setUserLocation({ latitude: userLat, longitude: userLon, name: locationName });
         }
 
-        // Location image — reuses the same locations fetch, skips second get() call
         const imageCacheKey = `location_image_${locationName}`;
         const cachedImageUrl = getCachedData<string>(imageCacheKey);
         if (cachedImageUrl) {
@@ -297,7 +293,7 @@ export default function Home() {
           return;
         }
 
-        const locData = await getLocationsData(database); // returns cached, no extra get()
+        const locData = await getLocationsData(database); 
         const entry = locData
           ? (Object.values(locData) as any[]).find((l) => l?.name === locationName)
           : null;
@@ -315,7 +311,7 @@ export default function Home() {
 
     fetchUserData();
     return () => { isMounted = false; };
-  }, []); // runs once — haversineDistanceKm is stable from hook
+  }, []); 
 
   // ── Date ticker ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -324,12 +320,6 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
-  // ── API fetch — runs once, polls every 60s ────────────────────────────────────
-  //
-  // Why userLocation is NOT in the deps array:
-  //   userLocation changes on every GPS tick (tiny float drift). Adding it caused a
-  //   full re-fetch + interval reset on every location update. Instead we read it
-  //   via userLocationRef so the fetch always has the latest value without re-running.
   useEffect(() => {
     let isMounted = true;
     const abort = new AbortController();

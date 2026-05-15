@@ -3,10 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -15,6 +12,8 @@ import {
 } from "react-native";
 import { resetPasswordWithToken } from "../../features/starter/services/auth-service";
 import { styles } from "../../features/starter/styles/new-password-styles";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import CustomAlert from "@/components/ui/custom-alert";
 
 export default function NewPassword() {
   const { email, resetToken } = useLocalSearchParams<{ email: string; resetToken: string }>();
@@ -24,13 +23,37 @@ export default function NewPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success",
+  });
+
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
+
   const handleResetPassword = async () => {
     if (password.length < 6) {
-      Alert.alert("Error", "Kata sandi harus terdiri dari minimal 6 karakter.");
+      showCustomAlert(
+        "Kata Sandi Tidak Valid",
+        "Silakan masukkan kata sandi minimal 6 karakter.",
+        "error"
+      );
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Kata sandi tidak cocok.");
+
+      showCustomAlert(
+        "Kata Sandi Tidak Cocok",
+        "Silakan masukkan kata sandi yang sama di kedua kolom.",
+        "error"
+      );
       return;
     }
 
@@ -39,16 +62,24 @@ export default function NewPassword() {
       await resetPasswordWithToken(email || "", resetToken || "", password);
       router.push("/starter/success-new-password");
     } catch (error) {
-      Alert.alert("Error", "Gagal menyimpan kata sandi baru.");
+      showCustomAlert(
+        "Gagal Menyimpan",
+        "Gagal menyimpan kata sandi baru.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      enableOnAndroid={true}
+      extraScrollHeight={24}
+      keyboardShouldPersistTaps="handled"
     >
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -115,6 +146,14 @@ export default function NewPassword() {
           disabled={isLoading}
         />
       </ScrollView>
-    </KeyboardAvoidingView>
+
+      <CustomAlert
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
+    </KeyboardAwareScrollView>
   );
 }

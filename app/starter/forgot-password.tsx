@@ -1,16 +1,14 @@
 import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   Text,
   TextInput,
   View,
-} from "react-native";
+} from "react-native"; // 2. Hapus import 'Alert' dari sini
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { sendResetOtp } from "../../features/starter/services/auth-service";
 import { styles } from "../../features/starter/styles/forgot-password-styles";
 
@@ -18,9 +16,31 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // 3. Tambahkan State untuk mengontrol Modal Custom
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success",
+  });
+
+  // 4. Tambahkan fungsi helper
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
+
   const handleSendOtp = async () => {
     if (!email.includes("@")) {
-      Alert.alert("Input Tidak Valid", "Silakan masukkan alamat email yang valid.");
+      // 5. Ganti Alert bawaan dengan showCustomAlert
+      showCustomAlert(
+        "Input Tidak Valid",
+        "Silakan masukkan alamat email yang valid.",
+        "error"
+      );
       return;
     }
     
@@ -29,21 +49,26 @@ export default function ForgotPassword() {
       await sendResetOtp(email);
       router.push({ pathname: "/starter/verify-code", params: { email } });
     } catch (error) {
-      Alert.alert("Error", "Gagal mengirim OTP.");
+      // Ganti Alert bawaan dengan showCustomAlert
+      showCustomAlert(
+        "Gagal",
+        "Gagal mengirim OTP. Silakan coba lagi.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      contentContainerStyle={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      enableOnAndroid={true}
+      extraScrollHeight={24}
+      keyboardShouldPersistTaps="handled"
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
         {/* Logo SeismoTrack */}
         <Image
           style={styles.logo}
@@ -86,8 +111,15 @@ export default function ForgotPassword() {
             disabled={isLoading}
           />
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* 6. Panggil Komponen CustomAlert di bagian terbawah render */}
+        <CustomAlert
+          visible={modalConfig.visible}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          type={modalConfig.type}
+          onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+        />
+      </KeyboardAwareScrollView>
   );
 }
-

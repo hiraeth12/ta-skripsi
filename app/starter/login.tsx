@@ -3,23 +3,22 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from "react-native";
-
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native"; 
 import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert"; 
 import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { getApp } from "@react-native-firebase/app";
 import {
-    getAuth,
-    signInWithEmailAndPassword,
+  getAuth,
+  signInWithEmailAndPassword,
 } from "@react-native-firebase/auth";
 
 export default function Login() {
@@ -34,7 +33,7 @@ export default function Login() {
     visible: false,
     title: "",
     message: "",
-    type: "error", // Bisa 'error' atau 'success'
+    type: "error" as "error" | "success", // Tambahkan as "error" | "success" untuk TypeScript
   });
 
   // Fungsi untuk menampilkan Custom Alert
@@ -160,35 +159,14 @@ export default function Login() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Komponen Modal Alert Kustom */}
-      <Modal
+      {/* Panggil Komponen CustomAlert di sini */}
+      <CustomAlert
         visible={modalConfig.visible}
-        transparent={true}
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.infoCard}>
-            <Ionicons
-              name={
-                modalConfig.type === "error"
-                  ? "alert-circle"
-                  : "checkmark-circle"
-              }
-              size={50}
-              color={modalConfig.type === "error" ? "#D9534F" : "#1E6F9F"}
-              style={styles.modalIcon}
-            />
-            <Text style={styles.infoTitle}>{modalConfig.title}</Text>
-            <Text style={styles.infoDesc}>{modalConfig.message}</Text>
-            <TouchableOpacity
-              style={styles.infoButton}
-              onPress={() => setModalConfig({ ...modalConfig, visible: false })}
-            >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
     </KeyboardAvoidingView>
   );
 }

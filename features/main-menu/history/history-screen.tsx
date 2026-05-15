@@ -21,9 +21,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
-  useMemo,
+  memo,
   useRef,
   useState,
+  useMemo,
 } from "react";
 import {
   Animated,
@@ -231,7 +232,7 @@ function SkeletonList() {
 
 // ─── List card ────────────────────────────────────────────────────────────────
 
-const EarthquakeListItem = ({
+const EarthquakeListItem = memo(({
   item,
   onPress,
 }: {
@@ -240,6 +241,7 @@ const EarthquakeListItem = ({
 }) => {
   const magValue = parseFloat(item.magnitude);
   const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
+  const handlePress = useCallback(() => onPress(item), [item, onPress]);
 
   return (
     <TouchableOpacity
@@ -283,7 +285,7 @@ const EarthquakeListItem = ({
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -326,7 +328,7 @@ export default function History() {
   const tabParam = asSingle(searchParams.tab);
   const initialTab: EarthquakeTab =
     tabParam === "terdeteksi" ? "GEMPA TERDETEKSI" : "GEMPA DIRASAKAN";
-  const now = useMemo(() => new Date(), []);
+  const now = useMemo(() => new Date(), [])
 
   // ── State ──────────────────────────────────────────────────────────────────
 
