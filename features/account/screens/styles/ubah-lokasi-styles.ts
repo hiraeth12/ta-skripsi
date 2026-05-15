@@ -210,11 +210,6 @@ export const styles = StyleSheet.create({
   btnGPSLoading: {
     opacity: 0.75,
   },
-  gpsButtonInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
 });
 
 

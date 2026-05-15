@@ -1,0 +1,172 @@
+import { styles } from "../styles/login-styles";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native"; 
+import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert"; 
+import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
+import { getApp } from "@react-native-firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+} from "@react-native-firebase/auth";
+
+export default function Login() {
+  const router = useRouter();
+  const [secure, setSecure] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // State untuk mengontrol Modal Custom
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success", // Tambahkan as "error" | "success" untuk TypeScript
+  });
+
+  // Fungsi untuk menampilkan Custom Alert
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
+
+  const handleLogin = async () => {
+    if (isSubmitting) return;
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      showCustomAlert(
+        "Input belum lengkap",
+        "Email dan kata sandi wajib diisi.",
+        "error",
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const app = getApp();
+      const authInstance = getAuth(app);
+      const result = await signInWithEmailAndPassword(
+        authInstance,
+        trimmedEmail,
+        trimmedPassword,
+      );
+
+      // Fire-and-forget — don't block navigation on token save
+      if (result.user?.uid) {
+        saveFcmTokenToDatabase(result.user.uid).catch(() => {});
+      }
+
+      router.replace("/starter/ask-location");
+    } catch (e) {
+      const error = e as { code?: string; message?: string };
+      showCustomAlert(
+        "Login gagal",
+        "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.",
+        "error",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <Image
+          style={styles.image}
+          source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
+          resizeMode="contain"
+        />
+
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          placeholder="email@gmail.com"
+          placeholderTextColor="#999"
+          value={email}
+          onChangeText={(v) => setEmail(v.trimStart())}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Kata Sandi</Text>
+        <View style={styles.passwordContainer}>
+          <TextInput
+            placeholder="********"
+            placeholderTextColor="#999"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={secure}
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="password"
+            style={styles.passwordInput}
+          />
+          <TouchableOpacity onPress={() => setSecure(!secure)}>
+            <Ionicons
+              name={secure ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color="#888"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => router.push("/starter/forgot-password")}
+        >
+          <Text style={styles.forgotPassword}>Lupa Kata Sandi?</Text>
+        </TouchableOpacity>
+
+        <AuthButton
+          title={isSubmitting ? "Memproses..." : "Login"}
+          onPress={handleLogin}
+          disabled={isSubmitting}
+        />
+
+        <Text style={styles.signUpText}>Belum Punya Akun?</Text>
+        <TouchableOpacity onPress={() => router.push("/starter/register")}>
+          <Text
+            style={{ color: "#1E6F9F", fontWeight: "bold", textAlign: "right" }}
+          >
+            Daftar
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Panggil Komponen CustomAlert di sini */}
+      <CustomAlert
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
+    </KeyboardAvoidingView>
+  );
+}
