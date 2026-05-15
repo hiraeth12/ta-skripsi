@@ -107,11 +107,6 @@ gpsButtonLoading: {
   backgroundColor: "#155a80",
   opacity: 0.9,
 },
-gpsButtonInner: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 8,
-},
 gpsButtonText: {
   color: "#ffffff",
   fontSize: 16,

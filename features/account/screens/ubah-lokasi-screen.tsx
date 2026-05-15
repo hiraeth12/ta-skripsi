@@ -1,6 +1,6 @@
-// ─── ubah-lokasi-screen.tsx ────────────────────────────────────────────────────
-// Only the profile-read and the save (optimistic update) differ from original.
-
+import GpsButton from "@/components/ui/gps-button";
+import CustomAlert from "@/components/ui/custom-alert";
+import LocationSearchModal from "@/components/ui/location-search-modal";
 import { useHaversine } from "@/hooks/use-haversine";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
@@ -8,15 +8,11 @@ import { getAuth } from "@react-native-firebase/auth";
 import { getDatabase, ref, update } from "@react-native-firebase/database";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
   Modal,
   Pressable,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -24,29 +20,55 @@ import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-lokasi-styles";
 
+
+const BBOX_DEG = 0.45;
+const GPS_TIMEOUT_MS = 6000;
 function findNearestLocation(
   gpsLat: number,
   gpsLon: number,
   locations: any[],
   haversineDistanceKm: (a: number, b: number, c: number, d: number) => number,
-) {
+): any | null {
   if (!locations.length) return null;
-  return locations.reduce(
+
+  // Tahap 1: bounding-box pre-filter
+  const candidates = locations.filter(
+    (loc) =>
+      Math.abs(loc.latitude - gpsLat) < BBOX_DEG &&
+      Math.abs(loc.longitude - gpsLon) < BBOX_DEG,
+  );
+
+  // Fallback jika kosong (GPS di luar area data)
+  const pool = candidates.length > 0 ? candidates : locations;
+
+  // Tahap 2: Haversine hanya pada pool
+  return pool.reduce(
     (nearest, loc) => {
-      const d = haversineDistanceKm(gpsLat, gpsLon, loc.latitude, loc.longitude);
+      const d = haversineDistanceKm(
+        gpsLat,
+        gpsLon,
+        loc.latitude,
+        loc.longitude,
+      );
       return d < nearest.dist ? { loc, dist: d } : nearest;
     },
     {
-      loc: locations[0],
-      dist: haversineDistanceKm(gpsLat, gpsLon, locations[0].latitude, locations[0].longitude),
+      loc: pool[0],
+      dist: haversineDistanceKm(
+        gpsLat,
+        gpsLon,
+        pool[0].latitude,
+        pool[0].longitude,
+      ),
     },
   ).loc;
 }
 
+// ─── Komponen utama ──────────────────────────────────────────────────────────
 export default function UbahLokasi() {
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
-  const { profile, setProfile } = useProfileContext(); // ← no local fetch
+  const { profile, setProfile } = useProfileContext();
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
@@ -56,41 +78,73 @@ export default function UbahLokasi() {
   const [allLocations, setAllLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsMessage, setGpsMessage] = useState("Sedang mencari lokasi GPS Anda...");
+  const [gpsMessage, setGpsMessage] = useState("Memperbarui Lokasi ...");
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    type: "error" as "error" | "success",
+  });
 
-  // Locations list is NOT profile data — still fetched locally once
-  useState(() => {
+  const showCustomAlert = (
+    title: string,
+    message: string,
+    type: "error" | "success" = "error",
+  ) => {
+    setModalConfig({ visible: true, title, message, type });
+  };
+
+
+  const locationsCache = useRef<any[]>([]);
+
+  // ── Perbaikan 1 & 2: useEffect + cache ref ─────────────────────────────
+  useEffect(() => {
+    // Jika cache sudah ada, langsung pakai — tidak perlu fetch ulang
+    if (locationsCache.current.length > 0) {
+      setAllLocations(locationsCache.current);
+      setLoading(false);
+      return;
+    }
+
     const fetchLocations = async () => {
       try {
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         if (!dbUrl) throw new Error("Database URL not configured");
+
         const res = await fetch(`${dbUrl}/locations.json`);
         if (!res.ok) throw new Error(`Failed: ${res.status}`);
+
         const data = await res.json();
-        setAllLocations(
-          Object.entries(data || {}).map(([id, loc]: any) => ({
+        const mapped = Object.entries(data || {}).map(
+          ([id, loc]: any) => ({
             id,
             name: loc.name || "",
             desc: loc.alt_name || loc.name || "",
             latitude: loc.latitude,
             longitude: loc.longitude,
-          })),
+          }),
         );
+
+        locationsCache.current = mapped; // simpan ke cache
+        setAllLocations(mapped);
       } catch {
         setAllLocations([]);
       } finally {
         setLoading(false);
       }
     };
-    fetchLocations();
-  });
 
+    fetchLocations();
+  }, []); // ← dependency array kosong: hanya jalan sekali saat mount
+
+  // ── Filter pencarian ────────────────────────────────────────────────────
   const filteredLocations = allLocations.filter(
     (item) =>
       item.name.toLowerCase().includes(query.toLowerCase()) ||
       item.desc.toLowerCase().includes(query.toLowerCase()),
   );
 
+  // ── Pilih dari daftar ───────────────────────────────────────────────────
   const handleSelect = (item: any) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
     setSelectedLocationItem(item);
@@ -98,55 +152,101 @@ export default function UbahLokasi() {
     setQuery("");
   };
 
+  // ── Perbaikan 3: GPS cepat dengan Accuracy.Lowest + timeout race ────────
   const handleUseGPS = async () => {
     setGpsLoading(true);
     setGpsMessage("Meminta izin akses lokasi...");
+
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Ditolak", "Aktifkan izin lokasi di pengaturan.");
+        showCustomAlert(
+          "Permission Ditolak",
+          "Aktifkan izin lokasi di pengaturan.",
+          "error",
+        );
         return;
       }
-      setGpsMessage("Sedang menentukan posisi Anda...");
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+
+      setGpsMessage("Sedang memperbarui lokasi...");
+
+      // Promise.race: ambil GPS atau lempar error jika melebihi GPS_TIMEOUT_MS
+      const loc = await Promise.race<Location.LocationObject>([
+        Location.getCurrentPositionAsync({
+          // Lowest: tidak menunggu satelit presisi tinggi.
+          // Cukup untuk mencocokkan ke lokasi terdekat di list.
+          accuracy: Location.Accuracy.Lowest,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("GPS timeout")),
+            GPS_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+
       const { latitude, longitude } = loc.coords;
-      const nearest = findNearestLocation(latitude, longitude, allLocations, haversineDistanceKm);
+
+      // Perbaikan 4: bounding-box filter di dalam findNearestLocation
+      const nearest = findNearestLocation(
+        latitude,
+        longitude,
+        allLocations,
+        haversineDistanceKm,
+      );
+
       const name = nearest?.name ?? "Lokasi GPS";
       const desc = nearest?.desc ?? "";
       setSelectedLocation(desc ? `${name}, ${desc}` : name);
       setSelectedLocationItem({ name, latitude, longitude });
-    } catch {
-      Alert.alert("Error", "Tidak dapat mengakses GPS.");
+    } catch (err: any) {
+      if (err?.message === "GPS timeout") {
+        showCustomAlert(
+          "GPS Lambat",
+          "Sinyal GPS tidak tersedia. Coba lagi di area terbuka.",
+          "error",
+        );
+      } else {
+        showCustomAlert("Error", "Tidak dapat mengakses GPS.", "error");
+      }
     } finally {
       setGpsLoading(false);
     }
   };
 
+  // ── Simpan ke Firebase ──────────────────────────────────────────────────
   const handleSimpan = async () => {
     if (!selectedLocationItem) {
-      Alert.alert("Error", "Silakan pilih lokasi terlebih dahulu");
+      showCustomAlert("Error", "Silakan pilih lokasi terlebih dahulu", "error");
       return;
     }
+
     try {
       const app = getApp();
       const auth = getAuth(app);
       const user = auth.currentUser;
+
       if (user) {
         const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+
         await update(ref(db, `users/${user.uid}`), {
-          latitude: selectedLocationItem.latitude?.toFixed(6) ?? selectedLocationItem.latitude,
-          longitude: selectedLocationItem.longitude?.toFixed(6) ?? selectedLocationItem.longitude,
+          latitude:
+            selectedLocationItem.latitude?.toFixed(6) ??
+            selectedLocationItem.latitude,
+          longitude:
+            selectedLocationItem.longitude?.toFixed(6) ??
+            selectedLocationItem.longitude,
           locationName: selectedLocationItem.name,
           locationUpdatedAt: new Date().toISOString(),
         });
       }
     } catch {
-      Alert.alert("Error", "Gagal menyimpan lokasi ke database");
+      showCustomAlert("Error", "Gagal menyimpan lokasi ke database", "error");
       return;
     }
 
-    // ── Optimistic update ─────────────────────────────────────────────────────
+    // Optimistic update: langsung perbarui context tanpa menunggu re-fetch
     setProfile((prev) => ({ ...prev, location: selectedLocationItem.name }));
 
     setShowSuccessModal(true);
@@ -156,6 +256,7 @@ export default function UbahLokasi() {
     }, 1500);
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <>
       <ProfilePageLayout
@@ -166,7 +267,9 @@ export default function UbahLokasi() {
         headerInitials={profile.initials}
       >
         <View style={styles.inputCard}>
-          <Text style={styles.description}>Silahkan Pilih Lokasi Anda atau Menggunakan Mode GPS</Text>
+          <Text style={styles.description}>
+            Silahkan Pilih Lokasi Anda atau Menggunakan Mode GPS
+          </Text>
 
           <View style={styles.inputArea}>
             <Text style={styles.label}>Cari Lokasi</Text>
@@ -175,7 +278,13 @@ export default function UbahLokasi() {
               onPress={() => setLocationModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.inputText, !selectedLocation && { color: "#999" }]} numberOfLines={1}>
+              <Text
+                style={[
+                  styles.inputText,
+                  !selectedLocation && { color: "#999" },
+                ]}
+                numberOfLines={1}
+              >
                 {selectedLocation || "Cari Kelurahan atau Desa..."}
               </Text>
               <EvilIcons name="chevron-down" size={24} color="#1E6F9F" />
@@ -185,28 +294,23 @@ export default function UbahLokasi() {
           <Text style={styles.orText}>Atau</Text>
 
           <View style={styles.gpsWrapper}>
-            <TouchableOpacity
-              style={[styles.btnGPS, gpsLoading && styles.btnGPSLoading]}
-              activeOpacity={0.8}
+            <GpsButton
+              text="Pakai GPS"
+              loadingText={gpsMessage}
+              loading={gpsLoading}
               onPress={handleUseGPS}
-              disabled={gpsLoading}
-            >
-              {gpsLoading ? (
-                <View style={styles.gpsButtonInner}>
-                  <ActivityIndicator size="small" color="#ffffff" />
-                  <Text style={styles.btnTextGPS}>{gpsMessage}</Text>
-                </View>
-              ) : (
-                <View style={styles.gpsButtonInner}>
-                  <Ionicons name="navigate" size={18} color="#ffffff" />
-                  <Text style={styles.btnTextGPS}>Pakai GPS</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              disabled={gpsLoading || loading} // ← disable juga saat data belum siap
+              style={styles.btnGPS}
+              loadingStyle={styles.btnGPSLoading}
+              textStyle={styles.btnTextGPS}
+            />
           </View>
 
           <View style={styles.buttonWrapper}>
-            <TouchableOpacity style={styles.btnBatal} onPress={() => router.back()}>
+            <TouchableOpacity
+              style={styles.btnBatal}
+              onPress={() => router.back()}
+            >
               <Text style={styles.btnTextBatal}>Batal</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSimpan} onPress={handleSimpan}>
@@ -216,60 +320,55 @@ export default function UbahLokasi() {
         </View>
       </ProfilePageLayout>
 
-      {/* Modal list lokasi */}
-      <Modal animationType="slide" transparent visible={locationModalVisible} onRequestClose={() => setLocationModalVisible(false)}>
-        <View style={styles.bottomSheetOverlay}>
-          <View style={styles.bottomSheetContent}>
-            <View style={styles.handleBar} />
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pilih Lokasi</Text>
-              <TouchableOpacity onPress={() => setLocationModalVisible(false)}>
-                <Ionicons name="close-circle" size={28} color="#ccc" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchBarContainer}>
-              <Ionicons name="search" size={18} color="#999" style={{ marginLeft: 10 }} />
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Ketik nama desa atau kecamatan..."
-                autoFocus
-                value={query}
-                onChangeText={setQuery}
-              />
-            </View>
-            <FlatList
-              data={filteredLocations}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.locListItem} onPress={() => handleSelect(item)}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="map-outline" size={20} color="#1E6F9F" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.locName}>{item.name}</Text>
-                    <Text style={styles.locDesc}>{item.desc}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color="#ccc" />
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+      <LocationSearchModal
+        visible={locationModalVisible}
+        query={query}
+        locations={filteredLocations}
+        onClose={() => setLocationModalVisible(false)}
+        onChangeQuery={setQuery}
+        onSelect={handleSelect}
+      />
 
       {/* Modal berhasil */}
       <Modal visible={showSuccessModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => { setShowSuccessModal(false); router.replace("/main-menu/account"); }}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setShowSuccessModal(false);
+            router.replace("/main-menu/account");
+          }}
+        >
           <View style={styles.infoCard}>
-            <Ionicons name="checkmark-circle" size={50} color="#1E6F9F" style={{ alignSelf: "center", marginBottom: 12 }} />
+            <Ionicons
+              name="checkmark-circle"
+              size={50}
+              color="#1E6F9F"
+              style={{ alignSelf: "center", marginBottom: 12 }}
+            />
             <Text style={styles.infoTitle}>Berhasil</Text>
-            <Text style={styles.infoDesc}>Lokasi Anda telah berhasil diperbarui di sistem SeismoTrack.</Text>
-            <TouchableOpacity style={styles.infoButton} onPress={() => { setShowSuccessModal(false); router.replace("/main-menu/account"); }}>
+            <Text style={styles.infoDesc}>
+              Lokasi Anda telah berhasil diperbarui di sistem SeismoTrack.
+            </Text>
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace("/main-menu/account");
+              }}
+            >
               <Text style={styles.infoButtonText}>Mengerti</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
+
+      <CustomAlert
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+      />
     </>
   );
 }
