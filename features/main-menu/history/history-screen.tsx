@@ -2,11 +2,11 @@ import EarthquakeTabBar, {
   type EarthquakeTab,
 } from "@/components/earthquake-tab-bar";
 import { getApp } from "@/config/firebase-init";
+import { useUserSession } from "@/features/account/user-session-context";
 import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAuth } from "@react-native-firebase/auth";
 import {
   endAt,
   get,
@@ -303,6 +303,7 @@ function roundCoord(n: number): number {
 export default function History() {
   const router = useRouter();
   const isFocused = useIsFocused();
+  const session = useUserSession();
   const { haversineDistanceKm } = useHaversine();
 
   const searchParams = useLocalSearchParams<{
@@ -482,25 +483,15 @@ export default function History() {
   // ── User location ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        const app = getApp();
-        const user = getAuth(app).currentUser;
-        if (!user) return;
-        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
-        const snap = await get(ref(db, `/users/${user.uid}`));
-        const data = snap.val();
-        const lat = parseFloat(String(data?.latitude ?? ""));
-        const lon = parseFloat(String(data?.longitude ?? ""));
-        if (!isNaN(lat) && !isNaN(lon) && isMounted) {
-          setUserLocation({ lat: roundCoord(lat), lon: roundCoord(lon) });
-        }
-      } catch { }
+    if (!session.location) {
+      return;
     }
-    void load();
-    return () => { isMounted = false; };
-  }, []);
+
+    setUserLocation({
+      lat: roundCoord(session.location.latitude),
+      lon: roundCoord(session.location.longitude),
+    });
+  }, [session.location]);
 
   // ── Cache-first fetch ─────────────────────────────────────────────────────
 

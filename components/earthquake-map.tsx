@@ -1,11 +1,8 @@
-import { getApp } from "@react-native-firebase/app";
-import { getAuth } from "@react-native-firebase/auth";
-import { get, getDatabase, ref } from "@react-native-firebase/database";
+import { useUserSession } from "@/features/account/user-session-context";
 import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import patahanGeoJson from "../assets/geojson/patahan.geojson";
 
 import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
@@ -73,6 +70,9 @@ type Props = {
   isCardOpen?: boolean;
   // --- PERBAIKAN: Menambahkan tipe cardHeight
   cardHeight?: number;
+  showFaultLines?: boolean;
+  showMapChrome?: boolean;
+  showUserMarker?: boolean;
 };
 
 type DotMarkerProps = {
@@ -361,7 +361,11 @@ const EarthquakeMap = memo(
     isCardOpen = false,
     // --- PERBAIKAN: Default parameter cardHeight
     cardHeight = 0,
+    showFaultLines = true,
+    showMapChrome = true,
+    showUserMarker = true,
   }: Props) {
+    const session = useUserSession();
     const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
     const cameraRef = React.useRef<Mapbox.Camera | null>(null);
     const pendingCameraMoveRef = React.useRef<{
@@ -380,7 +384,7 @@ const EarthquakeMap = memo(
     const [hasMeasuredViewport, setHasMeasuredViewport] = useState(false);
     const [innerWaveProgress, setInnerWaveProgress] = useState(0);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [showFaultLines, setShowFaultLines] = useState(true);
+    const [faultLinesVisible, setFaultLinesVisible] = useState(showFaultLines);
     const [showSeismicSensors, setShowSeismicSensors] = useState(false);
     const [seismicSensorsGeoJson, setSeismicSensorsGeoJson] =
       useState<GeoJSON.FeatureCollection | null>(null);
@@ -393,52 +397,17 @@ const EarthquakeMap = memo(
     } | null>(null);
 
     useEffect(() => {
-      let isMounted = true;
-      const fetchUser = async () => {
-        try {
-          const app = getApp();
-          const authInstance = getAuth(app);
-          const currentUser = authInstance.currentUser;
-          if (!currentUser) return;
+      if (!session.location) {
+        setUserProfile(null);
+        return;
+      }
 
-          const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-          const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-          const userRef = ref(database, `users/${currentUser.uid}`);
-          const snapshot = await get(userRef);
-          const userData = snapshot.val();
-
-          if (
-            userData &&
-            userData.latitude &&
-            userData.longitude &&
-            isMounted
-          ) {
-            const lat = parseFloat(userData.latitude);
-            const lon = parseFloat(userData.longitude);
-            if (!isNaN(lat) && !isNaN(lon)) {
-              const firstInt = userData.firstName ? userData.firstName[0] : "";
-              const lastInt = userData.lastName ? userData.lastName[0] : "";
-              const initials = (firstInt + lastInt).toUpperCase() || "ME";
-              setUserProfile({
-                latitude: lat,
-                longitude: lon,
-                initials,
-                photoUrl:
-                  userData.photoURL ||
-                  userData.photoUrl ||
-                  userData.profilePicture,
-              });
-            }
-          }
-        } catch (e) {}
-      };
-
-      fetchUser();
-
-      return () => {
-        isMounted = false;
-      };
-    }, []);
+      setUserProfile({
+        latitude: session.location.latitude,
+        longitude: session.location.longitude,
+        initials: session.profile?.initials || "ME",
+      });
+    }, [session.location, session.profile?.initials]);
 
     useEffect(() => {
       if (!waveOverlays?.length) {
@@ -581,8 +550,11 @@ const EarthquakeMap = memo(
             }}
           />
 
-          {showFaultLines && (
-            <Mapbox.ShapeSource id="faults" shape={patahanGeoJson}>
+          {showFaultLines && faultLinesVisible && (
+            <Mapbox.ShapeSource
+              id="faults"
+              shape={require("../assets/geojson/patahan.geojson")}
+            >
               <Mapbox.LineLayer
                 id="fault-lines"
                 style={{
@@ -691,7 +663,7 @@ const EarthquakeMap = memo(
             </React.Fragment>
           ))}
 
-          {userProfile && (
+          {showUserMarker && userProfile && (
             <UserMarker
               coordinate={{
                 latitude: userProfile.latitude,
@@ -732,7 +704,7 @@ const EarthquakeMap = memo(
           ))}
         </Mapbox.MapView>
 
-        {!isCardOpen && (
+        {showMapChrome && !isCardOpen && (
           <View
             pointerEvents="box-none"
             style={[
@@ -752,8 +724,8 @@ const EarthquakeMap = memo(
                   <View style={styles.menuRow}>
                     <Text style={styles.menuLabel}>Tampilkan patahan</Text>
                     <Switch
-                      value={showFaultLines}
-                      onValueChange={setShowFaultLines}
+                      value={faultLinesVisible}
+                      onValueChange={setFaultLinesVisible}
                       trackColor={{ false: "#cbd5e1", true: "#f59e0b" }}
                     />
                   </View>
@@ -785,6 +757,9 @@ const EarthquakeMap = memo(
   },
   (prev, next) => {
     if (prev.isCardOpen !== next.isCardOpen) return false;
+    if (prev.showFaultLines !== next.showFaultLines) return false;
+    if (prev.showMapChrome !== next.showMapChrome) return false;
+    if (prev.showUserMarker !== next.showUserMarker) return false;
     // Peta perlu render ulang kalau ukuran card berubah agar bisa adjust posisi tombolnya
     if (prev.cardHeight !== next.cardHeight) return false;
     if (prev.markerCoordinate !== next.markerCoordinate) return false;

@@ -1,4 +1,5 @@
 import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
@@ -29,7 +30,7 @@ export const TerdeteksiCard = ({
   onCardPress: () => void;
   onShare: () => void;
 }) => {
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<MapViewType | null>(null);
 
   return (
     <TouchableOpacity
@@ -54,7 +55,9 @@ export const TerdeteksiCard = ({
                 magnitude: data.magnitude,
                 depth: data.kedalaman,
               }}
-              isCardOpen={true}
+              showFaultLines={false}
+              showMapChrome={false}
+              showUserMarker={false}
             />
           </View>
         ) : (

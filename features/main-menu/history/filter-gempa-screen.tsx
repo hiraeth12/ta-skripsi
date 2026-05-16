@@ -70,9 +70,8 @@ export default function FilterGempaScreen() {
       now,
     );
     const months = normalizeFilterMonths(selectedMonths, clamped.year, tab, now);
-    const target = params.returnTo === "list" ? "/main-menu/list-gempa" : "/main-menu/history";
     router.replace({
-      pathname: target,
+      pathname: "/main-menu/history",
       params: {
         tab,
         filterYear: String(clamped.year),
