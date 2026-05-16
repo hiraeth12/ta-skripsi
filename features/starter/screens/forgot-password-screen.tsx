@@ -1,7 +1,7 @@
 import AuthButton from "@/components/auth-button";
 import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Image, Text, TextInput, View } from "react-native"; // 2. Hapus import 'Alert' dari sini
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { sendResetOtp } from "../services/auth-service";
@@ -10,6 +10,7 @@ import { styles } from "../styles/forgot-password-styles";
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // 3. Tambahkan State untuk mengontrol Modal Custom
   const [modalConfig, setModalConfig] = useState({
@@ -29,7 +30,11 @@ export default function ForgotPassword() {
   };
 
   const handleSendOtp = async () => {
-    if (!email.includes("@")) {
+    if (isSubmittingRef.current) return;
+
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail.includes("@")) {
       // 5. Ganti Alert bawaan dengan showCustomAlert
       showCustomAlert(
         "Input Tidak Valid",
@@ -39,18 +44,28 @@ export default function ForgotPassword() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
     try {
-      await sendResetOtp(email);
-      router.push({ pathname: "/starter/verify-code", params: { email } });
+      await sendResetOtp(trimmedEmail);
+      router.push({
+        pathname: "/starter/verify-code",
+        params: { email: trimmedEmail },
+      });
     } catch (error) {
       // Ganti Alert bawaan dengan showCustomAlert
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal mengirim OTP. Silakan coba lagi.";
+
       showCustomAlert(
         "Gagal",
-        "Gagal mengirim OTP. Silakan coba lagi.",
+        message,
         "error",
       );
     } finally {
+      isSubmittingRef.current = false;
       setIsLoading(false);
     }
   };
