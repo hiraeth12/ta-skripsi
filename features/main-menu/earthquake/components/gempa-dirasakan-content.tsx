@@ -1,4 +1,5 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
+import { ModalShakeMap } from "@/components/modal-shakemap";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useHaversine } from "@/hooks/use-haversine";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -7,11 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
-  Dimensions,
-  Image,
-  Modal,
   PanResponder,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -21,7 +18,6 @@ import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
@@ -397,39 +393,11 @@ export default function GempaDirasakan({
         </Animated.View>
       )}
 
-      <Modal visible={shakeMapVisible} transparent animationType="slide">
-        <View style={styles.modalOverlayBottom}>
-          <View style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}>
-            <View style={styles.handleBar} />
-            <View style={styles.modalHeaderBottom}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-                <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShakeMapVisible(false)}
-                style={styles.modalCloseCircle}
-              >
-                <Ionicons name="close" size={20} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1 }}>
-              {shakeMapUrl && (
-                <Image
-                  source={{ uri: shakeMapUrl }}
-                  style={styles.maximizedImage}
-                  resizeMode="contain"
-                />
-              )}
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <Text style={styles.scrollHint}>
-                * Data diperbarui secara otomatis dari BMKG ShakeMap
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ModalShakeMap
+        visible={shakeMapVisible}
+        imageUrl={shakeMapUrl}
+        onClose={() => setShakeMapVisible(false)}
+      />
 
       <NetworkErrorModal
         visible={networkErrorModalVisible}
