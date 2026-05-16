@@ -5,11 +5,24 @@ import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
+
+function FcmBootstrap() {
+  useFcm();
+  return null;
+}
 
 export default function RootLayout() {
   const [notification, setNotification] = useState<InAppNotificationData | null>(null);
+  const [fcmReady, setFcmReady] = useState(false);
   const segments = useSegments();
-  useFcm();
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setFcmReady(true);
+    });
+    return () => task.cancel();
+  }, []);
   
   // Deteksi apakah saat ini sedang berada di folder/layar starter (auth)
   const isStarter = segments[0] === "starter";
@@ -54,6 +67,7 @@ export default function RootLayout() {
 
   return (
     <>
+      {fcmReady && <FcmBootstrap />}
       <Stack screenOptions={{ headerShown: false, animation: "none" }} />
       <GempaBumiNotificationModal 
         visible={!!notification && !isStarter} 

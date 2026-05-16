@@ -13,6 +13,12 @@ import { useEffect, useRef } from "react";
 // Global flag to ensure foreground listener is registered only once
 let isForegroundListenerInitialized = false;
 
+function toMessageText(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value == null) return undefined;
+  return String(value);
+}
+
 /**
  * Initialize Firebase Cloud Messaging for push notifications
  * Uses modular Firebase API (v22+ compatible)
@@ -52,15 +58,22 @@ export const useFcm = () => {
           onMessage(messaging, async (remoteMessage) => {
             console.log("FOREGROUND HANDLER TRIGGERED", remoteMessage.data);
             
-            if (remoteMessage.data?.send_timestamp) {
-              const latency = (Date.now() - parseInt(remoteMessage.data.send_timestamp, 10)) / 1000;
+            const sendTimestamp = toMessageText(remoteMessage.data?.send_timestamp);
+            if (sendTimestamp) {
+              const latency = (Date.now() - parseInt(sendTimestamp, 10)) / 1000;
               console.log(`[LATENCY LOG] Notifikasi diterima dalam: ${latency.toFixed(3)} detik (Foreground)`);
             }
 
             // Karena kita menggunakan Data-Only Payload untuk background Wake-Up,
             // properti ada di remoteMessage.data
-            const title = remoteMessage.data?.title || remoteMessage.notification?.title || "Notifikasi Gempa";
-            const body = remoteMessage.data?.body || remoteMessage.notification?.body || "Ada gempa baru terdeteksi";
+            const title =
+              toMessageText(remoteMessage.data?.title) ||
+              remoteMessage.notification?.title ||
+              "Notifikasi Gempa";
+            const body =
+              toMessageText(remoteMessage.data?.body) ||
+              remoteMessage.notification?.body ||
+              "Ada gempa baru terdeteksi";
             
             notificationEmitter.emit({
               title,
