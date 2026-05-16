@@ -75,8 +75,11 @@ export const styles = StyleSheet.create({
     fontSize: 18, 
     fontWeight: "bold" 
   },
-  scrollContent: { 
-    paddingBottom: 20 
+  keyboardScroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
 
   // INPUT CARD
@@ -137,5 +140,86 @@ export const styles = StyleSheet.create({
   btnTextSimpan: { 
     color: "#fff", 
     fontWeight: "bold" 
+  },
+  logoutButton: {
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoutText: {
+    color: "#E11D48",
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    paddingHorizontal: 24,
+  },
+  confirmCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    alignItems: "center",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  confirmIcon: {
+    marginBottom: 10,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#111827",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  confirmButtonWrapper: {
+    flexDirection: "row",
+    width: "100%",
+  },
+  confirmCancelButton: {
+    flex: 1,
+    marginRight: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+  },
+  confirmLogoutButton: {
+    flex: 1,
+    marginLeft: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#E11D48",
+    alignItems: "center",
+  },
+  confirmCancelText: {
+    color: "#6B7280",
+    fontWeight: "bold",
+  },
+  confirmLogoutText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });

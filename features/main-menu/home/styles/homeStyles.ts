@@ -1,6 +1,4 @@
-import { Dimensions, StyleSheet } from "react-native";
-
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
@@ -189,6 +187,14 @@ export const styles = StyleSheet.create({
     borderTopRightRadius: 25,
     width: "100%",
   },
+  handleBar: {
+    width: 40,
+    height: 5,
+    backgroundColor: "#ccc",
+    borderRadius: 10,
+    alignSelf: "center",
+    marginTop: 12,
+  },
   modalHeaderBottom: {
     flexDirection: "row",
     alignItems: "center",
@@ -199,30 +205,10 @@ export const styles = StyleSheet.create({
   },
   modalTitleBottom: { color: "#0C4A6E", fontWeight: "bold", fontSize: 16 },
   modalSubtitle: { fontSize: 11, color: "#777" },
-  maximizedImage: { width: SCREEN_WIDTH, height: 600, marginTop: 10 },
   modalFooter: {
     padding: 15,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
     backgroundColor: "#fafafa",
-  },
-  scrollHint: {
-    textAlign: "center",
-    fontSize: 12,
-    color: "#1E6F9F",
-    fontWeight: "500",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#ccc",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginTop: 12,
-  },
-  modalCloseCircle: {
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-    padding: 4,
   },
 });

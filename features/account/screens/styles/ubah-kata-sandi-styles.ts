@@ -119,6 +119,10 @@ export const styles = StyleSheet.create({
   },
   btnTextBatal: { color: "#999", fontWeight: "bold" },
   btnTextSimpan: { color: "#fff", fontWeight: "bold" },
+
+  keyboardScroll: {
+    flex: 1,
+  },
 });
 
 

@@ -1,4 +1,5 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
+import { ModalShakeMap } from "@/components/modal-shakemap";
 import Skeleton from "@/components/skeleton";
 import {
   CACHE_KEYS,
@@ -25,7 +26,6 @@ import {
   AppStateStatus,
   Dimensions,
   Image,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -40,7 +40,7 @@ import { styles } from "./styles/homeStyles";
 
 // ─── Module-level constants (never recreated) ─────────────────────────────────
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
@@ -601,30 +601,11 @@ export default function Home() {
         }}
       />
 
-      <Modal visible={shakeMapVisible} transparent animationType="slide">
-        <View style={styles.modalOverlayBottom}>
-          <View style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}>
-            <View style={styles.handleBar} />
-            <View style={styles.modalHeaderBottom}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-                <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShakeMapVisible(false)} style={styles.modalCloseCircle}>
-                <Ionicons name="close" size={20} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1 }}>
-              {shakeMapUrl && (
-                <Image source={{ uri: shakeMapUrl }} style={styles.maximizedImage} resizeMode="contain" />
-              )}
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <Text style={styles.scrollHint}>* Data diperbarui secara otomatis dari BMKG ShakeMap</Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ModalShakeMap
+        visible={shakeMapVisible}
+        imageUrl={shakeMapUrl}
+        onClose={() => setShakeMapVisible(false)}
+      />
     </View>
   );
 }
