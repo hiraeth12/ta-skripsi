@@ -15,16 +15,15 @@ import {
   View,
 } from "react-native";
 import { saveFcmTokenToDatabase } from "../../../hooks/use-fcm-token-save";
+import { PUSH_NOTIFICATION_PREF_KEY } from "../components/handle-logout";
 import ProfilePageLayout from "../components/profile-page-layout";
 import Skeleton from "../../../components/skeleton";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/account-styles";
 
-const PUSH_NOTIFICATION_PREF_KEY = "push_notifications_enabled";
-
 export default function Account() {
   const router = useRouter();
-  const { profile, loading } = useProfileContext(); // ← no local fetch
+  const { profile, loading } = useProfileContext(); 
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
   const [isToggleProcessing, setIsToggleProcessing] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
@@ -53,7 +52,9 @@ export default function Account() {
     if (isNavigating.current) return;
     isNavigating.current = true;
     router.push(path as any);
-    setTimeout(() => { isNavigating.current = false; }, 600);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 600);
   };
 
   const handleToggleNotification = async (value: boolean) => {
@@ -108,8 +109,18 @@ export default function Account() {
             borderBottomRightRadius: 24,
           }}
         >
-          <Skeleton width={90} height={90} borderRadius={45} style={{ marginBottom: 16 }} />
-          <Skeleton width={160} height={20} borderRadius={6} style={{ marginBottom: 8 }} />
+          <Skeleton
+            width={90}
+            height={90}
+            borderRadius={45}
+            style={{ marginBottom: 16 }}
+          />
+          <Skeleton
+            width={160}
+            height={20}
+            borderRadius={6}
+            style={{ marginBottom: 8 }}
+          />
           <Skeleton width={200} height={14} borderRadius={4} />
         </View>
         <View style={{ padding: 20, marginTop: 10 }}>
@@ -119,7 +130,12 @@ export default function Account() {
                 <View style={styles.iconWrapper}>
                   <Skeleton width={25} height={25} borderRadius={12.5} />
                 </View>
-                <Skeleton width={140} height={16} borderRadius={6} style={{ marginLeft: 12 }} />
+                <Skeleton
+                  width={140}
+                  height={16}
+                  borderRadius={6}
+                  style={{ marginLeft: 12 }}
+                />
               </View>
               <Skeleton width={16} height={16} borderRadius={4} />
             </View>
@@ -137,15 +153,35 @@ export default function Account() {
         headerLocation={profile.location}
         headerInitials={profile.initials}
       >
-        <MenuLink icon="account-circle-outline" title="Pengaturan Profil" onPress={() => navigate("/profile/pengaturan")} />
-        <MenuLink icon="lock-outline" title="Ubah Kata Sandi" onPress={() => navigate("/profile/ubah-kata-sandi")} />
-        <MenuLink icon="map-marker-outline" title="Ubah Lokasi" onPress={() => navigate("/profile/ubah-lokasi")} />
-        <MenuLink icon="earth" title="Ubah Bahasa" onPress={() => navigate("/profile/ubah-bahasa")} />
+        <MenuLink
+          icon="account-circle-outline"
+          title="Pengaturan Profil"
+          onPress={() => navigate("/profile/pengaturan")}
+        />
+        <MenuLink
+          icon="lock-outline"
+          title="Ubah Kata Sandi"
+          onPress={() => navigate("/profile/ubah-kata-sandi")}
+        />
+        <MenuLink
+          icon="map-marker-outline"
+          title="Ubah Lokasi"
+          onPress={() => navigate("/profile/ubah-lokasi")}
+        />
+        <MenuLink
+          icon="earth"
+          title="Ubah Bahasa"
+          onPress={() => navigate("/profile/ubah-bahasa")}
+        />
 
         <View style={styles.menuItem}>
           <View style={styles.menuLeft}>
             <View style={styles.iconWrapper}>
-              <Ionicons name="notifications-outline" size={25} color="#1E6F9F" />
+              <Ionicons
+                name="notifications-outline"
+                size={25}
+                color="#1E6F9F"
+              />
             </View>
             <Text style={styles.menuText}>Notifikasi Push</Text>
           </View>
@@ -159,11 +195,19 @@ export default function Account() {
           />
         </View>
 
-        <MenuLink icon="cellphone-information" title="Tentang Aplikasi" onPress={() => navigate("/profile/tentang-aplikasi")} />
+        <MenuLink
+          icon="cellphone-information"
+          title="Tentang Aplikasi"
+          onPress={() => navigate("/profile/tentang-aplikasi")}
+        />
+
       </ProfilePageLayout>
 
       <Modal visible={showNotifModal} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={() => setShowNotifModal(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowNotifModal(false)}
+        >
           <View style={styles.infoCard}>
             <Ionicons
               name={notifStatus ? "notifications" : "notifications-off"}
@@ -171,24 +215,34 @@ export default function Account() {
               color="#1E6F9F"
               style={styles.modalIcon}
             />
-            <Text style={styles.infoTitle}>Notifikasi {notifStatus ? "Aktif" : "Nonaktif"}</Text>
+            <Text style={styles.infoTitle}>
+              Notifikasi {notifStatus ? "Aktif" : "Nonaktif"}
+            </Text>
             <Text style={styles.infoDesc}>
               {notifStatus
                 ? "Dengan ini, Anda akan menerima pemberitahuan langsung di perangkat Anda terkait aktivitas gempa terkini."
                 : "Anda telah mematikan notifikasi. Anda tidak akan menerima pemberitahuan langsung mengenai pembaruan sistem atau gempa."}
             </Text>
-            <TouchableOpacity style={styles.infoButton} onPress={() => setShowNotifModal(false)}>
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => setShowNotifModal(false)}
+            >
               <Text style={styles.infoButtonText}>Mengerti</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
+
     </>
   );
 }
 
 const MenuLink = ({ icon, title, onPress }: any) => (
-  <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
+  <TouchableOpacity
+    style={styles.menuItem}
+    activeOpacity={0.7}
+    onPress={onPress}
+  >
     <View style={styles.menuLeft}>
       <View style={styles.iconWrapper}>
         <MaterialCommunityIcons name={icon} size={25} color="#1E6F9F" />

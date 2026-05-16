@@ -1,9 +1,15 @@
+import { useCallback } from "react";
+
+function toRad(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
 /**
  * Haversine formula for calculating distance between two geographic coordinates
  * Returns distance in kilometers
  */
 export function useHaversine() {
-  const haversineDistanceKm = (
+  const haversineDistanceKm = useCallback((
     lat1: number,
     lon1: number,
     lat2: number,
@@ -22,11 +28,7 @@ export function useHaversine() {
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
-  };
-
-  const toRad = (degrees: number): number => {
-    return (degrees * Math.PI) / 180;
-  };
+  }, []);
 
   return { haversineDistanceKm };
 }

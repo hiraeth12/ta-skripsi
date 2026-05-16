@@ -1,4 +1,5 @@
 import EarthquakeMap from "@/components/earthquake-map";
+import { ModalShakeMap } from "@/components/modal-shakemap";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { useHaversine } from "@/hooks/use-haversine";
@@ -15,11 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
-    Dimensions,
-    Image,
-    Modal,
     PanResponder,
-    ScrollView,
     Text,
     TouchableOpacity,
     View
@@ -34,7 +31,6 @@ import styles from "./styles/gempa-dirasakan-history-content";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DB_PATH = "gempa_dirasakan/items";
 const MAX_POINTS = 20;
@@ -688,40 +684,11 @@ export function GempaDirasakanHistoryContent({
         </Animated.View>
       )}
 
-      {/* ShakeMap modal */}
-      <Modal visible={shakeMapVisible} transparent animationType="slide">
-        <View style={styles.modalOverlayBottom}>
-          <View style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}>
-            <View style={styles.handleBar} />
-            <View style={styles.modalHeaderBottom}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-                <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShakeMapVisible(false)}
-                style={styles.modalCloseCircle}
-              >
-                <Ionicons name="close" size={20} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1 }}>
-              {shakeMapUrl && (
-                <Image
-                  source={{ uri: shakeMapUrl }}
-                  style={styles.maximizedImage}
-                  resizeMode="contain"
-                />
-              )}
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <Text style={styles.scrollHint}>
-                * Data diperbarui secara otomatis dari BMKG ShakeMap
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ModalShakeMap
+        visible={shakeMapVisible}
+        imageUrl={shakeMapUrl}
+        onClose={() => setShakeMapVisible(false)}
+      />
     </View>
   );
 }

@@ -11,15 +11,20 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
-        "softwareKeyboardLayoutMode": "pan",
         "backgroundColor": "#E6F4FE",
+<<<<<<< HEAD
         "foregroundImage": "./assets/images/seismo-icon.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
+=======
+        "foregroundImage": "./assets/images/seismo-icon.png"
+>>>>>>> 7ab26387b61b9372b3178054867b0745dd78e73d
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "googleServicesFile": "./google-services.json",
       "package": "com.fasyabrhns.myApp"
     },

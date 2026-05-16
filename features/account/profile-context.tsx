@@ -1,6 +1,8 @@
 import {
   createContext,
+  Dispatch,
   ReactNode,
+  SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -10,9 +12,9 @@ import {
 import NetInfo from "@react-native-community/netinfo";
 import {
   ACCOUNT_PROFILE,
-  fetchProfileFromFirebase,
   ProfileData,
 } from "./data/profile";
+import { useUserSession } from "./user-session-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,7 +22,7 @@ type ProfileContextValue = {
   /** Current profile data (optimistically updated on save) */
   profile: ProfileData;
   /** Call this after saving changes so all screens reflect updates instantly */
-  setProfile: React.Dispatch<React.SetStateAction<ProfileData>>;
+  setProfile: Dispatch<SetStateAction<ProfileData>>;
   /** True only on the very first load */
   loading: boolean;
   /** Force a fresh fetch (e.g. after a pull-to-refresh) */
@@ -34,26 +36,52 @@ const ProfileContext = createContext<ProfileContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<ProfileData>(ACCOUNT_PROFILE);
-  const [loading, setLoading] = useState(true);
+  const session = useUserSession();
+  const [profile, setLocalProfile] = useState<ProfileData>(
+    session.profile ?? ACCOUNT_PROFILE,
+  );
+  const [loading, setLoading] = useState(session.loading && !session.profile);
   const profileLoaded = useRef(false);
 
   const fetchProfile = useCallback(async () => {
     try {
-      const data = await fetchProfileFromFirebase();
-      setProfile(data);
+      await session.refreshProfile();
       profileLoaded.current = true;
     } catch {
       // Keep previous / default data on error; NetInfo will retry on reconnect
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session]);
+
+  const setProfile: Dispatch<SetStateAction<ProfileData>> =
+    useCallback(
+      (next) => {
+        setLocalProfile((current) => {
+          const resolved =
+            typeof next === "function"
+              ? (next as (value: ProfileData) => ProfileData)(current)
+              : next;
+          session.setProfile(resolved);
+          return resolved;
+        });
+      },
+      [session],
+    );
+
+  useEffect(() => {
+    if (!session.profile) return;
+    setLocalProfile(session.profile);
+    profileLoaded.current = true;
+    setLoading(false);
+  }, [session.profile]);
 
   // Fetch once on mount
   useEffect(() => {
+    if (session.loading) return;
+    if (session.profile) return;
     fetchProfile();
-  }, [fetchProfile]);
+  }, [fetchProfile, session.loading, session.profile]);
 
   // Retry when internet comes back and profile wasn't loaded yet
   useEffect(() => {

@@ -1,4 +1,5 @@
 import EarthquakeMap from "@/components/earthquake-map";
+import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
@@ -33,8 +34,8 @@ export const DirasakanCard = ({
   onCardPress: () => void;
   onShare: () => void;
 }) => {
-  const mapRef = useRef<any>(null);
-  
+  const mapRef = useRef<MapViewType | null>(null);
+
   return (
   <TouchableOpacity
     style={styles.mapCard}
@@ -44,7 +45,7 @@ export const DirasakanCard = ({
     <View style={styles.mapImageContainer}>
       {data?.latitude && data?.longitude ? (
         <View style={styles.mapImage} pointerEvents="none">
-          <EarthquakeMap 
+          <EarthquakeMap
             mapRef={mapRef}
             initialRegion={{
               latitude: data.latitude,
@@ -58,7 +59,9 @@ export const DirasakanCard = ({
               magnitude: data.magnitude,
               depth: data.kedalaman,
             }}
-            isCardOpen={true}
+            showFaultLines={false}
+            showMapChrome={false}
+            showUserMarker={false}
           />
         </View>
       ) : (

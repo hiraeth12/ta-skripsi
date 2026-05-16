@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import CustomAlert from "@/components/ui/custom-alert";
 import { useHaversine } from "@/hooks/use-haversine";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
@@ -345,3 +346,6 @@ export default function AskLocation() {
     </KeyboardAvoidingView>
   );
 }
+=======
+export { default } from "@/features/starter/screens/ask-location-screen";
+>>>>>>> 7ab26387b61b9372b3178054867b0745dd78e73d

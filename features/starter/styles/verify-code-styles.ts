@@ -44,17 +44,17 @@ export const styles = StyleSheet.create({
   },
   otpContainer: {
     flexDirection: "row",
-    justifyContent: "space-evenly",
+    justifyContent: "space-between",
     width: "100%",
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     marginBottom: 35,
   },
   inputWrapper: {
-    width: 55, // Ukuran kotak lebih proporsional
-    height: 70,
+    width: 44, // Disesuaikan agar 6 digit tetap muat di layar kecil
+    height: 58,
     borderWidth: 2,
     borderColor: "#1E6F9F",
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: "#FFF",
     justifyContent: "center",
     alignItems: "center",

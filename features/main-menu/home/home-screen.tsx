@@ -1,12 +1,15 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
+import { ModalShakeMap } from "@/components/modal-shakemap";
 import Skeleton from "@/components/skeleton";
 import {
   CACHE_KEYS,
   getCachedData,
+  getPersistentCache,
   setCacheData,
 } from "@/hooks/use-earthquake-cache";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useHaversine } from "@/hooks/use-haversine";
+import { useUserSession } from "@/features/account/user-session-context";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { getApp } from "@react-native-firebase/app";
@@ -25,7 +28,6 @@ import {
   AppStateStatus,
   Dimensions,
   Image,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -40,7 +42,7 @@ import { styles } from "./styles/homeStyles";
 
 // ─── Module-level constants (never recreated) ─────────────────────────────────
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
@@ -193,6 +195,7 @@ function CardSkeleton() {
 
 export default function Home() {
   const router = useRouter();
+  const session = useUserSession();
   const { haversineDistanceKm } = useHaversine();
   const { shareQuake } = useEarthquakeShare();
   const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
@@ -247,6 +250,33 @@ export default function Home() {
     setNetworkErrorModalVisible(true);
   }, []);
 
+  const sessionUserId = session.user?.uid;
+  const sessionProfileName = session.profile?.name ?? "";
+  const sessionProfileLocation = session.profile?.location ?? "";
+  const sessionLatitude = session.location?.latitude;
+  const sessionLongitude = session.location?.longitude;
+  const sessionLocationName = session.location?.name ?? "";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateLatestFromStorage() {
+      const [cachedDirasakan, cachedTerdeteksi] = await Promise.all([
+        getPersistentCache<DirasakanQuake>(CACHE_KEYS.DIRASAKAN),
+        getPersistentCache<TerdeteksiQuake>(CACHE_KEYS.TERDETEKSI),
+      ]);
+
+      if (!isMounted) return;
+      if (!dirasakanData && cachedDirasakan) setDirasakanData(cachedDirasakan);
+      if (!terdeteksiData && cachedTerdeteksi) setTerdeteksiData(cachedTerdeteksi);
+    }
+
+    hydrateLatestFromStorage();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // ── User data — runs once on mount ───────────────────────────────────────────
   useEffect(() => {
     let isMounted = true;
@@ -254,20 +284,20 @@ export default function Home() {
     async function fetchUserData() {
       try {
         const app = getApp();
-        const currentUser = getAuth(app).currentUser;
-        if (!currentUser) return;
+        const authUser = getAuth(app).currentUser;
+        if (!sessionUserId && !authUser) return;
 
         const database = DB_URL ? getDatabase(app, DB_URL) : getDatabase(app);
-        const snap = await get(ref(database, `users/${currentUser.uid}`));
-        const userData = snap.val();
-        if (!userData || !isMounted) return;
 
-        // Name
-        if (userData.firstName) setUserName(userData.firstName);
+        if (sessionProfileName && isMounted) {
+          const firstName = sessionProfileName.split(" ")[0] || sessionProfileName;
+          setUserName((prev) => (prev === firstName ? prev : firstName));
+        }
 
-        const userLat = parseFloat(userData.latitude);
-        const userLon = parseFloat(userData.longitude);
-        let locationName: string = userData.locationName || "Lokasi Saya";
+        const userLat = sessionLatitude ?? NaN;
+        const userLon = sessionLongitude ?? NaN;
+        let locationName: string =
+          sessionLocationName || sessionProfileLocation || "Lokasi Saya";
 
        
         if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
@@ -283,13 +313,22 @@ export default function Home() {
         }
 
         if (!isNaN(userLat) && !isNaN(userLon) && isMounted) {
-          setUserLocation({ latitude: userLat, longitude: userLon, name: locationName });
+          setUserLocation((prev) =>
+            prev.latitude === userLat &&
+            prev.longitude === userLon &&
+            prev.name === locationName
+              ? prev
+              : { latitude: userLat, longitude: userLon, name: locationName },
+          );
         }
 
         const imageCacheKey = `location_image_${locationName}`;
         const cachedImageUrl = getCachedData<string>(imageCacheKey);
         if (cachedImageUrl) {
-          if (isMounted) { setLocationImageUrl(cachedImageUrl); setLocationImageLoading(false); }
+          if (isMounted) {
+            setLocationImageUrl((prev) => (prev === cachedImageUrl ? prev : cachedImageUrl));
+            setLocationImageLoading(false);
+          }
           return;
         }
 
@@ -301,7 +340,7 @@ export default function Home() {
         if (entry?.image) {
           const url = await getDownloadURL(storageRef(getStorage(app), entry.image));
           setCacheData(imageCacheKey, url, 3_600_000);
-          if (isMounted) setLocationImageUrl(url);
+          if (isMounted) setLocationImageUrl((prev) => (prev === url ? prev : url));
         }
       } catch {}
       finally {
@@ -311,7 +350,15 @@ export default function Home() {
 
     fetchUserData();
     return () => { isMounted = false; };
-  }, []); 
+  }, [
+    haversineDistanceKm,
+    sessionUserId,
+    sessionLatitude,
+    sessionLocationName,
+    sessionLongitude,
+    sessionProfileLocation,
+    sessionProfileName,
+  ]); 
 
   // ── Date ticker ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -601,30 +648,11 @@ export default function Home() {
         }}
       />
 
-      <Modal visible={shakeMapVisible} transparent animationType="slide">
-        <View style={styles.modalOverlayBottom}>
-          <View style={[styles.modalCardBottom, { height: SCREEN_HEIGHT * 0.9 }]}>
-            <View style={styles.handleBar} />
-            <View style={styles.modalHeaderBottom}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-                <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShakeMapVisible(false)} style={styles.modalCloseCircle}>
-                <Ionicons name="close" size={20} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1 }}>
-              {shakeMapUrl && (
-                <Image source={{ uri: shakeMapUrl }} style={styles.maximizedImage} resizeMode="contain" />
-              )}
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <Text style={styles.scrollHint}>* Data diperbarui secara otomatis dari BMKG ShakeMap</Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ModalShakeMap
+        visible={shakeMapVisible}
+        imageUrl={shakeMapUrl}
+        onClose={() => setShakeMapVisible(false)}
+      />
     </View>
   );
 }
