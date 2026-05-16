@@ -10,16 +10,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native"; // 2. Hapus import 'Alert' dan 'Platform' (karena Platform tidak terpakai)
-import { verifyOtpCode } from "../services/auth-service";
+import { sendResetOtp, verifyOtpCode } from "../services/auth-service";
+import { PasswordResetApiError } from "../services/auth-service";
 import { styles } from "../styles/verify-code-styles";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+
+const OTP_LENGTH = 6;
 
 export default function VerifyCode() {
   const router = useRouter();
   const { email } = useLocalSearchParams<{ email: string }>();
-  const [code, setCode] = useState(["", "", "", ""]);
+  const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [timer, setTimer] = useState(30);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
 
   // 3. Tambahkan State untuk mengontrol Modal Custom
@@ -60,7 +64,7 @@ export default function VerifyCode() {
     setCode(newCode);
 
     // Otomatis pindah ke kanan jika diisi
-    if (cleanText.length === 1 && index < 3) {
+    if (cleanText.length === 1 && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1].focus();
     }
   };
@@ -74,11 +78,11 @@ export default function VerifyCode() {
 
   const handleVerify = async () => {
     const combinedCode = code.join("");
-    if (combinedCode.length < 4) {
+    if (combinedCode.length < OTP_LENGTH) {
       // 5. Ganti Alert bawaan
       showCustomAlert(
         "Input Tidak Valid",
-        "Silakan masukkan kode 4 digit.",
+        "Silakan masukkan kode 6 digit.",
         "error"
       );
       return;
@@ -93,13 +97,47 @@ export default function VerifyCode() {
       });
     } catch (error) {
       // 5. Ganti Alert bawaan
+      const message =
+        error instanceof PasswordResetApiError && error.code === "otp_already_used"
+          ? "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode."
+          : error instanceof PasswordResetApiError &&
+              error.code === "otp_attempts_exceeded"
+            ? "Terlalu banyak percobaan. Silakan kirim ulang kode."
+            : error instanceof PasswordResetApiError && error.code === "otp_expired"
+              ? "Kode OTP sudah kedaluwarsa. Silakan kirim ulang kode."
+              : "Kode OTP salah atau kedaluwarsa.";
+
       showCustomAlert(
         "Verifikasi Gagal",
-        "Kode OTP salah atau kedaluwarsa.",
+        message,
         "error"
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email || timer !== 0 || isResending) return;
+
+    setIsResending(true);
+    try {
+      await sendResetOtp(email);
+      setCode(Array(OTP_LENGTH).fill(""));
+      setTimer(30);
+      showCustomAlert(
+        "Kode Dikirim",
+        "Kode verifikasi baru telah dikirim ke email Anda.",
+        "success",
+      );
+    } catch (error) {
+      showCustomAlert(
+        "Gagal",
+        "Gagal mengirim ulang OTP. Silakan coba lagi.",
+        "error",
+      );
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -168,8 +206,8 @@ export default function VerifyCode() {
         />
 
         <TouchableOpacity
-          disabled={timer !== 0}
-          onPress={() => setTimer(30)}
+          disabled={timer !== 0 || isResending}
+          onPress={handleResend}
           style={{ marginTop: 25 }}
         >
           <Text style={styles.resendText}>
@@ -180,7 +218,7 @@ export default function VerifyCode() {
               </>
             ) : (
               <Text style={{ color: "#1E6F9F", fontWeight: "bold" }}>
-                Kirim Ulang Kode
+                {isResending ? "Mengirim ulang..." : "Kirim Ulang Kode"}
               </Text>
             )}
           </Text>
