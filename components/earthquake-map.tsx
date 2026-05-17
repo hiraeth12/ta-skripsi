@@ -8,6 +8,8 @@ import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
 
 const SENSOR_SEISMIC_URL = process.env.EXPO_PUBLIC_SENSOR_SEISMIC_URL || "";
+const SENSOR_SEISMIC_GLOBAL =
+  process.env.EXPO_PUBLIC_SENSOR_SEISMIC_GLOBAL_URL || "";
 
 type MapRegion = {
   latitude: number;
@@ -248,21 +250,24 @@ function toCoordinateNumber(value: unknown): number | null {
 function normalizeSeismicSensorsFeatureCollection(
   data: any,
 ): GeoJSON.FeatureCollection | null {
-  if (
-    !data ||
-    data.type !== "FeatureCollection" ||
-    !Array.isArray(data.features)
-  )
-    return null;
+  const sourceFeatures = Array.isArray(data)
+    ? data
+    : data?.type === "FeatureCollection" && Array.isArray(data.features)
+      ? data.features
+      : null;
+
+  if (!sourceFeatures) return null;
+
   const normalizedFeatures: GeoJSON.Feature[] = [];
-  for (const feature of data.features) {
+  for (const feature of sourceFeatures) {
     const coords = feature.geometry?.coordinates;
-    if (!coords) continue;
+    if (!Array.isArray(coords) || coords.length < 2) continue;
     const lon = toCoordinateNumber(coords[0]);
     const lat = toCoordinateNumber(coords[1]);
     if (lon === null || lat === null) continue;
     normalizedFeatures.push({
       type: "Feature",
+      id: feature.id,
       properties: feature.properties ?? {},
       geometry: { type: "Point", coordinates: [lon, lat] },
     });
@@ -384,7 +389,11 @@ const EarthquakeMap = memo(
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [faultLinesVisible, setFaultLinesVisible] = useState(showFaultLines);
     const [showSeismicSensors, setShowSeismicSensors] = useState(false);
+    const [showGlobalSeismicSensors, setShowGlobalSeismicSensors] =
+      useState(false);
     const [seismicSensorsGeoJson, setSeismicSensorsGeoJson] =
+      useState<GeoJSON.FeatureCollection | null>(null);
+    const [globalSeismicSensorsGeoJson, setGlobalSeismicSensorsGeoJson] =
       useState<GeoJSON.FeatureCollection | null>(null);
 
     const [userProfile, setUserProfile] = useState<{
@@ -422,6 +431,7 @@ const EarthquakeMap = memo(
       return () => cancelAnimationFrame(frameId);
     }, [waveOverlays]);
 
+    // BMKG - tidak berubah
     useEffect(() => {
       if (!showSeismicSensors || seismicSensorsGeoJson || !SENSOR_SEISMIC_URL)
         return;
@@ -433,6 +443,23 @@ const EarthquakeMap = memo(
         })
         .catch(() => {});
     }, [showSeismicSensors, seismicSensorsGeoJson]);
+
+    // Global - gunakan state & setter terpisah
+    useEffect(() => {
+      if (
+        !showGlobalSeismicSensors ||
+        globalSeismicSensorsGeoJson ||
+        !SENSOR_SEISMIC_GLOBAL
+      )
+        return;
+      fetch(SENSOR_SEISMIC_GLOBAL)
+        .then((res) => res.json())
+        .then((data) => {
+          const normalized = normalizeSeismicSensorsFeatureCollection(data);
+          if (normalized) setGlobalSeismicSensorsGeoJson(normalized);
+        })
+        .catch(() => {});
+    }, [showGlobalSeismicSensors, globalSeismicSensorsGeoJson]);
 
     const applyCameraMove = useCallback(
       (region: MapRegion, duration: number) => {
@@ -586,6 +613,24 @@ const EarthquakeMap = memo(
             </Mapbox.ShapeSource>
           )}
 
+          {showGlobalSeismicSensors && globalSeismicSensorsGeoJson && (
+            <Mapbox.ShapeSource
+              id="sensors-global"
+              shape={globalSeismicSensorsGeoJson}
+            >
+              <Mapbox.SymbolLayer
+                id="sensor-labels-global"
+                style={{
+                  textField: "▲",
+                  textSize: 14,
+                  textColor: "#66ff00",
+                  textHaloColor: "#000",
+                  textHaloWidth: 1,
+                }}
+              />
+            </Mapbox.ShapeSource>
+          )}
+
           {highlightPolygonGeometries.map((p) => (
             <Mapbox.ShapeSource
               key={p.id}
@@ -728,11 +773,19 @@ const EarthquakeMap = memo(
                     />
                   </View>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+                    <Text style={styles.menuLabel}>Sensor Seismik BMKG</Text>
                     <Switch
                       value={showSeismicSensors}
                       onValueChange={setShowSeismicSensors}
                       trackColor={{ false: "#cbd5e1", true: "#2563eb" }}
+                    />
+                  </View>
+                  <View style={styles.menuRow}>
+                    <Text style={styles.menuLabel}>Sensor Seismik Global</Text>
+                    <Switch
+                      value={showGlobalSeismicSensors}
+                      onValueChange={setShowGlobalSeismicSensors}
+                      trackColor={{ false: "#cbd5e1", true: "#66ff00" }}
                     />
                   </View>
                 </View>

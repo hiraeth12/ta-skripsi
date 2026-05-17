@@ -1,5 +1,14 @@
 import { XMLParser } from "fast-xml-parser";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useEffect, useState } from "react";
+import {
+  isUserInsideShakeRadius,
+  parseCoordinate,
+  parseDepthKm,
+} from "@/utils/earthquake-impact";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +36,8 @@ type NotificationState = {
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
+const FIREBASE_DATABASE_URL =
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 const POLL_INTERVAL_MS = 15_000;
 const MAX_NOTIFICATIONS = 100; // FIX #6: named constant instead of magic number
 
@@ -102,6 +113,46 @@ function parseTimestamp(date: string, time: string) {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
+function parsePointCoordinates(pointCoordinates: unknown) {
+  const [lonRaw, latRaw] = String(pointCoordinates ?? "").split(",");
+  const longitude = parseCoordinate(lonRaw);
+  const latitude = parseCoordinate(latRaw);
+
+  if (latitude === null || longitude === null) return null;
+  return { latitude, longitude };
+}
+
+function getLocalDeliveryKey(userId: string, eventId: string) {
+  return `quake_notification_delivered:dirasakan:${userId}:${eventId}`;
+}
+
+async function hasLocalDelivery(userId: string, eventId: string) {
+  const value = await AsyncStorage.getItem(getLocalDeliveryKey(userId, eventId));
+  return value === "true";
+}
+
+async function markLocalDelivery(userId: string, eventId: string) {
+  await AsyncStorage.setItem(getLocalDeliveryKey(userId, eventId), "true");
+}
+
+async function getCurrentUserLocation() {
+  const app = getApp();
+  const auth = getAuth(app);
+  const user = auth.currentUser;
+  if (!user) return null;
+
+  const database = FIREBASE_DATABASE_URL
+    ? getDatabase(app, FIREBASE_DATABASE_URL)
+    : getDatabase(app);
+  const snapshot = await get(ref(database, `users/${user.uid}`));
+  const data = snapshot.val();
+  const latitude = parseCoordinate(data?.latitude);
+  const longitude = parseCoordinate(data?.longitude);
+
+  if (latitude === null || longitude === null) return null;
+  return { userId: user.uid, latitude, longitude };
+}
+
 function pushNotification(notification: QuakeNotification) {
   if (state.notifications.some((item) => item.id === notification.id)) return;
 
@@ -170,9 +221,46 @@ async function fetchDirasakanNotification() {
   );
 
   if (!eventId || eventId === latestSeen.dirasakan) return;
-  latestSeen.dirasakan = eventId;
 
   const magnitude = Number.parseFloat(String(latest.magnitude ?? "0")) || 0;
+  const depthKm = parseDepthKm(latest.depth) ?? 0;
+  const coordinates =
+    parsePointCoordinates(latest?.point?.coordinates) ??
+    (() => {
+      const latitude = parseCoordinate(latest?.latitude);
+      const longitude = parseCoordinate(latest?.longitude);
+      return latitude === null || longitude === null
+        ? null
+        : { latitude, longitude };
+    })();
+
+  if (!coordinates || magnitude <= 0) {
+    latestSeen.dirasakan = eventId;
+    return;
+  }
+
+  const userLocation = await getCurrentUserLocation();
+  if (!userLocation) return;
+
+  if (await hasLocalDelivery(userLocation.userId, eventId)) {
+    latestSeen.dirasakan = eventId;
+    return;
+  }
+
+  const impact = isUserInsideShakeRadius({
+    quakeLat: coordinates.latitude,
+    quakeLon: coordinates.longitude,
+    userLat: userLocation.latitude,
+    userLon: userLocation.longitude,
+    magnitude,
+    depthKm,
+  });
+
+  if (!impact.inside) {
+    latestSeen.dirasakan = eventId;
+    return;
+  }
+
   const date = String(latest.date ?? "");
   const time = String(latest.time ?? "");
 
@@ -187,6 +275,8 @@ async function fetchDirasakanNotification() {
     timestamp: parseTimestamp(date, time),
     isRead: false,
   });
+  await markLocalDelivery(userLocation.userId, eventId);
+  latestSeen.dirasakan = eventId;
 }
 
 async function fetchTerdeteksiNotification() {

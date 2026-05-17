@@ -2,6 +2,10 @@ import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { ModalShakeMap } from "@/components/modal-shakemap";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { useHaversine } from "@/hooks/use-haversine";
+import {
+  getRealisticShakeRadiiMeters,
+  parseDepthKm,
+} from "@/utils/earthquake-impact";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,25 +34,6 @@ const REFERENCE_LOCATION = {
 
 // Module-level singleton — not recreated on every poll
 const xmlParser = new XMLParser({ ignoreAttributes: false });
-
-function getMagnitudeScaleFactor(magnitude: number): number {
-  const deltaMagnitude = magnitude - 5;
-  const scale = Math.pow(10, 0.5 * deltaMagnitude);
-  return Math.max(0.05, Math.min(scale, 3.5));
-}
-
-function getDepthAttenuationFactor(depthKm: number): number {
-  const attenuation = 1 / (1 + depthKm / 200);
-  return Math.max(0.35, Math.min(attenuation, 1));
-}
-
-function getStaticWaveRadiiMeters(magnitude: number, depthKm: number) {
-  const scale = getMagnitudeScaleFactor(magnitude);
-  const depthFactor = getDepthAttenuationFactor(depthKm);
-  const outerRadiusMeters = (100000 + 240000 * scale) * depthFactor;
-  const innerRadiusMeters = (35000 + 80000 * scale) * depthFactor;
-  return { outerRadiusMeters, innerRadiusMeters };
-}
 
 type LatestQuake = {
   id: string;
@@ -83,7 +68,8 @@ export default function GempaDirasakan({
   const showCardRef = useRef(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
+    useState(false);
   const latestEventId = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isFetching = useRef(false);
@@ -97,7 +83,6 @@ export default function GempaDirasakan({
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
 
-  
   const showNetworkError = useCallback(() => {
     if (networkErrorShownRef.current) return;
     networkErrorShownRef.current = true;
@@ -106,13 +91,21 @@ export default function GempaDirasakan({
 
   const waveOverlays = useMemo(() => {
     if (!latestQuake) return [];
-    const magnitude = parseFloat(String(latestQuake.magnitude).replace("M", "")) || 0;
-    const depthKm = parseFloat(String(latestQuake.kedalaman).replace(/[^\d.-]/g, "")) || 0;
-    const radii = getStaticWaveRadiiMeters(magnitude, depthKm);
+
+    const magnitude =
+      parseFloat(String(latestQuake.magnitude).replace("M", "")) || 0;
+
+    const depthKm = parseDepthKm(latestQuake.kedalaman) ?? 0;
+
+    const radii = getRealisticShakeRadiiMeters(magnitude, depthKm);
+
     return [
       {
         id: latestQuake.id,
-        center: { latitude: latestQuake.latitude, longitude: latestQuake.longitude },
+        center: {
+          latitude: latestQuake.latitude,
+          longitude: latestQuake.longitude,
+        },
         pWaveRadiusMeters: radii.outerRadiusMeters,
         sWaveRadiusMeters: radii.innerRadiusMeters,
       },
@@ -131,9 +124,21 @@ export default function GempaDirasakan({
       onPanResponderRelease: (_, gs) => {
         if (gs.dy > 80) {
           Animated.parallel([
-            Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-            Animated.timing(btnOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+            Animated.timing(translateY, {
+              toValue: 600,
+              duration: 220,
+              useNativeDriver: true,
+            }),
+            Animated.timing(opacity, {
+              toValue: 0,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(btnOpacity, {
+              toValue: 0,
+              duration: 150,
+              useNativeDriver: true,
+            }),
           ]).start(() => {
             showCardRef.current = false;
             setShowCard(false);
@@ -141,8 +146,16 @@ export default function GempaDirasakan({
         } else {
           Animated.parallel([
             Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-            Animated.timing(btnOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+            Animated.timing(opacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
+            Animated.timing(btnOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
           ]).start();
         }
       },
@@ -156,9 +169,21 @@ export default function GempaDirasakan({
     showCardRef.current = true;
     setShowCard(true);
     Animated.parallel([
-      Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(btnOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        bounciness: 4,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(btnOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
     ]).start();
   }
 
@@ -166,9 +191,21 @@ export default function GempaDirasakan({
     if (showCardRef.current) {
       showCardRef.current = false;
       Animated.parallel([
-        Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-        Animated.timing(btnOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(translateY, {
+          toValue: 600,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(btnOpacity, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
       ]).start(() => {
         setShowCard(false);
         callback?.();
@@ -183,8 +220,8 @@ export default function GempaDirasakan({
     isMountedRef.current = true;
 
     type FetchResult = {
-      changed: boolean;   
-      ok: boolean;        
+      changed: boolean;
+      ok: boolean;
       latitude?: number;
       longitude?: number;
     };
@@ -212,7 +249,9 @@ export default function GempaDirasakan({
         }
         if (!latest) return { changed: false, ok: true };
 
-        const eventId = String(latest.eventid ?? latest.identifier ?? globalIdentifier);
+        const eventId = String(
+          latest.eventid ?? latest.identifier ?? globalIdentifier,
+        );
         const isSameEvent = eventId && eventId === latestEventId.current;
         if (!isSameEvent) latestEventId.current = eventId;
 
@@ -220,9 +259,9 @@ export default function GempaDirasakan({
         const [lonStr, latStr] = coordStr.split(",");
         const latitude = parseFloat(latStr);
         const longitude = parseFloat(lonStr);
-        if (isNaN(latitude) || isNaN(longitude)) return { changed: false, ok: true };
+        if (isNaN(latitude) || isNaN(longitude))
+          return { changed: false, ok: true };
 
-        
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
           isOfflineRef.current = false;
@@ -237,7 +276,9 @@ export default function GempaDirasakan({
         }
 
         if (!isSameEvent) {
-          setShakeMapUrl(latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null);
+          setShakeMapUrl(
+            latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
+          );
           setLatestQuake({
             id: eventId || `${latitude}-${longitude}-${Date.now()}`,
             latitude,
@@ -258,7 +299,6 @@ export default function GempaDirasakan({
             lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
           });
 
-          
           if (!wasOffline) {
             mapRef.current?.animateToRegion(
               { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
@@ -287,7 +327,10 @@ export default function GempaDirasakan({
       if (!isMountedRef.current) return;
       // Back off slower when offline so we don't hammer a dead connection
       if (!ok) {
-        pollDelayRef.current = Math.min(pollDelayRef.current + 15_000, MAX_POLL_MS);
+        pollDelayRef.current = Math.min(
+          pollDelayRef.current + 15_000,
+          MAX_POLL_MS,
+        );
       } else {
         pollDelayRef.current = changed
           ? MIN_POLL_MS
@@ -357,24 +400,55 @@ export default function GempaDirasakan({
 
       {showCard && latestQuake && (
         <Animated.View
-          style={[styles.locationCard, { transform: [{ translateY }], opacity }]}
+          style={[
+            styles.locationCard,
+            { transform: [{ translateY }], opacity },
+          ]}
         >
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
           <View style={styles.statsTopRow}>
-            <StatItem icon="triangle-wave" value={latestQuake.magnitude} label="Magnitudo" />
+            <StatItem
+              icon="triangle-wave"
+              value={latestQuake.magnitude}
+              label="Magnitudo"
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="rss" value={latestQuake.kedalaman} label="Kedalaman" />
+            <StatItem
+              icon="rss"
+              value={latestQuake.kedalaman}
+              label="Kedalaman"
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={latestQuake.latText} label="LS" />
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.latText}
+              label="LS"
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={latestQuake.lonText} label="BT" />
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.lonText}
+              label="BT"
+            />
           </View>
           <View style={styles.separator} />
-          <DetailItem icon="location" label="Lokasi Gempa :" value={latestQuake.wilayah} />
-          <DetailItem icon="time-outline" label="Waktu :" value={`${latestQuake.tanggal}, ${latestQuake.jam}`} />
-          <DetailItem icon="walk-outline" label="Jarak :" value={`${latestQuake.distanceKm} km`} />
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={latestQuake.wilayah}
+          />
+          <DetailItem
+            icon="time-outline"
+            label="Waktu :"
+            value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
+          />
+          <DetailItem
+            icon="walk-outline"
+            label="Jarak :"
+            value={`${latestQuake.distanceKm} km`}
+          />
           {!!latestQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
@@ -383,7 +457,10 @@ export default function GempaDirasakan({
             />
           )}
           <TouchableOpacity
-            style={[styles.simulasiBtn, !shakeMapUrl && styles.simulasiBtnDisabled]}
+            style={[
+              styles.simulasiBtn,
+              !shakeMapUrl && styles.simulasiBtnDisabled,
+            ]}
             activeOpacity={0.8}
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}

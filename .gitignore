@@ -48,6 +48,8 @@ app-example
 .env
 .env.development
 .env.production
+.env.eas.preview
+.env.eas.production
 
 node_modules
 
