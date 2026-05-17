@@ -7,9 +7,7 @@ import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "";
 const SENSOR_SEISMIC_URL = process.env.EXPO_PUBLIC_SENSOR_SEISMIC_URL || "";
-Mapbox.setAccessToken(MAPBOX_TOKEN);
 
 type MapRegion = {
   latitude: number;
