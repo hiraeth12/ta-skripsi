@@ -2,9 +2,6 @@ import Mapbox from "@rnmapbox/maps";
 import { memo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "";
-Mapbox.setAccessToken(MAPBOX_TOKEN);
-
 type CardMapProps = {
   latitude: number | string;
   longitude: number | string;

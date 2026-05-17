@@ -1,9 +1,11 @@
 // Initialize Firebase FIRST - before anything else
 import { initializeFirebase } from "./config/firebase-init";
-initializeFirebase();
-
+import { configureMapbox } from "./config/mapbox";
 import { registerFcmBackgroundHandler } from "./hooks/fcm-background-handler";
+
+initializeFirebase();
+configureMapbox();
 registerFcmBackgroundHandler();
 
-import "expo-router/entry";
+require("expo-router/entry");
 
