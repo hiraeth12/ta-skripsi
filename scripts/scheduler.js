@@ -1,6 +1,6 @@
 /**
  * Scheduler untuk auto-sync gempa data ke Firebase
- * Run dengan: node api/database/scheduler.js
+ * Run dengan: node scripts/scheduler.js
  */
 
 import { spawn } from "child_process";
@@ -10,100 +10,95 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Simple interval-based scheduler
-function schedule(name, interval, fn) {
-  // Run immediately on startup
-  fn().catch((error) => {
-  });
+const runningJobs = new Map();
 
-  // Then run at intervals
-  setInterval(async () => {
+function schedule(name, interval, fn) {
+  async function run() {
+    if (runningJobs.get(name)) {
+      console.log(`[SKIP] ${name} masih berjalan`);
+      return;
+    }
+
+    runningJobs.set(name, true);
+    console.log(`[START] ${name}`);
+
     try {
       const result = await fn();
+      console.log(`[DONE] ${name}`, result);
     } catch (error) {
+      console.error(`[ERROR] ${name}`, error);
+    } finally {
+      runningJobs.set(name, false);
     }
-  }, interval);
+  }
+
+  run();
+
+  setInterval(run, interval);
+}
+
+function runScript(scriptName) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("node", [path.join(__dirname, scriptName)], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let output = "";
+    let errorOutput = "";
+
+    child.stdout.on("data", (data) => {
+      output += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      errorOutput += data.toString();
+    });
+
+    child.on("error", reject);
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(`${scriptName} exited with code ${code}: ${errorOutput}`)
+        );
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(output));
+      } catch {
+        resolve({ ok: true, raw: output.trim() });
+      }
+    });
+  });
 }
 
 async function syncLatestGempaDirasakan() {
-  // Spawn as subprocess to use dynamic import
-  return new Promise((resolve, reject) => {
-    const child = spawn("node", [
-      path.join(__dirname, "sync-latest-gempa-dirasakan-history.js"),
-    ]);
-
-    let output = "";
-    let errorOutput = "";
-
-    child.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-
-    child.stderr.on("data", (data) => {
-      errorOutput += data.toString();
-    });
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`Process exited with code ${code}: ${errorOutput}`));
-      } else {
-        try {
-          resolve(JSON.parse(output));
-        } catch {
-          resolve({ ok: true, raw: output });
-        }
-      }
-    });
-  });
+  return runScript("sync-latest-gempa-dirasakan-history.js");
 }
 
 async function syncGempaTerdeteksi() {
-  return new Promise((resolve, reject) => {
-    const child = spawn("node", [
-      path.join(__dirname, "db-gempa-terdeteksi-history.js"),
-    ]);
-
-    let output = "";
-    let errorOutput = "";
-
-    child.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-
-    child.stderr.on("data", (data) => {
-      errorOutput += data.toString();
-    });
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`Process exited with code ${code}: ${errorOutput}`));
-      } else {
-        try {
-          resolve(JSON.parse(output));
-        } catch {
-          resolve({ ok: true, raw: output });
-        }
-      }
-    });
-  });
+  return runScript("db-gempa-terdeteksi-history.js");
 }
 
-// Start schedulers
-// Sync gempa dirasakan latest every 5 minutes (300000 ms)
 schedule(
   "sync:gempa-dirasakan:latest",
   300000,
   syncLatestGempaDirasakan
 );
 
-// Sync gempa terdeteksi every 15 minutes (900000 ms)
 schedule(
   "sync:gempa-terdeteksi:history",
   900000,
   syncGempaTerdeteksi
 );
 
-// Graceful shutdown
 process.on("SIGINT", () => {
+  console.log("Scheduler stopped");
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  console.log("Scheduler stopped");
   process.exit(0);
 });
