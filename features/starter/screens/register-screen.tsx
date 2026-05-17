@@ -32,6 +32,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   // State untuk mengontrol Modal Custom
   const [modalConfig, setModalConfig] = useState({
@@ -58,9 +59,18 @@ export default function Register() {
     });
   };
 
+  const trimmedEmail = email.trim();
+  const trimmedFirstName = firstName.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const passwordsMatch = confirmPassword === "" || password === confirmPassword;
+  const firstNameValid = trimmedFirstName.length > 0;
+  const emailValid = emailRegex.test(trimmedEmail);
+  const showFirstNameError = submitted && !firstNameValid;
+  const showEmailError = submitted && !emailValid;
 
   const handleRegister = async () => {
+    setSubmitted(true);
+
     if (password !== confirmPassword) {
       showCustomAlert(
         "Kata sandi tidak cocok",
@@ -70,9 +80,7 @@ export default function Register() {
       return;
     }
 
-    const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
-    const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
 
     if (
@@ -84,6 +92,15 @@ export default function Register() {
       showCustomAlert(
         "Input belum lengkap",
         "Nama, email, dan kata sandi wajib diisi.",
+        "error",
+      );
+      return;
+    }
+
+    if (!emailValid) {
+      showCustomAlert(
+        "Email tidak valid",
+        "Masukkan alamat email yang valid.",
         "error",
       );
       return;
@@ -149,10 +166,16 @@ export default function Register() {
         <TextInput
           placeholder="Jane"
           placeholderTextColor="#999"
-          style={styles.input}
+          style={[
+            styles.input,
+            showFirstNameError && { borderBottomColor: "red" },
+          ]}
           value={firstName}
           onChangeText={setFirstName}
         />
+        {showFirstNameError && (
+          <Text style={styles.errorText}>Nama depan tidak boleh kosong</Text>
+        )}
 
         <Text style={styles.label}>Nama Belakang</Text>
         <TextInput
@@ -169,10 +192,16 @@ export default function Register() {
           placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
-          style={styles.input}
+          style={[
+            styles.input,
+            showEmailError && { borderBottomColor: "red" },
+          ]}
           value={email}
           onChangeText={setEmail}
         />
+        {showEmailError && (
+          <Text style={styles.errorText}>Email tidak valid</Text>
+        )}
 
         <Text style={styles.label}>Kata Sandi</Text>
         <View style={styles.passwordContainer}>

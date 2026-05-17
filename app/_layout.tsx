@@ -1,15 +1,72 @@
 import { GempaBumiNotificationModal } from "@/components/ui/GempaBumiNotificationModal";
 import { InAppNotificationData } from "@/components/ui/in-app-notification-modal";
+import { setLogoutTransitionRunner } from "@/features/account/components/logout-transition";
 import { notificationEmitter } from "@/hooks/fcm-event-emitter";
 import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";
-import { useEffect, useState } from "react";
-import { InteractionManager } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, InteractionManager, StyleSheet } from "react-native";
 
 function FcmBootstrap() {
   useFcm();
   return null;
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      resolve();
+    });
+  });
+}
+
+function LogoutTransitionOverlay() {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const [visible, setVisible] = useState(false);
+
+  const animateOpacity = useCallback(
+    (toValue: number, duration: number) =>
+      new Promise<void>((resolve) => {
+        Animated.timing(opacity, {
+          toValue,
+          duration,
+          useNativeDriver: true,
+        }).start(() => resolve());
+      }),
+    [opacity],
+  );
+
+  useEffect(() => {
+    return setLogoutTransitionRunner(async (action) => {
+      let didLogout = false;
+
+      setVisible(true);
+      await animateOpacity(1, 180);
+
+      try {
+        didLogout = await action();
+      } finally {
+        await waitForNextFrame();
+        await waitForNextFrame();
+        await animateOpacity(0, 220);
+        setVisible(false);
+      }
+
+      return didLogout;
+    });
+  }, [animateOpacity]);
+
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <Animated.View
+      pointerEvents="auto"
+      style={[styles.logoutTransitionOverlay, { opacity }]}
+    />
+  );
 }
 
 export default function RootLayout() {
@@ -76,6 +133,16 @@ export default function RootLayout() {
         closeInSecond={6}
         onClose={() => setNotification(null)} 
       />
+      <LogoutTransitionOverlay />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  logoutTransitionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#ffffff",
+    elevation: 999,
+    zIndex: 999,
+  },
+});

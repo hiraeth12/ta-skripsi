@@ -26,6 +26,8 @@ import styles from "./styles/gempa-terdeteksi-content";
 
 const DB_PATH = "gempa_terdeteksi/items";
 const MAX_POINTS = 20;
+const LIST_HIDE_TO_CARD_DELAY_MS = 340;
+const CARD_REPLACE_CLOSE_MS = 180;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,7 @@ export function GempaTerdeteksiHistoryContent({
   const dataSignatureRef = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isMountedRef = useRef(true);
+  const openCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animation values
   const translateY = useRef(new Animated.Value(600)).current;
@@ -220,17 +223,46 @@ export function GempaTerdeteksiHistoryContent({
 
   // ── Card animation ─────────────────────────────────────────────────────────
 
-  const openCard = useCallback(() => {
+  const openCard = useCallback((notifyParent = true) => {
     translateY.setValue(600);
     opacity.setValue(0);
     showCardRef.current = true;
     setShowCard(true);
-    onCardOpen?.();
+    if (notifyParent) {
+      onCardOpen?.();
+    }
     Animated.parallel([
       Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   }, [translateY, opacity, onCardOpen]);
+
+  const closeCardForReplacement = useCallback(
+    (callback: () => void) => {
+      if (!showCardRef.current) {
+        callback();
+        return;
+      }
+
+      Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: 600,
+          duration: CARD_REPLACE_CLOSE_MS,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: CARD_REPLACE_CLOSE_MS - 40,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        showCardRef.current = false;
+        setShowCard(false);
+        callback();
+      });
+    },
+    [opacity, translateY],
+  );
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
@@ -257,7 +289,11 @@ export function GempaTerdeteksiHistoryContent({
   );
 
   const flyToAndOpen = useCallback(
-    (quake: QuakeItem, delay = 0) => {
+    (quake: QuakeItem, delay = 300, notifyParent = true) => {
+      if (openCardTimeoutRef.current) {
+        clearTimeout(openCardTimeoutRef.current);
+      }
+
       mapRef.current?.animateToRegion(
         {
           latitude: quake.latitude,
@@ -267,10 +303,21 @@ export function GempaTerdeteksiHistoryContent({
         },
         400,
       );
-      setTimeout(openCard, delay || 300);
+      openCardTimeoutRef.current = setTimeout(() => {
+        openCardTimeoutRef.current = null;
+        openCard(notifyParent);
+      }, delay);
     },
     [openCard],
   );
+
+  useEffect(() => {
+    return () => {
+      if (openCardTimeoutRef.current) {
+        clearTimeout(openCardTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // ── PanResponder ───────────────────────────────────────────────────────────
 
@@ -316,11 +363,14 @@ export function GempaTerdeteksiHistoryContent({
       const quake = quakes[index];
       if (!quake) return;
       selectedEventIdRef.current = quake.eventId;
-      setOverrideQuake(null);
-      setSelectedIndex(index);
-      flyToAndOpen(quake);
+      onCardOpen?.();
+      closeCardForReplacement(() => {
+        setOverrideQuake(null);
+        setSelectedIndex(index);
+        flyToAndOpen(quake, LIST_HIDE_TO_CARD_DELAY_MS, false);
+      });
     },
-    [quakes, flyToAndOpen],
+    [closeCardForReplacement, flyToAndOpen, onCardOpen, quakes],
   );
 
   const handleMapPress = useCallback(() => dismissCard(), [dismissCard]);

@@ -5,8 +5,10 @@
 
 import fs from "fs";
 import path from "path";
+import { XMLParser } from "fast-xml-parser";
 import { sendGempaDirasakanNotification } from "./fcm-notifications.js";
 import { initializeAdmin } from "./firebase-admin-config.js";
+import { parseCoordinate } from "../utils/earthquake-impact.js";
 
 /**
  * Load environment variables from .env file
@@ -31,6 +33,64 @@ function readEnvFile(envPath) {
   return env;
 }
 
+function parsePointCoordinates(pointCoordinates) {
+  const [lonRaw, latRaw] = String(pointCoordinates ?? "").split(",");
+  const longitude = parseCoordinate(lonRaw);
+  const latitude = parseCoordinate(latRaw);
+
+  if (latitude === null || longitude === null) return null;
+  return { latitude, longitude };
+}
+
+async function fetchLatestGempaDirasakan(apiUrl) {
+  const res = await fetch(`${apiUrl.trim()}${Date.now()}`);
+  const raw = await res.text();
+  let latest = null;
+  let globalIdentifier = "";
+
+  try {
+    const data = JSON.parse(raw);
+    const infoRaw = data?.info;
+    latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+    globalIdentifier = String(data?.identifier ?? "");
+  } catch {
+    const parser = new XMLParser({ ignoreAttributes: false });
+    const data = parser.parse(raw);
+    const infoRaw = data?.alert?.info;
+    latest = Array.isArray(infoRaw) ? infoRaw[0] : infoRaw;
+    globalIdentifier = String(data?.alert?.identifier ?? "");
+  }
+
+  if (!latest) return null;
+
+  const coordinates =
+    parsePointCoordinates(latest?.point?.coordinates) ??
+    (() => {
+      const latitude = parseCoordinate(latest?.latitude);
+      const longitude = parseCoordinate(latest?.longitude);
+      return latitude === null || longitude === null
+        ? null
+        : { latitude, longitude };
+    })();
+
+  if (!coordinates) return null;
+
+  return {
+    eventId: String(
+      latest.eventid ?? latest.identifier ?? globalIdentifier ?? "",
+    ),
+    headline: String(
+      latest.headline || latest.description || "Gempa dirasakan",
+    ),
+    magnitude: String(latest.magnitude || ""),
+    location: String(latest.area || latest.location || ""),
+    depth: String(latest.depth || ""),
+    timestamp: `${String(latest.date ?? "")} ${String(latest.time ?? "")}`,
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+  };
+}
+
 async function testNotification() {
   try {
     console.log("[test-notification] Initializing Firebase Admin...");
@@ -45,24 +105,13 @@ async function testNotification() {
       throw new Error("EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL not configured in .env");
     }
 
-    const res = await fetch(`${apiUrl.trim()}${Date.now()}`);
-    const data = await res.json();
-    
-    if (!data.info || data.info.length === 0) {
+    const gempaData = await fetchLatestGempaDirasakan(apiUrl);
+    if (!gempaData?.eventId) {
       throw new Error("No gempa data available from BMKG API");
     }
 
-    const gempaData = Array.isArray(data.info) ? data.info[0] : data.info;
-    const headline = String(gempaData.headline || gempaData.description || "Gempa dirasakan");
     console.log("[test-notification] Sending test push...");
-    
-    const result = await sendGempaDirasakanNotification(
-      headline,                                 // headline from BMKG
-      String(gempaData.magnitude || ""),        // magnitude
-      String(gempaData.area || gempaData.location || ""), // location
-      String(gempaData.depth || ""),            // depth
-      new Date().toISOString()                  // timestamp
-    );
+    const result = await sendGempaDirasakanNotification(gempaData);
 
     if (!result) {
       throw new Error(
@@ -71,11 +120,9 @@ async function testNotification() {
     }
 
     console.log(
-      `[test-notification] Done. success=${result.successCount}, failure=${result.failureCount}`,
+      `[test-notification] Done. success=${result.successCount}, failure=${result.failureCount}, eligible=${result.eligibleCount}`,
     );
-    if (result.successCount === 0) {
-      throw new Error("FCM sent but zero successful deliveries. Cek token/perizinan device.");
-    }
+    console.log("[test-notification] Skipped:", result.skippedCounts);
 
     process.exit(0);
   } catch (error) {

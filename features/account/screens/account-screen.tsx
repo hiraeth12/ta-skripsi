@@ -5,7 +5,7 @@ import { getAuth } from "@react-native-firebase/auth";
 import { get, getDatabase, ref, remove } from "@react-native-firebase/database";
 import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -30,23 +30,49 @@ export default function Account() {
   const [notifStatus, setNotifStatus] = useState(true);
   const isNavigating = useRef(false);
 
-  useState(() => {
-    AsyncStorage.getItem(PUSH_NOTIFICATION_PREF_KEY).then(async (saved) => {
-      if (saved !== null) {
-        setIsNotificationsEnabled(saved === "true");
-        return;
+  useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateNotificationPreference() {
+      try {
+        const app = getApp();
+        const auth = getAuth(app);
+        const user = auth.currentUser;
+        const saved = await AsyncStorage.getItem(PUSH_NOTIFICATION_PREF_KEY);
+
+        if (!user) {
+          if (isMounted && saved !== null) {
+            setIsNotificationsEnabled(saved === "true");
+          }
+          return;
+        }
+
+        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
+        const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
+        const snap = await get(ref(db, `user_fcm_tokens/${user.uid}`));
+        const hasSavedToken = snap.exists();
+
+        if (hasSavedToken) {
+          await AsyncStorage.setItem(PUSH_NOTIFICATION_PREF_KEY, "true");
+        }
+
+        if (!isMounted) return;
+        setIsNotificationsEnabled(
+          hasSavedToken || saved === null || saved === "true",
+        );
+      } catch {
+        if (isMounted) {
+          setIsNotificationsEnabled(true);
+        }
       }
-      // Fallback: check if FCM token exists in the database
-      const app = getApp();
-      const auth = getAuth(app);
-      const user = auth.currentUser;
-      if (!user) return;
-      const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-      const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-      const snap = await get(ref(db, `user_fcm_tokens/${user.uid}`));
-      setIsNotificationsEnabled(snap.exists());
-    });
-  });
+    }
+
+    hydrateNotificationPreference();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const navigate = (path: string) => {
     if (isNavigating.current) return;
