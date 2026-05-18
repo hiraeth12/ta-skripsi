@@ -1,6 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import * as configPlugins from "@expo/config-plugins";
 
-const { withStringsXml } = configPlugins;
+const { withDangerousMod, withStringsXml } = configPlugins;
+
+const ANDROID_NOTIFICATION_SOUND_FILE = "eq_eva.wav";
 
 function withMapboxAccessToken(config) {
   return withStringsXml(config, (config) => {
@@ -32,6 +36,41 @@ function withMapboxAccessToken(config) {
   });
 }
 
+function withAndroidNotificationSound(config) {
+  return withDangerousMod(config, [
+    "android",
+    async (config) => {
+      const source = path.join(
+        config.modRequest.projectRoot,
+        "assets",
+        "sounds",
+        ANDROID_NOTIFICATION_SOUND_FILE,
+      );
+      const destinationDir = path.join(
+        config.modRequest.platformProjectRoot,
+        "app",
+        "src",
+        "main",
+        "res",
+        "raw",
+      );
+      const destination = path.join(
+        destinationDir,
+        ANDROID_NOTIFICATION_SOUND_FILE,
+      );
+
+      if (!fs.existsSync(source)) {
+        throw new Error(`Notification sound file tidak ditemukan: ${source}`);
+      }
+
+      fs.mkdirSync(destinationDir, { recursive: true });
+      fs.copyFileSync(source, destination);
+
+      return config;
+    },
+  ]);
+}
+
 function hasPlugin(plugins, pluginName) {
   return plugins.some((plugin) => {
     if (typeof plugin === "string") {
@@ -57,6 +96,10 @@ export default ({ config }) => {
         config.android?.googleServicesFile ??
         "./google-services.json",
     },
-    plugins: [withMapboxAccessToken, ...pluginsWithMapbox],
+    plugins: [
+      withMapboxAccessToken,
+      withAndroidNotificationSound,
+      ...pluginsWithMapbox,
+    ],
   };
 };
