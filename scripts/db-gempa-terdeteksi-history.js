@@ -199,7 +199,9 @@ async function syncOnce() {
     datasetChecksum: createPayloadChecksum(itemsByKey),
   };
 
-  const currentMetaRes = await getDatabase().ref("gempa_terdeteksi").get();
+  // FIX: Konsisten pakai Admin SDK (bukan fetch REST)
+  const db = getDatabase();
+  const currentMetaRes = await db.ref("gempa_terdeteksi").get();
 
   let currentData = {};
   if (currentMetaRes.exists()) {
@@ -226,22 +228,10 @@ async function syncOnce() {
     };
   }
 
-  // Write using Firebase Admin SDK
-  try {
-    const db = getDatabase();
-    await db.ref("gempa_terdeteksi").set(payload);
-  } catch (error) {
-    throw new Error(`Failed to write to Firebase Admin: ${error.message}`);
-  }
+  await db.ref("gempa_terdeteksi").set(payload);
 
-  // Verify write using Admin SDK
-  const verifySnapshot = await getDatabase()
-    .ref("gempa_terdeteksi/totalItems")
-    .get();
-
-  const verifyTotalItems = verifySnapshot.exists()
-    ? verifySnapshot.val()
-    : null;
+  const verifySnapshot = await db.ref("gempa_terdeteksi/totalItems").get();
+  const verifyTotalItems = verifySnapshot.exists() ? verifySnapshot.val() : null;
 
   return {
     ok: true,
@@ -259,7 +249,6 @@ async function run() {
   const intervalArg = Number(process.argv[2] ?? 0);
 
   if (intervalArg > 0) {
-    // Run once immediately, then repeat on the given interval (ms)
     try {
       const first = await syncOnce();
       console.log("[sync] Initial run:", first);
@@ -279,12 +268,17 @@ async function run() {
     return;
   }
 
-  // Single run mode
-  const result = await syncOnce();
-  console.log("[sync] Done:", result);
+  // FIX: Tambah try/catch di single run mode
+  try {
+    const result = await syncOnce();
+    console.log("[sync] Done:", JSON.stringify(result));
+  } catch (error) {
+    console.error("[sync] Fatal error:", error.message);
+    process.exit(1);
+  }
 }
 
-run().catch((error) => {
-  console.error("[sync] Fatal error:", error.message);
-  process.exit(1);
+// FIX: Tambah .finally() agar Firebase Admin connection tidak menggantung
+run().finally(() => {
+  process.exit(0);
 });
