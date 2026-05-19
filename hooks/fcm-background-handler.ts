@@ -3,7 +3,7 @@ import { getApp } from "@react-native-firebase/app";
 import { getMessaging, setBackgroundMessageHandler } from "@react-native-firebase/messaging";
 
 let isBackgroundHandlerRegistered = false;
-const GEMPA_ALERT_CHANNEL_ID = "gempa_alert_channel_eqeva_v2";
+const GEMPA_ALERT_CHANNEL_ID = "gempa_alert_channel_eqeva_v3";
 const GEMPA_ALERT_SOUND_NAME = "eq_eva";
 
 // Tangani event background Notifee (mutlak dibutuhkan agar Notifee tidak crash)

@@ -17,7 +17,7 @@ import {
   startAt,
 } from "@react-native-firebase/database";
 import { useIsFocused } from "@react-navigation/native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -302,6 +302,7 @@ function roundCoord(n: number): number {
 
 export default function History() {
   const router = useRouter();
+  const pathname = usePathname();
   const isFocused = useIsFocused();
   const session = useUserSession();
   const { haversineDistanceKm } = useHaversine();
@@ -469,10 +470,10 @@ export default function History() {
         filterYear: String(effectiveFilter.year),
         filterMonth: String(effectiveMonths[0]),
         filterMonths: serializeFilterMonths(effectiveMonths),
-        returnTo: "history",
+        returnTo: pathname,
       },
     });
-  }, [activeTab, effectiveFilter.year, effectiveMonths, isOpeningFilter, router]);
+  }, [activeTab, effectiveFilter.year, effectiveMonths, isOpeningFilter, pathname, router]);
 
   useEffect(() => {
     if (isFocused) {

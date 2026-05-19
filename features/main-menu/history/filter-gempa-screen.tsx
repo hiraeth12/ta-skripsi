@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +17,25 @@ import {
 } from "./utils/filter";
 
 const YEAR_START = 2023;
+
+function asSingle(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+function resolveReturnTo(value?: string | string[]): string {
+  const returnTo = asSingle(value);
+
+  if (returnTo.startsWith("/")) {
+    return returnTo;
+  }
+
+  if (returnTo) {
+    return `/main-menu/${returnTo}`;
+  }
+
+  return "/main-menu/history";
+}
 
 export default function FilterGempaScreen() {
   const router = useRouter();
@@ -41,20 +60,19 @@ export default function FilterGempaScreen() {
     tab,
     now,
   );
+  const initialMonths = normalizeFilterMonths(
+    incomingMonths.length > 0
+      ? incomingMonths
+      : [Number.isFinite(incomingMonth) ? incomingMonth : initialFilter.month],
+    initialFilter.year,
+    tab,
+    now,
+  );
   const [expandedSection, setExpandedSection] = useState<
     "year" | "month" | null
   >("year");
   const [selectedYear, setSelectedYear] = useState(initialFilter.year);
-  const [selectedMonths, setSelectedMonths] = useState<number[]>(
-    normalizeFilterMonths(
-      incomingMonths.length > 0
-        ? incomingMonths
-        : [Number.isFinite(incomingMonth) ? incomingMonth : initialFilter.month],
-      initialFilter.year,
-      tab,
-      now,
-    ),
-  );
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(initialMonths);
   const toggleSection = (section: "year" | "month") => {
     if (expandedSection === section) {
       setExpandedSection(null);
@@ -81,6 +99,31 @@ export default function FilterGempaScreen() {
     });
   };
 
+  const handleClose = () => {
+    const returnPath = resolveReturnTo(params.returnTo);
+    const returnBasePath = returnPath.split("?")[0];
+
+    if (returnPath.includes("?")) {
+      router.replace(returnPath as never);
+      return;
+    }
+
+    if (returnBasePath === "/main-menu/history") {
+      router.replace({
+        pathname: "/main-menu/history",
+        params: {
+          tab,
+          filterYear: String(initialFilter.year),
+          filterMonth: String(initialMonths[0] ?? initialFilter.month),
+          filterMonths: serializeFilterMonths(initialMonths),
+        },
+      });
+      return;
+    }
+
+    router.replace(returnPath as never);
+  };
+
   const handleReset = () => {
     const fallback = clampYearMonth(getNowYearMonth(now), tab, now);
     setSelectedYear(fallback.year);
@@ -98,14 +141,6 @@ export default function FilterGempaScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-          animation: "slide_from_right",
-          presentation: "transparentModal",
-        }}
-      />
-
       <View style={styles.container}>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -113,7 +148,7 @@ export default function FilterGempaScreen() {
             <TouchableOpacity
               style={styles.closeIcon}
               activeOpacity={0.7}
-              onPress={() => router.back()}
+              onPress={handleClose}
             >
               <Ionicons name="close" size={18} color="#0C4A6E" />
             </TouchableOpacity>
