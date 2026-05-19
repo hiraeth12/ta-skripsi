@@ -136,7 +136,7 @@ export default function MainLayout() {
               <Tabs.Screen name="notifikasi" options={{ href: null }} />
               <Tabs.Screen
                 name="filter-gempa-screen"
-                options={{ href: null }}
+                options={{ href: null, animation: "shift" }}
               />
             </Tabs>
           </View>
