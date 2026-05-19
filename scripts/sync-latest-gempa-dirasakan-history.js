@@ -201,14 +201,11 @@ async function syncLatestOnce() {
     };
   }
 
-  const currentRes = await fetch(`${dbUrl}/gempa_dirasakan.json`);
-  if (!currentRes.ok) {
-    throw new Error(
-      `Failed to read DB node: ${currentRes.status} ${currentRes.statusText}`,
-    );
-  }
+  // FIX: Ganti fetch REST ke Admin SDK agar konsisten dan tidak tergantung security rules
+  const db = getDatabase();
+  const currentSnapshot = await db.ref("gempa_dirasakan").get();
+  const currentNode = currentSnapshot.exists() ? currentSnapshot.val() : {};
 
-  const currentNode = await currentRes.json();
   const currentItems = normalizeExistingItems(currentNode);
   const currentLastEventId = String(currentNode?.lastEventId ?? "");
 
@@ -220,8 +217,9 @@ async function syncLatestOnce() {
   const updatedItems = sortItemsAscendingByDate(mergedItems);
   const updatedLastEventId = updatedItems[updatedItems.length - 1]?.eventid ?? null;
 
-  const apiEventIds = new Set(normalizedItems.map((item) => String(item?.eventid ?? "").trim()).filter(Boolean));
-  const nodeEventIds = new Set(currentItems.map((item) => String(item?.eventid ?? "").trim()).filter(Boolean));
+  const nodeEventIds = new Set(
+    currentItems.map((item) => String(item?.eventid ?? "").trim()).filter(Boolean),
+  );
   const missingInNode = normalizedItems.filter((item) => {
     const eventId = String(item?.eventid ?? "").trim();
     return eventId && !nodeEventIds.has(eventId);
@@ -244,29 +242,23 @@ async function syncLatestOnce() {
     addedEventIds: missingInNode.map((item) => item.eventid),
   });
 
-  try {
-    const db = getDatabase();
+  const updates = {
+    "gempa_dirasakan/sourceUrl": apiUrl,
+    "gempa_dirasakan/sourceIdentifier": globalIdentifier,
+    "gempa_dirasakan/syncedAt": new Date().toISOString(),
+    "gempa_dirasakan/lastEventId": updatedLastEventId,
+    "gempa_dirasakan/totalItems": updatedItems.length,
+    "gempa_dirasakan/items": updatedItems,
+  };
 
-    const updates = {
-      "gempa_dirasakan/sourceUrl": apiUrl,
-      "gempa_dirasakan/sourceIdentifier": globalIdentifier,
-      "gempa_dirasakan/syncedAt": new Date().toISOString(),
-      "gempa_dirasakan/lastEventId": updatedLastEventId,
-      "gempa_dirasakan/totalItems": updatedItems.length,
-      "gempa_dirasakan/items": updatedItems,
-    };
+  await db.ref().update(updates);
 
-    await db.ref().update(updates);
-
-    console.log("[sync] Gempa data written to database:", {
-      writePath: "/gempa_dirasakan",
-      addedCount: missingInNode.length,
-      totalItemsAfterUpdate: updatedItems.length,
-      lastEventId: updatedLastEventId,
-    });
-  } catch (error) {
-    throw new Error(`Failed to write to Firebase Admin: ${error.message}`);
-  }
+  console.log("[sync] Gempa data written to database:", {
+    writePath: "/gempa_dirasakan",
+    addedCount: missingInNode.length,
+    totalItemsAfterUpdate: updatedItems.length,
+    lastEventId: updatedLastEventId,
+  });
 
   return {
     ok: true,
@@ -282,8 +274,13 @@ async function run() {
   const intervalArg = Number(process.argv[2] ?? 0);
 
   if (intervalArg > 0) {
-    const firstResult = await syncLatestOnce();
-    console.log("[sync] Initial run:", firstResult);
+    // FIX: Tambah try/catch di initial run mode interval
+    try {
+      const firstResult = await syncLatestOnce();
+      console.log("[sync] Initial run:", firstResult);
+    } catch (error) {
+      console.error("[sync] Initial run failed:", error.message);
+    }
 
     setInterval(async () => {
       try {
@@ -297,11 +294,17 @@ async function run() {
     return;
   }
 
-  const result = await syncLatestOnce();
-  console.log("[sync] Done:", result);
+  // FIX: Tambah try/catch di single run mode
+  try {
+    const result = await syncLatestOnce();
+    console.log("[sync] Done:", JSON.stringify(result));
+  } catch (error) {
+    console.error("[sync] Fatal error:", error.message);
+    process.exit(1);
+  }
 }
 
-run().catch((error) => {
-  console.error("[sync] Fatal error:", error.message);
-  process.exit(1);
+// FIX: Tambah .finally() agar Firebase Admin connection tidak menggantung
+run().finally(() => {
+  process.exit(0);
 });
