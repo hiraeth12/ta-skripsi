@@ -5,6 +5,34 @@ import * as configPlugins from "@expo/config-plugins";
 const { withDangerousMod, withStringsXml } = configPlugins;
 
 const ANDROID_NOTIFICATION_SOUND_FILE = "eq_eva.wav";
+const ANDROID_CLEAN_CODEGEN_ORDER_BEGIN =
+  "// @generated begin react-native-clean-codegen-order - expo config plugin";
+const ANDROID_CLEAN_CODEGEN_ORDER_END =
+  "// @generated end react-native-clean-codegen-order";
+const ANDROID_CLEAN_CODEGEN_ORDER_BLOCK = `${ANDROID_CLEAN_CODEGEN_ORDER_BEGIN}
+gradle.projectsEvaluated {
+  def appNativeCleanTasks = project(':app').tasks.matching {
+    it.name.startsWith('externalNativeBuildClean')
+  }
+  def dependencyCodegenTasks = subprojects.collectMany { subproject ->
+    subproject.path == ':app' ? [] : subproject.tasks.matching {
+      it.name == 'generateCodegenArtifactsFromSchema'
+    }.toList()
+  }
+
+  appNativeCleanTasks.configureEach { task ->
+    task.dependsOn(dependencyCodegenTasks)
+  }
+
+  subprojects { subproject ->
+    if (subproject.path != ':app') {
+      subproject.tasks.matching { it.name == 'clean' }.configureEach { task ->
+        task.mustRunAfter(appNativeCleanTasks)
+      }
+    }
+  }
+}
+${ANDROID_CLEAN_CODEGEN_ORDER_END}`;
 
 function withMapboxAccessToken(config) {
   return withStringsXml(config, (config) => {
@@ -71,6 +99,48 @@ function withAndroidNotificationSound(config) {
   ]);
 }
 
+function withAndroidCleanCodegenOrder(config) {
+  return withDangerousMod(config, [
+    "android",
+    async (config) => {
+      const buildGradlePath = path.join(
+        config.modRequest.platformProjectRoot,
+        "build.gradle",
+      );
+      const contents = fs.readFileSync(buildGradlePath, "utf8");
+      const generatedBlockPattern = new RegExp(
+        `${escapeRegExp(ANDROID_CLEAN_CODEGEN_ORDER_BEGIN)}[\\s\\S]*?${escapeRegExp(ANDROID_CLEAN_CODEGEN_ORDER_END)}`,
+      );
+
+      if (generatedBlockPattern.test(contents)) {
+        fs.writeFileSync(
+          buildGradlePath,
+          contents.replace(generatedBlockPattern, ANDROID_CLEAN_CODEGEN_ORDER_BLOCK),
+        );
+        return config;
+      }
+
+      const anchor = 'apply plugin: "com.facebook.react.rootproject"';
+      if (!contents.includes(anchor)) {
+        throw new Error(
+          `Tidak bisa memasang Gradle clean ordering karena anchor tidak ditemukan: ${anchor}`,
+        );
+      }
+
+      fs.writeFileSync(
+        buildGradlePath,
+        contents.replace(anchor, `${anchor}\n\n${ANDROID_CLEAN_CODEGEN_ORDER_BLOCK}`),
+      );
+
+      return config;
+    },
+  ]);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function hasPlugin(plugins, pluginName) {
   return plugins.some((plugin) => {
     if (typeof plugin === "string") {
@@ -99,6 +169,7 @@ export default ({ config }) => {
     plugins: [
       withMapboxAccessToken,
       withAndroidNotificationSound,
+      withAndroidCleanCodegenOrder,
       ...pluginsWithMapbox,
     ],
   };

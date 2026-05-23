@@ -1,13 +1,11 @@
 import { useQuakeNotifications, type QuakeNotification } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/notifications-screen.styles";
 
-// ─── NotifCard ────────────────────────────────────────────────────────────────
-
-// FIX #5: typed with QuakeNotification instead of any
 type NotifCardProps = {
   item: QuakeNotification;
   onPress: () => void;
@@ -40,17 +38,104 @@ const NotifCard = ({ item, onPress }: NotifCardProps) => {
   );
 };
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+function getEarthquakeTab(type: QuakeNotification["type"]) {
+  return type === "Dirasakan" ? "GEMPA DIRASAKAN" : "GEMPA TERDETEKSI";
+}
+
+function getHistoryTab(type: QuakeNotification["type"]) {
+  return type === "Dirasakan" ? "dirasakan" : "terdeteksi";
+}
+
+function isNewerNotification(a: QuakeNotification, b: QuakeNotification) {
+  if (a.timestamp !== b.timestamp) return a.timestamp > b.timestamp;
+  return a.id.localeCompare(b.id) > 0;
+}
+
+function getLatestNotificationForType(
+  notifications: QuakeNotification[],
+  type: QuakeNotification["type"],
+) {
+  return notifications
+    .filter((item) => item.type === type)
+    .reduce<QuakeNotification | null>(
+      (latest, item) => (!latest || isNewerNotification(item, latest) ? item : latest),
+      null,
+    );
+}
+
+function mergeVisibleNotifications(
+  current: QuakeNotification[],
+  incoming: QuakeNotification[],
+) {
+  const byId = new Map<string, QuakeNotification>();
+  [...incoming, ...current].forEach((item) => byId.set(item.id, item));
+  return [...byId.values()].sort((a, b) => b.timestamp - a.timestamp);
+}
 
 export default function Notifikasi() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { notifications, unreadCount, error, markAllAsRead } = useQuakeNotifications();
+  const [visibleNotifications, setVisibleNotifications] = useState<QuakeNotification[]>([]);
+  const notificationsRef = useRef(notifications);
+  const unreadCountRef = useRef(unreadCount);
 
-  // FIX #4: guard against calling markAllAsRead when nothing is unread,
-  //         preventing a needless setState + re-render on every screen open
+  const unreadNotifications = useMemo(
+    () => notifications.filter((item) => !item.isRead),
+    [notifications],
+  );
+
   useEffect(() => {
-    if (unreadCount > 0) markAllAsRead();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally run once on mount
+    notificationsRef.current = notifications;
+    unreadCountRef.current = unreadCount;
+  }, [notifications, unreadCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const unread = notificationsRef.current.filter((item) => !item.isRead);
+      setVisibleNotifications(unread);
+
+      if (unreadCountRef.current > 0) {
+        markAllAsRead();
+      }
+    }, [markAllAsRead]),
+  );
+
+  useEffect(() => {
+    if (!isFocused || unreadNotifications.length === 0) return;
+
+    setVisibleNotifications((current) =>
+      mergeVisibleNotifications(current, unreadNotifications),
+    );
+    markAllAsRead();
+  }, [isFocused, markAllAsRead, unreadNotifications]);
+
+  const handleNotificationPress = useCallback(
+    (item: QuakeNotification) => {
+      const latestForType = getLatestNotificationForType(
+        visibleNotifications,
+        item.type,
+      );
+
+      if (latestForType?.id === item.id) {
+        router.push({
+          pathname: "/main-menu/earthquake",
+          params: {
+            tab: getEarthquakeTab(item.type),
+          },
+        });
+        return;
+      }
+
+      router.push({
+        pathname: "/main-menu/history",
+        params: {
+          tab: getHistoryTab(item.type),
+        },
+      });
+    },
+    [router, visibleNotifications],
+  );
 
   return (
     <View style={styles.container}>
@@ -64,24 +149,16 @@ export default function Notifikasi() {
           </View>
 
           <FlatList
-            data={notifications}
+            data={visibleNotifications}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
               <NotifCard
                 item={item}
-                onPress={() =>
-                  router.push({
-                    pathname: "/main-menu/earthquake",
-                    params: {
-                      tab: item.type === "Dirasakan" ? "GEMPA DIRASAKAN" : "GEMPA TERDETEKSI",
-                    },
-                  })
-                }
+                onPress={() => handleNotificationPress(item)}
               />
             )}
-            // FIX #3: show the actual error message instead of the generic empty text
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>
                 {error ?? "Belum ada notifikasi."}
