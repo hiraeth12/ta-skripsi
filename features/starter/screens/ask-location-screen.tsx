@@ -1,7 +1,7 @@
 import CustomAlert from "@/components/ui/custom-alert";
 import GpsButton from "@/components/ui/gps-button";
 import LocationSearchModal from "@/components/ui/location-search-modal";
-import { useHaversine } from "@/hooks/use-haversine";
+import { findNearestLocation, GeoLocation } from "@/utils/geo"; 
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
@@ -20,56 +20,24 @@ import {
 } from "react-native";
 import { styles } from "../styles/ask-location-styles";
 
-// Helper function to find nearest location
-function findNearestLocation(
-  gpsLat: number,
-  gpsLon: number,
-  locations: any[],
-  haversineDistanceKm: (
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ) => number,
-) {
-  if (!locations || locations.length === 0) return null;
-
-  let nearest = locations[0];
-  let minDistance = haversineDistanceKm(
-    gpsLat,
-    gpsLon,
-    nearest.latitude,
-    nearest.longitude,
-  );
-
-  for (let i = 1; i < locations.length; i++) {
-    const distance = haversineDistanceKm(
-      gpsLat,
-      gpsLon,
-      locations[i].latitude,
-      locations[i].longitude,
-    );
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearest = locations[i];
-    }
-  }
-
-  return nearest;
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AppLocation extends GeoLocation {
+  id: string;
+  name: string;
+  desc: string;
 }
 
 export default function AskLocation() {
   const [query, setQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("");
-  const [allLocations, setAllLocations] = useState<any[]>([]);
+  const [allLocations, setAllLocations] = useState<AppLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState(
     "Sedang mencari lokasi GPS Anda...",
   );
   const router = useRouter();
-  const { haversineDistanceKm } = useHaversine();
 
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -97,7 +65,7 @@ export default function AskLocation() {
           throw new Error(`Failed to fetch: ${response.status}`);
 
         const data = await response.json();
-        const locationsArray = Object.entries(data || {}).map(
+        const locationsArray: AppLocation[] = Object.entries(data || {}).map(
           ([id, location]: any) => ({
             id,
             name: location.name || "",
@@ -134,23 +102,16 @@ export default function AskLocation() {
 
       setGpsMessage("Sedang menentukan posisi Anda...");
 
-      // Balanced is significantly faster than High for this use case
-      // (finding nearest village — centimeter precision is not needed)
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
       const { latitude, longitude } = location.coords;
 
-      const nearestLocation = findNearestLocation(
-        latitude,
-        longitude,
-        allLocations,
-        haversineDistanceKm,
-      );
-      const locationName = nearestLocation?.name || "Lokasi GPS";
+      // ← findNearestLocation dari utils, tidak perlu oper haversineDistanceKm
+      const nearest = findNearestLocation(latitude, longitude, allLocations);
+      const locationName = nearest?.name ?? "Lokasi GPS";
 
-      // Fire-and-forget — DB update no longer blocks navigation
       const app = getApp();
       const currentUser = getAuth(app).currentUser;
       if (currentUser) {
@@ -164,7 +125,6 @@ export default function AskLocation() {
         }).catch(() => {});
       }
 
-      // Navigate immediately — no artificial delay
       router.push("/main-menu/home");
     } catch {
       showCustomAlert(
@@ -183,12 +143,11 @@ export default function AskLocation() {
       item.desc.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleSelect = async (item: any) => {
+  const handleSelect = async (item: AppLocation) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
     setModalVisible(false);
     setQuery("");
 
-    // Fire-and-forget — DB update no longer blocks navigation
     const app = getApp();
     const currentUser = getAuth(app).currentUser;
     if (currentUser) {
@@ -202,7 +161,6 @@ export default function AskLocation() {
       }).catch(() => {});
     }
 
-    // Navigate immediately — no artificial delay
     router.push("/main-menu/home");
   };
 

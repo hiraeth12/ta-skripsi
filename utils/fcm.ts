@@ -1,15 +1,15 @@
-import { ensureNotificationPermission } from '@/hooks/notification-permission';
-import { getApp } from '@react-native-firebase/app';
-import { getDatabase, ref, set } from '@react-native-firebase/database';
+import { ensureNotificationPermission } from "@/utils/permission";
+import { getApp } from "@react-native-firebase/app";
+import { getDatabase, ref, set } from "@react-native-firebase/database";
 import {
-    AuthorizationStatus,
-    getMessaging,
-    getToken,
-    requestPermission,
-} from '@react-native-firebase/messaging';
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  requestPermission,
+} from "@react-native-firebase/messaging";
 
 const FIREBASE_DATABASE_URL =
-  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || '';
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 
 type SaveFcmTokenOptions = {
   timeoutMs?: number;
@@ -46,23 +46,22 @@ async function withTimeout<T>(
  */
 export async function saveFcmTokenToDatabase(userId: string) {
   let token: string | null = null;
-  let startTime = Date.now();
   const timeoutMs = 15000;
-  
+
   try {
     const notificationAllowed = await ensureNotificationPermission();
     if (!notificationAllowed) {
       return null;
     }
-    
+
     const app = getApp();
-    
+
     const messaging = getMessaging(app);
 
     // Request permission and get token
     const authStatus = await requestPermission(messaging);
-    
-    const enabled = 
+
+    const enabled =
       authStatus === AuthorizationStatus.AUTHORIZED ||
       authStatus === AuthorizationStatus.PROVISIONAL;
 
@@ -79,23 +78,18 @@ export async function saveFcmTokenToDatabase(userId: string) {
     const db = FIREBASE_DATABASE_URL
       ? getDatabase(app, FIREBASE_DATABASE_URL)
       : getDatabase(app);
-    
+
     const dbPath = `user_fcm_tokens/${userId}`;
-    
+
     const dbRef = ref(db, dbPath);
-    startTime = Date.now();
 
     await withTimeout(
-      set(dbRef, {
-        token,
-        updatedAt: Date.now(),
-      }),
+      set(dbRef, { token, updatedAt: Date.now() }),
       timeoutMs,
-      'FCM token database write',
+      "FCM token database write",
     );
     
     return token;
-    
   } catch (error: any) {
     if (token) {
       return token;

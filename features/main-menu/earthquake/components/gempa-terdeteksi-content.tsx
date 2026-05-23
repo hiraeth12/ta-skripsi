@@ -1,7 +1,7 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
-import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
+import { shareQuake } from "@/utils/share"
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -40,7 +40,6 @@ export default function GempaTerdeteksi({
   onLoadingChange,
   isActive = true,
 }: Props) {
-  const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const showCardRef = useRef(false);

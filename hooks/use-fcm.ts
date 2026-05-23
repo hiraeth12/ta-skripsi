@@ -1,5 +1,5 @@
-import { notificationEmitter } from "@/hooks/fcm-event-emitter";
-import { ensureNotificationPermission } from "@/hooks/notification-permission";
+import { notificationEmitter } from "@/services/fcm-event-emitter";
+import { ensureNotificationPermission } from "@/utils/permission";
 import { getApp } from "@react-native-firebase/app";
 import {
     AuthorizationStatus,

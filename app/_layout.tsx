@@ -1,7 +1,7 @@
 import { GempaBumiNotificationModal } from "@/components/ui/GempaBumiNotificationModal";
 import { InAppNotificationData } from "@/components/ui/in-app-notification-modal";
 import { setLogoutTransitionRunner } from "@/features/account/components/logout-transition";
-import { notificationEmitter } from "@/hooks/fcm-event-emitter";
+import { notificationEmitter } from "@/services/fcm-event-emitter";
 import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";

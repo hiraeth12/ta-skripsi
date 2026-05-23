@@ -2,7 +2,7 @@ import {
   CACHE_KEYS,
   getPersistentCache,
   setPersistentCache,
-} from "@/hooks/use-earthquake-cache";
+} from "@/utils/cache";
 import { getApp } from "@react-native-firebase/app";
 import {
   getAuth,

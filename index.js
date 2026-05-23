@@ -1,7 +1,7 @@
 import * as SplashScreen from "expo-splash-screen";
 import { initializeFirebase } from "./config/firebase-init";
 import { configureMapbox } from "./config/mapbox";
-import { registerFcmBackgroundHandler } from "./hooks/fcm-background-handler";
+import { registerFcmBackgroundHandler } from "./services/fcm-background";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
