@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { saveFcmTokenToDatabase } from "../../../hooks/use-fcm-token-save";
+import { saveFcmTokenToDatabase } from "../../../utils/fcm";
 import { PUSH_NOTIFICATION_PREF_KEY } from "../components/handle-logout";
 import ProfilePageLayout from "../components/profile-page-layout";
 import Skeleton from "../../../components/skeleton";

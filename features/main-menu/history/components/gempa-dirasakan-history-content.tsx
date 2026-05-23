@@ -2,7 +2,7 @@ import EarthquakeMap from "@/components/earthquake-map";
 import { ModalShakeMap } from "@/components/modal-shakemap";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
-import { useHaversine } from "@/hooks/use-haversine";
+import { haversineDistanceKm } from "@/utils/geo";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
     endAt,
@@ -191,7 +191,6 @@ export function GempaDirasakanHistoryContent({
   filterMonths,
   onTabActivate,
 }: Props) {
-  const { haversineDistanceKm } = useHaversine();
   const now = useMemo(() => new Date(), []);
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear) ? filterYear! : fallback.year;

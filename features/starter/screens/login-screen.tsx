@@ -14,7 +14,7 @@ import {
 } from "react-native"; 
 import AuthButton from "@/components/auth-button";
 import CustomAlert from "@/components/ui/custom-alert"; 
-import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
+import { saveFcmTokenToDatabase } from "@/utils/fcm";
 import { getApp } from "@react-native-firebase/app";
 import {
   getAuth,

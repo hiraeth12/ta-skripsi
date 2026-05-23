@@ -3,8 +3,8 @@ import EarthquakeTabBar, {
 } from "@/components/earthquake-tab-bar";
 import { getApp } from "@/config/firebase-init";
 import { useUserSession } from "@/features/account/user-session-context";
-import { CACHE_KEYS, setCacheData } from "@/hooks/use-earthquake-cache";
-import { useHaversine } from "@/hooks/use-haversine";
+import { CACHE_KEYS, setCacheData } from "@/utils/cache";
+import { haversineDistanceKm } from "@/utils/geo";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -305,7 +305,6 @@ export default function History() {
   const pathname = usePathname();
   const isFocused = useIsFocused();
   const session = useUserSession();
-  const { haversineDistanceKm } = useHaversine();
 
   const searchParams = useLocalSearchParams<{
     tab?: string;

@@ -1,7 +1,7 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { ModalShakeMap } from "@/components/modal-shakemap";
-import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
-import { useHaversine } from "@/hooks/use-haversine";
+import { shareQuake } from "@/utils/share"
+import { haversineDistanceKm } from "@/utils/geo";
 import {
   getRealisticShakeRadiiMeters,
   parseDepthKm,
@@ -61,8 +61,6 @@ export default function GempaDirasakan({
   onLoadingChange,
   isActive = true,
 }: Props) {
-  const { haversineDistanceKm } = useHaversine();
-  const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
   const showCardRef = useRef(false);

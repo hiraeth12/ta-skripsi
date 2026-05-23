@@ -1,7 +1,7 @@
 import GpsButton from "@/components/ui/gps-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import LocationSearchModal from "@/components/ui/location-search-modal";
-import { useHaversine } from "@/hooks/use-haversine";
+import { findNearestLocation, GeoLocation } from "@/utils/geo"; // ← import dari utils
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
@@ -20,62 +20,26 @@ import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-lokasi-styles";
 
-
-const BBOX_DEG = 0.45;
-const GPS_TIMEOUT_MS = 6000;
-function findNearestLocation(
-  gpsLat: number,
-  gpsLon: number,
-  locations: any[],
-  haversineDistanceKm: (a: number, b: number, c: number, d: number) => number,
-): any | null {
-  if (!locations.length) return null;
-
-  // Tahap 1: bounding-box pre-filter
-  const candidates = locations.filter(
-    (loc) =>
-      Math.abs(loc.latitude - gpsLat) < BBOX_DEG &&
-      Math.abs(loc.longitude - gpsLon) < BBOX_DEG,
-  );
-
-  // Fallback jika kosong (GPS di luar area data)
-  const pool = candidates.length > 0 ? candidates : locations;
-
-  // Tahap 2: Haversine hanya pada pool
-  return pool.reduce(
-    (nearest, loc) => {
-      const d = haversineDistanceKm(
-        gpsLat,
-        gpsLon,
-        loc.latitude,
-        loc.longitude,
-      );
-      return d < nearest.dist ? { loc, dist: d } : nearest;
-    },
-    {
-      loc: pool[0],
-      dist: haversineDistanceKm(
-        gpsLat,
-        gpsLon,
-        pool[0].latitude,
-        pool[0].longitude,
-      ),
-    },
-  ).loc;
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AppLocation extends GeoLocation {
+  id: string;
+  name: string;
+  desc: string;
 }
+
+const GPS_TIMEOUT_MS = 6000;
 
 // ─── Komponen utama ──────────────────────────────────────────────────────────
 export default function UbahLokasi() {
   const router = useRouter();
-  const { haversineDistanceKm } = useHaversine();
   const { profile, setProfile } = useProfileContext();
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
-  const [selectedLocationItem, setSelectedLocationItem] = useState<any>(null);
-  const [allLocations, setAllLocations] = useState<any[]>([]);
+  const [selectedLocationItem, setSelectedLocationItem] = useState<AppLocation | null>(null);
+  const [allLocations, setAllLocations] = useState<AppLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState("Memperbarui Lokasi ...");
@@ -94,12 +58,10 @@ export default function UbahLokasi() {
     setModalConfig({ visible: true, title, message, type });
   };
 
+  const locationsCache = useRef<AppLocation[]>([]);
 
-  const locationsCache = useRef<any[]>([]);
-
-  // ── Perbaikan 1 & 2: useEffect + cache ref ─────────────────────────────
+  // ── Fetch lokasi ────────────────────────────────────────────────────────
   useEffect(() => {
-    // Jika cache sudah ada, langsung pakai — tidak perlu fetch ulang
     if (locationsCache.current.length > 0) {
       setAllLocations(locationsCache.current);
       setLoading(false);
@@ -115,7 +77,7 @@ export default function UbahLokasi() {
         if (!res.ok) throw new Error(`Failed: ${res.status}`);
 
         const data = await res.json();
-        const mapped = Object.entries(data || {}).map(
+        const mapped: AppLocation[] = Object.entries(data || {}).map(
           ([id, loc]: any) => ({
             id,
             name: loc.name || "",
@@ -125,7 +87,7 @@ export default function UbahLokasi() {
           }),
         );
 
-        locationsCache.current = mapped; // simpan ke cache
+        locationsCache.current = mapped;
         setAllLocations(mapped);
       } catch {
         setAllLocations([]);
@@ -135,7 +97,7 @@ export default function UbahLokasi() {
     };
 
     fetchLocations();
-  }, []); // ← dependency array kosong: hanya jalan sekali saat mount
+  }, []);
 
   // ── Filter pencarian ────────────────────────────────────────────────────
   const filteredLocations = allLocations.filter(
@@ -145,14 +107,14 @@ export default function UbahLokasi() {
   );
 
   // ── Pilih dari daftar ───────────────────────────────────────────────────
-  const handleSelect = (item: any) => {
+  const handleSelect = (item: AppLocation) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
     setSelectedLocationItem(item);
     setLocationModalVisible(false);
     setQuery("");
   };
 
-  // ── Perbaikan 3: GPS cepat dengan Accuracy.Lowest + timeout race ────────
+  // ── GPS ─────────────────────────────────────────────────────────────────
   const handleUseGPS = async () => {
     setGpsLoading(true);
     setGpsMessage("Meminta izin akses lokasi...");
@@ -170,35 +132,26 @@ export default function UbahLokasi() {
 
       setGpsMessage("Sedang memperbarui lokasi...");
 
-      // Promise.race: ambil GPS atau lempar error jika melebihi GPS_TIMEOUT_MS
       const loc = await Promise.race<Location.LocationObject>([
         Location.getCurrentPositionAsync({
-          // Lowest: tidak menunggu satelit presisi tinggi.
-          // Cukup untuk mencocokkan ke lokasi terdekat di list.
           accuracy: Location.Accuracy.Lowest,
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("GPS timeout")),
-            GPS_TIMEOUT_MS,
-          ),
+          setTimeout(() => reject(new Error("GPS timeout")), GPS_TIMEOUT_MS),
         ),
       ]);
 
       const { latitude, longitude } = loc.coords;
 
-      // Perbaikan 4: bounding-box filter di dalam findNearestLocation
-      const nearest = findNearestLocation(
-        latitude,
-        longitude,
-        allLocations,
-        haversineDistanceKm,
-      );
+      // ← findNearestLocation dari utils, tidak perlu oper haversineDistanceKm
+      const nearest = findNearestLocation(latitude, longitude, allLocations);
 
       const name = nearest?.name ?? "Lokasi GPS";
       const desc = nearest?.desc ?? "";
       setSelectedLocation(desc ? `${name}, ${desc}` : name);
-      setSelectedLocationItem({ name, latitude, longitude });
+      setSelectedLocationItem(
+        nearest ?? { id: "", name, desc, latitude, longitude },
+      );
     } catch (err: any) {
       if (err?.message === "GPS timeout") {
         showCustomAlert(
@@ -231,12 +184,8 @@ export default function UbahLokasi() {
         const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
         await update(ref(db, `users/${user.uid}`), {
-          latitude:
-            selectedLocationItem.latitude?.toFixed(6) ??
-            selectedLocationItem.latitude,
-          longitude:
-            selectedLocationItem.longitude?.toFixed(6) ??
-            selectedLocationItem.longitude,
+          latitude: selectedLocationItem.latitude?.toFixed(6) ?? selectedLocationItem.latitude,
+          longitude: selectedLocationItem.longitude?.toFixed(6) ?? selectedLocationItem.longitude,
           locationName: selectedLocationItem.name,
           locationUpdatedAt: new Date().toISOString(),
         });
@@ -246,7 +195,6 @@ export default function UbahLokasi() {
       return;
     }
 
-    // Optimistic update: langsung perbarui context tanpa menunggu re-fetch
     setProfile((prev) => ({ ...prev, location: selectedLocationItem.name }));
 
     setShowSuccessModal(true);
@@ -299,7 +247,7 @@ export default function UbahLokasi() {
               loadingText={gpsMessage}
               loading={gpsLoading}
               onPress={handleUseGPS}
-              disabled={gpsLoading || loading} // ← disable juga saat data belum siap
+              disabled={gpsLoading || loading}
               style={styles.btnGPS}
               loadingStyle={styles.btnGPSLoading}
               textStyle={styles.btnTextGPS}
@@ -329,7 +277,6 @@ export default function UbahLokasi() {
         onSelect={handleSelect}
       />
 
-      {/* Modal berhasil */}
       <Modal visible={showSuccessModal} transparent animationType="fade">
         <Pressable
           style={styles.modalOverlay}

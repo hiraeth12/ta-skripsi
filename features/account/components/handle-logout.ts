@@ -4,7 +4,7 @@ import { getAuth, signOut } from "@react-native-firebase/auth";
 import { getDatabase, ref, remove } from "@react-native-firebase/database";
 import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import type { Router } from "expo-router";
-import { CACHE_KEYS, clearCache } from "@/hooks/use-earthquake-cache";
+import { CACHE_KEYS, clearCache } from "@/utils/cache";
 import { runLogoutTransition } from "./logout-transition";
 
 export const PUSH_NOTIFICATION_PREF_KEY = "push_notifications_enabled";
