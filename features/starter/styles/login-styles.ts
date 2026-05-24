@@ -1,6 +1,5 @@
 import { StyleSheet } from "react-native";
 
-
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -99,5 +98,10 @@ export const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 16,
+  },
+  registerText: {
+    color: "#1E6F9F",
+    fontWeight: "bold",
+    textAlign: "right",
   },
 });

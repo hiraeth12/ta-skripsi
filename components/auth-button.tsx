@@ -1,23 +1,38 @@
-import { TouchableOpacity, Text, StyleSheet, GestureResponderEvent } from "react-native";
+import {
+  ActivityIndicator,
+  GestureResponderEvent,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+} from "react-native";
 
 type AuthButtonProps = {
   title: string;
   onPress: (event: GestureResponderEvent) => void;
   disabled?: boolean;
+  loading?: boolean;
 };
 
-export default function AuthButton({ title, onPress, disabled }: AuthButtonProps) {
+export default function AuthButton({
+  title,
+  onPress,
+  disabled,
+  loading,
+}: AuthButtonProps) {
+  const isDisabled = disabled || loading;
+
   return (
     <TouchableOpacity
-      style={[
-        styles.button,
-        disabled && { opacity: 0.5 }
-      ]}
+      style={[styles.button, isDisabled && { opacity: 0.5 }]}
       onPress={onPress}
       activeOpacity={0.7}
-      disabled={disabled}
+      disabled={isDisabled}
     >
-      <Text style={styles.buttonText}>{title}</Text>
+      {loading ? (
+        <ActivityIndicator color="#fff" size="small" />
+      ) : (
+        <Text style={styles.buttonText}>{title}</Text>
+      )}
     </TouchableOpacity>
   );
 }

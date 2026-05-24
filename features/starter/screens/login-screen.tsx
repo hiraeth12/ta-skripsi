@@ -1,5 +1,9 @@
-import { styles } from "../styles/login-styles";
+import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
+import { saveFcmTokenToDatabase } from "@/utils/fcm";
 import { Ionicons } from "@expo/vector-icons";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth, signInWithEmailAndPassword } from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,16 +14,25 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from "react-native"; 
-import AuthButton from "@/components/auth-button";
-import CustomAlert from "@/components/ui/custom-alert"; 
-import { saveFcmTokenToDatabase } from "@/utils/fcm";
-import { getApp } from "@react-native-firebase/app";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-} from "@react-native-firebase/auth";
+  View,
+} from "react-native";
+import { styles } from "../styles/login-styles";
+
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getFirebaseAuthError(code: string | undefined): string {
+  const messages: Record<string, string> = {
+    "auth/invalid-credential": "Email atau kata sandi salah.",
+    "auth/user-not-found": "Akun dengan email ini tidak ditemukan.",
+    "auth/wrong-password": "Kata sandi salah.",
+    "auth/too-many-requests": "Terlalu banyak percobaan. Coba lagi nanti.",
+    "auth/network-request-failed": "Tidak ada koneksi internet.",
+    "auth/user-disabled": "Akun ini telah dinonaktifkan.",
+  };
+  return messages[code ?? ""] ?? "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.";
+}
+
 
 export default function Login() {
   const router = useRouter();
@@ -28,15 +41,13 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // State untuk mengontrol Modal Custom
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
     message: "",
-    type: "error" as "error" | "success", // Tambahkan as "error" | "success" untuk TypeScript
+    type: "error" as "error" | "success",
   });
 
-  // Fungsi untuk menampilkan Custom Alert
   const showCustomAlert = (
     title: string,
     message: string,
@@ -51,12 +62,18 @@ export default function Login() {
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
-    if (!trimmedEmail || !trimmedPassword) {
-      showCustomAlert(
-        "Input belum lengkap",
-        "Email dan kata sandi wajib diisi.",
-        "error",
-      );
+    if (!trimmedEmail) {
+      showCustomAlert("Input Belum Lengkap", "Email wajib diisi.", "error");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      showCustomAlert("Input Tidak Valid", "Silakan masukkan alamat email yang valid.", "error");
+      return;
+    }
+
+    if (!trimmedPassword) {
+      showCustomAlert("Input Belum Lengkap", "Kata sandi wajib diisi.", "error");
       return;
     }
 
@@ -71,20 +88,15 @@ export default function Login() {
         trimmedPassword,
       );
 
-      // Fire-and-forget — don't block navigation on token save
       if (result.user?.uid) {
         saveFcmTokenToDatabase(result.user.uid).catch(() => {});
       }
 
+      setIsSubmitting(false);
       router.replace("/starter/ask-location");
     } catch (e) {
-      const error = e as { code?: string; message?: string };
-      showCustomAlert(
-        "Login gagal",
-        "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.",
-        "error",
-      );
-    } finally {
+      const error = e as { code?: string };
+      showCustomAlert("Login Gagal", getFirebaseAuthError(error.code), "error");
       setIsSubmitting(false);
     }
   };
@@ -137,9 +149,7 @@ export default function Login() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={() => router.push("/starter/forgot-password")}
-        >
+        <TouchableOpacity onPress={() => router.push("/starter/forgot-password")}>
           <Text style={styles.forgotPassword}>Lupa Kata Sandi?</Text>
         </TouchableOpacity>
 
@@ -151,15 +161,10 @@ export default function Login() {
 
         <Text style={styles.signUpText}>Belum Punya Akun?</Text>
         <TouchableOpacity onPress={() => router.push("/starter/register")}>
-          <Text
-            style={{ color: "#1E6F9F", fontWeight: "bold", textAlign: "right" }}
-          >
-            Daftar
-          </Text>
+          <Text style={styles.registerText}>Daftar</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Panggil Komponen CustomAlert di sini */}
       <CustomAlert
         visible={modalConfig.visible}
         title={modalConfig.title}
