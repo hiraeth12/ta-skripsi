@@ -1,10 +1,10 @@
 import BottomNav from "@/components/ui/navigation";
 import { ProfileProvider } from "@/features/account/profile-context";
-import { UserSessionProvider } from "@/features/account/user-session-context";
+import { UserSessionProvider, useUserSession } from "@/features/account/user-session-context";
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   InteractionManager,
@@ -12,6 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROUTE_MAP: Record<string, string> = {
   HOME: "home",
@@ -26,14 +29,106 @@ const TAB_MAP: Record<string, string> = {
   history: "RIWAYAT",
   account: "AKUN",
 };
-const MAIN_TAB_ROUTES = new Set(Object.values(ROUTE_MAP));
 
+const MAIN_TAB_ROUTES = new Set(Object.values(ROUTE_MAP));
+const NOTIFIKASI_PATH = "/main-menu/notifikasi";
+
+// ─── Auth Guard ───────────────────────────────────────────────────────────────
+
+/**
+ * FIX (Security): Pastikan user sudah login sebelum bisa mengakses main-menu.
+ * Jika session expired atau user belum login, redirect ke halaman login.
+ * Komponen ini harus berada di dalam UserSessionProvider.
+ */
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useUserSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Tunggu sampai session selesai dicek sebelum redirect
+    if (!loading && !user) {
+      router.replace("/starter/login");
+    }
+  }, [user, loading]);
+
+  // Jangan render konten selama session masih dicek atau user tidak ada
+  if (loading || !user) return null;
+
+  return <>{children}</>;
+}
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+
+/**
+ * FIX (Security): Tangkap crash dari Provider agar tidak expose stack trace
+ * atau data sensitif ke layar. Tampilkan fallback UI yang aman.
+ */
+import React from "react";
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ProviderErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    // Log ke monitoring (misal Sentry) tanpa ekspos ke UI
+    console.error("[ProviderErrorBoundary] Provider crash:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={errorStyles.container}>
+          <Ionicons name="warning-outline" size={48} color="#EF4444" />
+          <View style={errorStyles.textContainer}>
+            <View><Ionicons name="alert-circle-outline" size={16} color="#666" /></View>
+          </View>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const errorStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    gap: 12,
+  },
+  textContainer: {
+    alignItems: "center",
+    gap: 4,
+  },
+});
+
+// ─── Notification Button ──────────────────────────────────────────────────────
+
+/**
+ * FIX (Bug): Satu komponen tunggal untuk tombol notifikasi — tidak lagi
+ * duplikat antara "ready" dan "not ready". Saat belum ready, unreadDot
+ * cukup disembunyikan; disabled guard cukup ada di satu tempat saja.
+ */
 function NotificationButton({
-  pathname,
   onPress,
+  disabled,
 }: {
-  pathname: string;
   onPress: () => void;
+  disabled: boolean;
 }) {
   const { unreadCount } = useQuakeNotifications();
 
@@ -42,7 +137,9 @@ function NotificationButton({
       style={styles.notification}
       onPress={onPress}
       activeOpacity={0.7}
-      disabled={pathname === "/main-menu/notifikasi"}
+      // FIX (Bug): disabled guard hanya di sini — tidak perlu guard ganda
+      // di handleOpenNotifications juga
+      disabled={disabled}
     >
       <Ionicons name="notifications-outline" size={22} color="#fff" />
       {unreadCount > 0 && <View style={styles.unreadDot} />}
@@ -50,107 +147,126 @@ function NotificationButton({
   );
 }
 
-export default function MainLayout() {
+// ─── Inner Layout (di dalam providers) ───────────────────────────────────────
+
+function MainLayoutInner() {
   const router = useRouter();
   const pathname = usePathname();
-  const [notificationsReady, setNotificationsReady] = useState(false);
-  const [preloadTabs, setPreloadTabs] = useState(false);
+
+  // FIX (Bug): gabung dua state yang selalu berubah bersamaan jadi satu
+  const [isReady, setIsReady] = useState(false);
+
+  // FIX (Bug): gunakan ref agar tidak update state setelah unmount
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
-      setNotificationsReady(true);
-      setPreloadTabs(true);
+      if (isMounted.current) setIsReady(true);
     });
     return () => task.cancel();
   }, []);
 
+  // FIX (Device): gunakan safe area insets agar tidak hardcode paddingTop
+  const insets = useSafeAreaInsets();
+
+  const isOnNotifikasi = pathname === NOTIFIKASI_PATH;
+
   const handleOpenNotifications = () => {
-    if (pathname === "/main-menu/notifikasi") return;
-    router.push("/main-menu/notifikasi");
+    // FIX (Bug): guard cukup satu tempat — di prop `disabled` NotificationButton
+    router.push(NOTIFIKASI_PATH);
   };
 
   return (
-    <UserSessionProvider>
-      <ProfileProvider>
-        <View style={styles.container}>
-          <View style={styles.logoRow}>
-            <Image
-              source={require("../../assets/images/SeismoTrack_2-removebg-preview.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+    <View style={[styles.container, { paddingTop: insets.top || 50 }]}>
+      <View style={styles.logoRow}>
+        <Image
+          source={require("../../assets/images/SeismoTrack_2-removebg-preview.png")}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
 
-            {notificationsReady ? (
-              <NotificationButton
-                pathname={pathname}
-                onPress={handleOpenNotifications}
-              />
-            ) : (
-              <TouchableOpacity
-                style={styles.notification}
-                onPress={handleOpenNotifications}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="notifications-outline" size={22} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* FIX (Bug): komponen tunggal, tidak ada conditional render dua versi */}
+        <NotificationButton
+          onPress={handleOpenNotifications}
+          disabled={isOnNotifikasi}
+        />
+      </View>
 
-          <View style={styles.screenArea}>
-            <Tabs
-              screenOptions={({ route }) => ({
-                headerShown: false,
-                animation: "none",
-                freezeOnBlur: true,
-                lazy: !preloadTabs || !MAIN_TAB_ROUTES.has(route.name),
-              })}
-              tabBar={({ state, navigation }) => {
-                const currentRoute = state.routes[state.index]?.name ?? "";
-                const active = TAB_MAP[currentRoute] ?? "NONE";
+      <View style={styles.screenArea}>
+        <Tabs
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            animation: "none",
+            freezeOnBlur: true,
+            lazy: !isReady || !MAIN_TAB_ROUTES.has(route.name),
+          })}
+          tabBar={({ state, navigation }) => {
+            const currentRoute = state.routes[state.index]?.name ?? "";
+            const active = TAB_MAP[currentRoute] ?? TAB_MAP["home"];
 
-                return (
-                  <BottomNav
-                    active={active}
-                    onChange={(tab) => {
-                      const routeName = ROUTE_MAP[tab];
-                      if (!routeName || routeName === currentRoute) return;
-                      navigation.navigate(routeName as never);
-                    }}
-                  />
-                );
-              }}
-            >
-              <Tabs.Screen name="home" options={{ href: "/main-menu/home" }} />
-              <Tabs.Screen
-                name="earthquake"
-                options={{ href: "/main-menu/earthquake" }}
+            return (
+              <BottomNav
+                active={active}
+                onChange={(tab) => {
+                  const routeName = ROUTE_MAP[tab];
+                  if (!routeName || routeName === currentRoute) return;
+                  navigation.navigate(routeName as never);
+                }}
               />
-              <Tabs.Screen
-                name="history"
-                options={{ href: "/main-menu/history" }}
-              />
-              <Tabs.Screen
-                name="account"
-                options={{ href: "/main-menu/account" }}
-              />
-              <Tabs.Screen name="notifikasi" options={{ href: null }} />
-              <Tabs.Screen
-                name="filter-gempa-screen"
-                options={{ href: null, animation: "shift" }}
-              />
-            </Tabs>
-          </View>
-        </View>
-      </ProfileProvider>
-    </UserSessionProvider>
+            );
+          }}
+        >
+          <Tabs.Screen name="home" options={{ href: "/main-menu/home" }} />
+          <Tabs.Screen
+            name="earthquake"
+            options={{ href: "/main-menu/earthquake" }}
+          />
+          <Tabs.Screen
+            name="history"
+            options={{ href: "/main-menu/history" }}
+          />
+          <Tabs.Screen
+            name="account"
+            options={{ href: "/main-menu/account" }}
+          />
+          <Tabs.Screen name="notifikasi" options={{ href: null }} />
+          <Tabs.Screen
+            name="filter-gempa-screen"
+            options={{ href: null, animation: "shift" }}
+          />
+        </Tabs>
+      </View>
+    </View>
   );
 }
+
+// ─── Root Export ──────────────────────────────────────────────────────────────
+
+export default function MainLayout() {
+  return (
+    <ProviderErrorBoundary>
+      <UserSessionProvider>
+        <ProfileProvider>
+          <AuthGuard>
+            <MainLayoutInner />
+          </AuthGuard>
+        </ProfileProvider>
+      </UserSessionProvider>
+    </ProviderErrorBoundary>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
-    paddingTop: 50,
     paddingBottom: 7,
   },
   logoRow: {

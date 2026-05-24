@@ -16,3 +16,9 @@ export const DEFAULT_MAP_REGION: Region = {
   latitudeDelta: 5,
   longitudeDelta: 5,
 };
+
+export const DEFAULT_LOCATION = {
+  latitude: -6.9175,
+  longitude: 107.6191,
+  name: "Bandung",
+};

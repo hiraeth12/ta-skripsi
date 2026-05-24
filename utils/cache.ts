@@ -102,6 +102,7 @@ export function clearAllCache(): void {
 export const CACHE_KEYS = {
   DIRASAKAN: 'earthquake_dirasakan_latest',
   TERDETEKSI: 'earthquake_terdeteksi_latest',
+  TSUNAMI: 'tsunami_latest',
   DIRASAKAN_HISTORY: 'earthquake_dirasakan_history',
   TERDETEKSI_HISTORY: 'earthquake_terdeteksi_history',
   USER_LOCATION: 'user_location',

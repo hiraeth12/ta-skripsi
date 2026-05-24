@@ -1,8 +1,8 @@
 import { useQuakeNotifications, type QuakeNotification } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/notifications-screen.styles";
 
@@ -22,7 +22,7 @@ const NotifCard = ({ item, onPress }: NotifCardProps) => {
             {isDirasakan ? "Gempa Dirasakan" : "Gempa Terdeteksi"}
           </Text>
           <Text style={styles.notifSubTitle}>
-            M {item.magnitude} – {item.location}
+            M {item.magnitude} - {item.location}
           </Text>
           <Text style={styles.notifTime}>
             {item.date} • {item.time}
@@ -37,6 +37,8 @@ const NotifCard = ({ item, onPress }: NotifCardProps) => {
     </TouchableOpacity>
   );
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getEarthquakeTab(type: QuakeNotification["type"]) {
   return type === "Dirasakan" ? "GEMPA DIRASAKAN" : "GEMPA TERDETEKSI";
@@ -63,52 +65,29 @@ function getLatestNotificationForType(
     );
 }
 
-function mergeVisibleNotifications(
-  current: QuakeNotification[],
-  incoming: QuakeNotification[],
-) {
-  const byId = new Map<string, QuakeNotification>();
-  [...incoming, ...current].forEach((item) => byId.set(item.id, item));
-  return [...byId.values()].sort((a, b) => b.timestamp - a.timestamp);
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Notifikasi() {
   const router = useRouter();
-  const isFocused = useIsFocused();
-  const { notifications, unreadCount, error, markAllAsRead } = useQuakeNotifications();
-  const [visibleNotifications, setVisibleNotifications] = useState<QuakeNotification[]>([]);
-  const notificationsRef = useRef(notifications);
-  const unreadCountRef = useRef(unreadCount);
+  const { notifications, error, markAllAsRead } = useQuakeNotifications();
 
-  const unreadNotifications = useMemo(
+  const [visibleNotifications, setVisibleNotifications] = useState<QuakeNotification[]>(
     () => notifications.filter((item) => !item.isRead),
-    [notifications],
   );
 
-  useEffect(() => {
-    notificationsRef.current = notifications;
-    unreadCountRef.current = unreadCount;
-  }, [notifications, unreadCount]);
+  const notificationsRef = useRef(notifications);
+  notificationsRef.current = notifications;
 
   useFocusEffect(
     useCallback(() => {
+      // Snapshot unread saat screen dibuka
       const unread = notificationsRef.current.filter((item) => !item.isRead);
       setVisibleNotifications(unread);
 
-      if (unreadCountRef.current > 0) {
-        markAllAsRead();
-      }
+      // Tandai semua sebagai dibaca — satu kali, satu tempat
+      markAllAsRead();
     }, [markAllAsRead]),
   );
-
-  useEffect(() => {
-    if (!isFocused || unreadNotifications.length === 0) return;
-
-    setVisibleNotifications((current) =>
-      mergeVisibleNotifications(current, unreadNotifications),
-    );
-    markAllAsRead();
-  }, [isFocused, markAllAsRead, unreadNotifications]);
 
   const handleNotificationPress = useCallback(
     (item: QuakeNotification) => {
@@ -120,18 +99,14 @@ export default function Notifikasi() {
       if (latestForType?.id === item.id) {
         router.push({
           pathname: "/main-menu/earthquake",
-          params: {
-            tab: getEarthquakeTab(item.type),
-          },
+          params: { tab: getEarthquakeTab(item.type) },
         });
         return;
       }
 
       router.push({
         pathname: "/main-menu/history",
-        params: {
-          tab: getHistoryTab(item.type),
-        },
+        params: { tab: getHistoryTab(item.type) },
       });
     },
     [router, visibleNotifications],
