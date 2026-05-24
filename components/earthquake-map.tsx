@@ -68,7 +68,6 @@ type Props = {
   highlightPolygons?: HighlightPolygon[];
   waveOverlays?: WaveOverlay[];
   isCardOpen?: boolean;
-  // --- PERBAIKAN: Menambahkan tipe cardHeight
   cardHeight?: number;
   showFaultLines?: boolean;
   showMapChrome?: boolean;
@@ -362,7 +361,6 @@ const EarthquakeMap = memo(
     highlightPolygons,
     waveOverlays,
     isCardOpen = false,
-    // --- PERBAIKAN: Default parameter cardHeight
     cardHeight = 0,
     showFaultLines = true,
     showMapChrome = true,

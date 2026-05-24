@@ -15,6 +15,7 @@ import {
 import { calculateTimeAgo } from "@/utils/date";
 import { shareQuake } from "@/utils/share";
 import { computeStatus } from "@/utils/earthquake";
+import {DEFAULT_LOCATION} from "@/constants/map";
 import { useUserSession } from "@/features/account/user-session-context";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -44,22 +45,21 @@ import {
 import { DirasakanCard } from "./components/dirasakan-card";
 import { InfoModal } from "./components/info-modal";
 import { TerdeteksiCard } from "./components/terdeteksi-card";
+import { TsunamiCard, type TsunamiQuake } from "./components/tsunami-card";
 import { styles } from "./styles/homeStyles";
 
-// ─── Module-level constants (never recreated) ─────────────────────────────────
+// ─── Module-level constants ───────────────────────────────────────────────────
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
-const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
-const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
-const DB_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-const DEFAULT_LOCATION = {
-  latitude: -6.9175,
-  longitude: 107.6191,
-  name: "Bandung",
-};
+
+const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL ?? "";
+const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL ?? "";
+const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
+const DB_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() ?? "";
+
 const xmlParser = new XMLParser({ ignoreAttributes: false });
-let cachedLocationsData: Record<string, any> | null = null;
+let cachedLocationsData: FirebaseLocation[] | null = null;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,13 +94,12 @@ type TerdeteksiQuake = {
 
 type UserLocation = { latitude: number; longitude: number; name: string };
 
-// Tipe data lokasi dari Firebase
 interface FirebaseLocation extends GeoLocation {
   name: string;
   image?: string;
 }
 
-// ─── Pure helpers (stable, no component deps) ─────────────────────────────────
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 function formatCoord(value: number): {
   text: string;
@@ -115,20 +114,200 @@ function formatCoord(value: number): {
   };
 }
 
+function safeText(value: unknown, fallback = "-"): string {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function parsePointCoordinates(coordStr: string): {
+  latitude: number;
+  longitude: number;
+} | null {
+  const [lonStr, latStr] = coordStr.split(",").map((part) => part.trim());
+  const latitude = parseFloat(latStr ?? "");
+  const longitude = parseFloat(lonStr ?? "");
+
+  if (isNaN(latitude) || isNaN(longitude)) return null;
+
+  return { latitude, longitude };
+}
+
+function buildShakemapUrl(shakemap: string): string {
+  const value = shakemap.trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${SHAKEMAP_BASE}/${value}`;
+}
+
+function withCacheBuster(url: string): string {
+  const base = url.trim();
+  if (!base) return "";
+  if (base.endsWith("=") || base.endsWith("?") || base.endsWith("&")) {
+    return `${base}${Date.now()}`;
+  }
+  return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
 async function getLocationsData(
   database: ReturnType<typeof getDatabase>,
 ): Promise<FirebaseLocation[] | null> {
-  if (cachedLocationsData) {
-    return Object.values(cachedLocationsData) as FirebaseLocation[];
-  }
+  if (cachedLocationsData) return cachedLocationsData;
   const snap = await get(ref(database, "locations"));
-  cachedLocationsData = snap.val() ?? null;
-  return cachedLocationsData
-    ? (Object.values(cachedLocationsData) as FirebaseLocation[])
-    : null;
+  const val = snap.val();
+  cachedLocationsData = val ? (Object.values(val) as FirebaseLocation[]) : null;
+  return cachedLocationsData;
 }
 
-// ─── Skeleton card (extracted to avoid duplication in JSX) ───────────────────
+function parseDirasakanPayload(latest: unknown): {
+  coordStr: string;
+  magnitude: string;
+  kedalaman: string;
+  wilayah: string;
+  tanggal: string;
+  jam: string;
+  felt: string;
+  description: string;
+  shakemap: string;
+} | null {
+  if (!latest || typeof latest !== "object") return null;
+  const l = latest as Record<string, unknown>;
+
+  const coordStr = String((l?.point as Record<string, unknown>)?.coordinates ?? "");
+  if (!coordStr) return null;
+
+  return {
+    coordStr,
+    magnitude: String(l.magnitude ?? "-"),
+    kedalaman: String(l.depth ?? "-"),
+    wilayah: String(l.area ?? "-"),
+    tanggal: String(l.date ?? ""),
+    jam: String(l.time ?? ""),
+    felt: String(l.felt ?? ""),
+    description: String(l.description ?? ""),
+    shakemap: String(l.shakemap ?? ""),
+  };
+}
+
+function getTsunamiInfoItems(parsed: Record<string, unknown>): unknown[] {
+  const alert = parsed.alert;
+  const root =
+    alert && typeof alert === "object"
+      ? (alert as Record<string, unknown>)
+      : parsed;
+  const info = root.info;
+
+  if (Array.isArray(info)) return info;
+  return info ? [info] : [];
+}
+
+function parseTsunamiTimesent(value: unknown): number {
+  const text = String(value ?? "").trim().replace(/\s*WIB$/i, "").trim();
+  const match = text.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/,
+  );
+
+  if (!match) return Number.NEGATIVE_INFINITY;
+
+  const day = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10) - 1;
+  const year = Number.parseInt(match[3], 10);
+  const hour = Number.parseInt(match[4], 10);
+  const minute = Number.parseInt(match[5], 10);
+  const second = Number.parseInt(match[6], 10);
+  const timestamp = new Date(year, month, day, hour, minute, second).getTime();
+
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function getLatestTsunamiInfo(items: unknown[]): unknown | null {
+  if (items.length === 0) return null;
+
+  const rankedItems = items.map((item, index) => {
+    const record = item && typeof item === "object"
+      ? (item as Record<string, unknown>)
+      : {};
+    return {
+      item,
+      index,
+      time: parseTsunamiTimesent(record.timesent),
+    };
+  });
+  const hasTimesent = rankedItems.some(
+    (item) => item.time !== Number.NEGATIVE_INFINITY,
+  );
+
+  if (!hasTimesent) return items[items.length - 1];
+
+  return [...rankedItems].sort((a, b) => {
+    if (b.time !== a.time) return b.time - a.time;
+    return b.index - a.index;
+  })[0]?.item ?? null;
+}
+
+function parseTsunamiPayload(latest: unknown): TsunamiQuake | null {
+  if (!latest || typeof latest !== "object") return null;
+  const l = latest as Record<string, unknown>;
+  const coordStr = String((l.point as Record<string, unknown>)?.coordinates ?? "");
+  const coordinates = parsePointCoordinates(coordStr);
+
+  return {
+    magnitude: safeText(l.magnitude),
+    kedalaman: safeText(l.depth),
+    latText: safeText(l.latitude),
+    lonText: safeText(l.longitude),
+    wilayah: safeText(l.area),
+    tanggal: safeText(l.date),
+    jam: safeText(l.time),
+    subject: safeText(l.subject),
+    headline: safeText(l.headline),
+    shakemap: buildShakemapUrl(String(l.shakemap ?? "")),
+    ...(coordinates
+      ? {
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude,
+        }
+      : {}),
+  };
+}
+
+// FIX (Security + Bug): helper sanitasi data gempa terdeteksi
+function parseTerdeteksiPayload(feature: unknown): {
+  longitude: number;
+  latitude: number;
+  tanggal: string;
+  jam: string;
+  magnitude: string;
+  kedalaman: string;
+  wilayah: string;
+  fase: string;
+} | null {
+  if (!feature || typeof feature !== "object") return null;
+  const f = feature as Record<string, unknown>;
+  const props = (f.properties ?? {}) as Record<string, unknown>;
+  const coords = (f.geometry as Record<string, unknown>)?.coordinates;
+
+  if (!Array.isArray(coords)) return null;
+
+  const longitude = parseFloat(String(coords[0] ?? ""));
+  const latitude = parseFloat(String(coords[1] ?? ""));
+  if (isNaN(latitude) || isNaN(longitude)) return null;
+
+  const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
+  const jam = (jamRaw ?? "").split(".")[0];
+
+  return {
+    longitude,
+    latitude,
+    tanggal: tanggal ?? "",
+    jam: jam ?? "",
+    magnitude: parseFloat(String(props.mag ?? "0")).toFixed(1),
+    kedalaman: `${parseFloat(String(props.depth ?? "0")).toFixed(1)} km`,
+    wilayah: String(props.place ?? "-"),
+    fase: String(props.fase ?? ""),
+  };
+}
+
+// ─── Skeleton card ────────────────────────────────────────────────────────────
 
 function CardSkeleton() {
   return (
@@ -156,44 +335,43 @@ function CardSkeleton() {
 export default function Home() {
   const router = useRouter();
   const session = useUserSession();
+
   const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
     () => getCachedData(CACHE_KEYS.DIRASAKAN) ?? null,
   );
   const [terdeteksiData, setTerdeteksiData] = useState<TerdeteksiQuake | null>(
     () => getCachedData(CACHE_KEYS.TERDETEKSI) ?? null,
   );
+  const [tsunamiData, setTsunamiData] = useState<TsunamiQuake | null>(
+    () => getCachedData(CACHE_KEYS.TSUNAMI) ?? null,
+  );
 
-  const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
+  const [dirasakanShakeMapUrl, setDirasakanShakeMapUrl] = useState<string | null>(null);
+  const [activeShakeMapUrl, setActiveShakeMapUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
-    useState(false);
+  const [infoVisibleTsunami, setInfoVisibleTsunami] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
 
-  const [userLocation, setUserLocation] =
-    useState<UserLocation>(DEFAULT_LOCATION);
+  const [userLocation, setUserLocation] = useState<UserLocation>(DEFAULT_LOCATION);
   const [locationImageUrl, setLocationImageUrl] = useState<string | null>(null);
   const [locationImageLoading, setLocationImageLoading] = useState(true);
   const [userName, setUserName] = useState("Pengguna");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState(0);
 
-  // ── Refs ─────────────────────────────────────────────────────────────────────
   const networkErrorShownRef = useRef(false);
   const appStatePrevRef = useRef<AppStateStatus>(AppState.currentState);
-
-  // Read userLocation in fetch without adding it to deps — prevents re-fetch on GPS drift
   const userLocationRef = useRef(userLocation);
+
   useEffect(() => {
     userLocationRef.current = userLocation;
   }, [userLocation]);
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
   const status = useMemo(() => computeStatus(dirasakanData), [dirasakanData]);
-
   const timeAgo = useMemo(
-    () =>
-      calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? ""),
+    () => calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? ""),
     [dirasakanData?.tanggal, dirasakanData?.jam],
   );
 
@@ -205,13 +383,18 @@ export default function Home() {
     () => shareQuake(terdeteksiData, "terdeteksi"),
     [terdeteksiData],
   );
+  const handleShareTsunami = useCallback(
+    () => shareQuake(tsunamiData, "tsunami"),
+    [tsunamiData],
+  );
 
-  // ── Network error helper ──────────────────────────────────────────────────────
   const showNetworkError = useCallback(() => {
     if (networkErrorShownRef.current) return;
     networkErrorShownRef.current = true;
     setNetworkErrorModalVisible(true);
   }, []);
+
+  // ── Derived session values ────────────────────────────────────────────────
 
   const sessionUserId = session.user?.uid;
   const sessionProfileName = session.profile?.name ?? "";
@@ -220,28 +403,27 @@ export default function Home() {
   const sessionLongitude = session.location?.longitude;
   const sessionLocationName = session.location?.name ?? "";
 
+  // ── Hydrate cache on mount ────────────────────────────────────────────────
+
   useEffect(() => {
     let isMounted = true;
-
     async function hydrateLatestFromStorage() {
-      const [cachedDirasakan, cachedTerdeteksi] = await Promise.all([
+      const [cachedDirasakan, cachedTerdeteksi, cachedTsunami] = await Promise.all([
         getPersistentCache<DirasakanQuake>(CACHE_KEYS.DIRASAKAN),
         getPersistentCache<TerdeteksiQuake>(CACHE_KEYS.TERDETEKSI),
+        getPersistentCache<TsunamiQuake>(CACHE_KEYS.TSUNAMI),
       ]);
-
       if (!isMounted) return;
       if (!dirasakanData && cachedDirasakan) setDirasakanData(cachedDirasakan);
-      if (!terdeteksiData && cachedTerdeteksi)
-        setTerdeteksiData(cachedTerdeteksi);
+      if (!terdeteksiData && cachedTerdeteksi) setTerdeteksiData(cachedTerdeteksi);
+      if (!tsunamiData && cachedTsunami) setTsunamiData(cachedTsunami);
     }
-
     hydrateLatestFromStorage();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
-  // ── User data — runs once on mount ───────────────────────────────────────────
+  // ── User data + location image ────────────────────────────────────────────
+
   useEffect(() => {
     let isMounted = true;
 
@@ -254,8 +436,7 @@ export default function Home() {
         const database = DB_URL ? getDatabase(app, DB_URL) : getDatabase(app);
 
         if (sessionProfileName && isMounted) {
-          const firstName =
-            sessionProfileName.split(" ")[0] || sessionProfileName;
+          const firstName = sessionProfileName.split(" ")[0] || sessionProfileName;
           setUserName((prev) => (prev === firstName ? prev : firstName));
         }
 
@@ -264,14 +445,9 @@ export default function Home() {
         let locationName: string =
           sessionLocationName || sessionProfileLocation || "Lokasi Saya";
 
-        if (
-          locationName === "Lokasi GPS" &&
-          !isNaN(userLat) &&
-          !isNaN(userLon)
-        ) {
+        if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
           const locations = await getLocationsData(database);
           if (locations) {
-            // ← findNearestLocation dari utils, tidak perlu loop manual
             const nearest = findNearestLocation(userLat, userLon, locations);
             if (nearest?.name) locationName = nearest.name;
           }
@@ -291,9 +467,7 @@ export default function Home() {
         const cachedImageUrl = getCachedData<string>(imageCacheKey);
         if (cachedImageUrl) {
           if (isMounted) {
-            setLocationImageUrl((prev) =>
-              prev === cachedImageUrl ? prev : cachedImageUrl,
-            );
+            setLocationImageUrl((prev) => prev === cachedImageUrl ? prev : cachedImageUrl);
             setLocationImageLoading(false);
           }
           return;
@@ -303,25 +477,21 @@ export default function Home() {
         const entry = locations?.find((l) => l?.name === locationName) ?? null;
 
         if (entry?.image) {
-          const url = await getDownloadURL(
-            storageRef(getStorage(app), entry.image),
-          );
+          const url = await getDownloadURL(storageRef(getStorage(app), entry.image));
           setCacheData(imageCacheKey, url, 3_600_000);
           if (isMounted)
             setLocationImageUrl((prev) => (prev === url ? prev : url));
         }
       } catch {
+        // Silently ignore — UI akan tampil dengan data default
       } finally {
         if (isMounted) setLocationImageLoading(false);
       }
     }
 
     fetchUserData();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [
-    // haversineDistanceKm dihapus dari deps — module-level, referensi selalu stabil
     sessionUserId,
     sessionLatitude,
     sessionLocationName,
@@ -330,7 +500,6 @@ export default function Home() {
     sessionProfileName,
   ]);
 
-  // ── Date ticker ───────────────────────────────────────────────────────────────
   useEffect(() => {
     setCurrentDate(new Date());
     const id = setInterval(() => setCurrentDate(new Date()), 60_000);
@@ -342,28 +511,35 @@ export default function Home() {
     const abort = new AbortController();
 
     async function fetchDirasakan() {
+      // FIX (Security): cek URL sebelum fetch, bukan pakai `!` assertion
       if (!DIRASAKAN_API_URL) return;
-      const res = await fetch(`${DIRASAKAN_API_URL.trim()}${Date.now()}`, {
+
+      const res = await fetch(withCacheBuster(DIRASAKAN_API_URL), {
         signal: abort.signal,
       });
-      const raw = await res.text();
+      // FIX (Bug): cek response.ok sebelum parse — sebelumnya langsung .text()
+      if (!res.ok) throw new Error(`dirasakan fetch failed: ${res.status}`);
 
-      let latest: any = null;
+      const raw = await res.text();
+      let latest: unknown = null;
+
       try {
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
         const info = parsed?.info;
         latest = Array.isArray(info) ? info[0] : info;
       } catch {
-        // Module-level singleton — not recreated each call
-        const parsed = xmlParser.parse(raw);
-        const info = parsed?.alert?.info;
+        const parsed = xmlParser.parse(raw) as Record<string, unknown>;
+        const info = (parsed?.alert as Record<string, unknown>)?.info;
         latest = Array.isArray(info) ? info[0] : info;
       }
 
       if (!latest || !isMounted) return;
 
-      const coordStr = String(latest?.point?.coordinates ?? "");
-      const [lonStr, latStr] = coordStr.split(",");
+      // FIX (Security): pakai helper sanitasi, bukan akses `any` langsung
+      const p = parseDirasakanPayload(latest);
+      if (!p) return;
+
+      const [lonStr, latStr] = p.coordStr.split(",");
       const latitude = parseFloat(latStr);
       const longitude = parseFloat(lonStr);
       if (isNaN(latitude) || isNaN(longitude)) return;
@@ -373,85 +549,116 @@ export default function Home() {
       const lonCoord = formatCoord(longitude);
 
       const data: DirasakanQuake = {
-        // ← haversineDistanceKm langsung dari utils
-        distanceKm: haversineDistanceKm(
-          uLat,
-          uLon,
-          latitude,
-          longitude,
-        ).toFixed(1),
-        magnitude: String(latest.magnitude ?? "-"),
-        kedalaman: String(latest.depth ?? "-"),
+        distanceKm: haversineDistanceKm(uLat, uLon, latitude, longitude).toFixed(1),
+        magnitude: p.magnitude,
+        kedalaman: p.kedalaman,
         latText: `${latCoord.text}°${latCoord.latLabel}`,
         lonText: `${lonCoord.text}°${lonCoord.lonLabel}`,
-        wilayah: String(latest.area ?? "-"),
-        tanggal: String(latest.date ?? ""),
-        jam: String(latest.time ?? ""),
-        felt: String(latest.felt ?? ""),
-        description: String(latest.description ?? ""),
+        wilayah: p.wilayah,
+        tanggal: p.tanggal,
+        jam: p.jam,
+        felt: p.felt,
+        description: p.description,
         latitude,
         longitude,
       };
 
       setCacheData(CACHE_KEYS.DIRASAKAN, data);
       if (isMounted) {
-        setDirasakanData(data);
-        setShakeMapUrl(
-          latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
+        // FIX (Bug): cek apakah data benar-benar baru sebelum setState
+        // Cegah re-render dan re-mount EarthquakeMap saat data sama
+        setDirasakanData((prev) =>
+          prev?.tanggal === data.tanggal && prev?.jam === data.jam ? prev : data,
         );
+        setDirasakanShakeMapUrl(p.shakemap ? buildShakemapUrl(p.shakemap) : null);
       }
     }
 
     async function fetchTerdeteksi() {
       if (!TERDETEKSI_API_URL) return;
-      const res = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`, {
+
+      const res = await fetch(withCacheBuster(TERDETEKSI_API_URL), {
         signal: abort.signal,
       });
-      const { features } = await res.json();
-      if (!Array.isArray(features) || features.length === 0 || !isMounted)
-        return;
+      // FIX (Bug): cek response.ok
+      if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
-      const latest = [...features].sort((a, b) =>
-        (b?.properties?.time ?? "").localeCompare(a?.properties?.time ?? ""),
-      )[0];
-      if (!latest) return;
+      const body = await res.json() as { features?: unknown[] };
+      const features = body?.features;
+      if (!Array.isArray(features) || features.length === 0 || !isMounted) return;
 
-      const props = latest?.properties ?? {};
-      const coords = latest?.geometry?.coordinates;
-      const longitude = parseFloat(coords?.[0] ?? "0");
-      const latitude = parseFloat(coords?.[1] ?? "0");
-      if (isNaN(latitude) || isNaN(longitude)) return;
-      const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
-      const jam = (jamRaw ?? "").split(".")[0];
+      const latest = [...features].sort((a, b) => {
+        const aTime = String((a as Record<string, unknown>)?.properties
+          ? ((a as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? ""
+          : "");
+        const bTime = String((b as Record<string, unknown>)?.properties
+          ? ((b as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? ""
+          : "");
+        return bTime.localeCompare(aTime);
+      })[0];
+
+      // FIX (Security): pakai helper sanitasi
+      const parsed = parseTerdeteksiPayload(latest);
+      if (!parsed) return;
+
       const { latitude: uLat, longitude: uLon } = userLocationRef.current;
-      const latCoord = formatCoord(latitude);
-      const lonCoord = formatCoord(longitude);
+      const latCoord = formatCoord(parsed.latitude);
+      const lonCoord = formatCoord(parsed.longitude);
+
       const data: TerdeteksiQuake = {
-        distanceKm: haversineDistanceKm(
-          uLat,
-          uLon,
-          latitude,
-          longitude,
-        ).toFixed(1),
-        magnitude: parseFloat(props.mag ?? "0").toFixed(1),
-        kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
+        distanceKm: haversineDistanceKm(uLat, uLon, parsed.latitude, parsed.longitude).toFixed(1),
+        magnitude: parsed.magnitude,
+        kedalaman: parsed.kedalaman,
         latText: `${latCoord.text}°${latCoord.latLabel}`,
         lonText: `${lonCoord.text}°${lonCoord.lonLabel}`,
-        wilayah: String(props.place ?? "-"),
-        tanggal: tanggal ?? "",
-        jam: jam ?? "",
-        fase: String(props.fase ?? ""),
-        latitude,
-        longitude,
+        wilayah: parsed.wilayah,
+        tanggal: parsed.tanggal,
+        jam: parsed.jam,
+        fase: parsed.fase,
+        latitude: parsed.latitude,
+        longitude: parsed.longitude,
       };
 
       setCacheData(CACHE_KEYS.TERDETEKSI, data);
-      if (isMounted) setTerdeteksiData(data);
+      // FIX (Bug): cek apakah data benar-benar baru
+      if (isMounted) {
+        setTerdeteksiData((prev) =>
+          prev?.tanggal === data.tanggal && prev?.jam === data.jam ? prev : data,
+        );
+      }
+    }
+
+    async function fetchTsunami() {
+      if (!TSUNAMI_API_URL) return;
+
+      const res = await fetch(withCacheBuster(TSUNAMI_API_URL), {
+        signal: abort.signal,
+      });
+      if (!res.ok) throw new Error(`tsunami fetch failed: ${res.status}`);
+
+      const raw = await res.text();
+      const parsed = xmlParser.parse(raw) as Record<string, unknown>;
+      const latest = getLatestTsunamiInfo(getTsunamiInfoItems(parsed));
+      if (!latest || !isMounted) return;
+
+      const data = parseTsunamiPayload(latest);
+      if (!data) return;
+
+      setCacheData(CACHE_KEYS.TSUNAMI, data);
+      if (isMounted) {
+        setTsunamiData((prev) =>
+          prev?.tanggal === data.tanggal &&
+          prev?.jam === data.jam &&
+          prev?.subject === data.subject
+            ? prev
+            : data,
+        );
+      }
     }
 
     async function fetchAll() {
       try {
-        await Promise.all([fetchDirasakan(), fetchTerdeteksi()]);
+        await Promise.all([fetchDirasakan(), fetchTerdeteksi(), fetchTsunami()]);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           showNetworkError();
@@ -460,9 +667,10 @@ export default function Home() {
     }
 
     fetchAll();
-    const interval = setInterval(fetchAll, 60_000);
+    // Polling adaptif: 30 detik saat foreground — lebih responsif dari 60 detik
+    const INTERVAL_FOREGROUND = 30_000;
+    const interval = setInterval(fetchAll, INTERVAL_FOREGROUND);
 
-    // Only re-fetch when coming from background — not on every focus/blur
     const appStateSub = AppState.addEventListener("change", (next) => {
       if (
         appStatePrevRef.current.match(/inactive|background/) &&
@@ -479,9 +687,10 @@ export default function Home() {
       appStateSub.remove();
       abort.abort();
     };
-  }, []); // stable — location read via ref, no re-run on GPS drift
+  }, []);
 
-  // ── Scroll pagination indicator ───────────────────────────────────────────────
+  // ── Scroll handler ────────────────────────────────────────────────────────
+
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const index = Math.round(
@@ -492,7 +701,7 @@ export default function Home() {
     [],
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -543,9 +752,7 @@ export default function Home() {
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>JARAK GEMPA</Text>
               {dirasakanData ? (
-                <Text
-                  style={styles.statValue}
-                >{`${dirasakanData.distanceKm} km`}</Text>
+                <Text style={styles.statValue}>{`${dirasakanData.distanceKm} km`}</Text>
               ) : (
                 <Skeleton width={60} height={14} borderRadius={4} />
               )}
@@ -600,8 +807,11 @@ export default function Home() {
               {dirasakanData ? (
                 <DirasakanCard
                   data={dirasakanData}
-                  onShakeMap={() => setShakeMapVisible(true)}
-                  hasShakeMap={!!shakeMapUrl}
+                  onShakeMap={() => {
+                    setActiveShakeMapUrl(dirasakanShakeMapUrl);
+                    setShakeMapVisible(true);
+                  }}
+                  hasShakeMap={!!dirasakanShakeMapUrl}
                   onShare={handleShareDirasakan}
                   onCardPress={() =>
                     router.push({
@@ -621,9 +831,7 @@ export default function Home() {
                 <Text style={styles.sectionTitle}>
                   Gempabumi Terakhir Terdeteksi
                 </Text>
-                <TouchableOpacity
-                  onPress={() => setInfoVisibleTerdeteksi(true)}
-                >
+                <TouchableOpacity onPress={() => setInfoVisibleTerdeteksi(true)}>
                   <Ionicons
                     name="information-circle-outline"
                     size={25}
@@ -646,10 +854,38 @@ export default function Home() {
                 <CardSkeleton />
               )}
             </View>
+
+            {/* Tsunami */}
+            <View style={{ width: SCREEN_WIDTH }}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>
+                  Informasi Tsunami Terakhir
+                </Text>
+                <TouchableOpacity onPress={() => setInfoVisibleTsunami(true)}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={25}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+              </View>
+              <TsunamiCard
+                data={tsunamiData}
+                onShakeMap={() => {
+                  setActiveShakeMapUrl(tsunamiData?.shakemap ?? null);
+                  setShakeMapVisible(true);
+                }}
+                hasShakeMap={!!tsunamiData?.shakemap}
+                onShare={handleShareTsunami}
+                onCardPress={() => {
+                  // TODO: Navigate to a tsunami detail route when one exists.
+                }}
+              />
+            </View>
           </ScrollView>
 
           <View style={styles.paginationContainer}>
-            {[0, 1].map((i) => (
+            {[0, 1, 2].map((i) => (
               <View
                 key={i}
                 style={[
@@ -675,6 +911,12 @@ export default function Home() {
         title="Gempabumi Terakhir Terdeteksi"
         desc="Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia."
       />
+      <InfoModal
+        visible={infoVisibleTsunami}
+        onClose={() => setInfoVisibleTsunami(false)}
+        title="Peringatan Tsunami Terakhir"
+        desc="Menampilkan informasi peringatan dini tsunami terbaru dari BMKG."
+      />
       <NetworkErrorModal
         visible={networkErrorModalVisible}
         onClose={() => {
@@ -682,10 +924,9 @@ export default function Home() {
           networkErrorShownRef.current = false;
         }}
       />
-
       <ModalShakeMap
         visible={shakeMapVisible}
-        imageUrl={shakeMapUrl}
+        imageUrl={activeShakeMapUrl}
         onClose={() => setShakeMapVisible(false)}
       />
     </View>
