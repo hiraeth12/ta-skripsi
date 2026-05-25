@@ -3,6 +3,11 @@ import type {
   TsunamiObsArea,
   TsunamiWzArea,
 } from "@/features/main-menu/earthquake/components/modal-tsunami-info";
+import {
+  formatLatText,
+  formatLonText,
+  parseCoordinateText,
+} from "@/utils/geo";
 
 const MAP_ASSET_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
@@ -100,7 +105,7 @@ function rawText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function safeText(value: unknown, fallback = "-"): string {
+export function safeText(value: unknown, fallback = "-"): string {
   const text = rawText(value);
   return text || fallback;
 }
@@ -141,8 +146,9 @@ function buildTimestamp(
   }
 
   const { hour, minute, second } = parseClock(timeValue);
+  const normalizedYear = normalizeYear(year);
   const timestamp = new Date(
-    normalizeYear(year),
+    normalizedYear,
     month - 1,
     day,
     hour,
@@ -150,7 +156,22 @@ function buildTimestamp(
     second,
   ).getTime();
 
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+  if (Number.isNaN(timestamp)) return Number.NEGATIVE_INFINITY;
+
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getFullYear() !== normalizedYear ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  return timestamp;
+}
+
+function isValidTimestamp(value: number): boolean {
+  return Number.isFinite(value) && value !== Number.NEGATIVE_INFINITY;
 }
 
 export function parseTsunamiDateTime(
@@ -164,6 +185,7 @@ export function parseTsunamiDateTime(
 
   if (!raw) return Number.NEGATIVE_INFINITY;
 
+  // Format 1: ISO-like — "2024-01-15" atau "2024-01-15 07:30:00"
   let match = raw.match(
     /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]+(\d{1,2}:\d{2}(?::\d{2})?))?/,
   );
@@ -176,6 +198,7 @@ export function parseTsunamiDateTime(
     );
   }
 
+  // Format 2: DD/MM/YY atau DD-MM-YY — "15/01/2024" atau "15-01-24"
   match = raw.match(
     /^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/,
   );
@@ -188,6 +211,7 @@ export function parseTsunamiDateTime(
     );
   }
 
+  // Format 3: DD-Mon-YY — "15-Jan-2024" atau "15-Januari-24"
   match = raw.match(
     /^(\d{1,2})-([A-Za-z]+)-(\d{2}|\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/,
   );
@@ -203,38 +227,91 @@ export function parseTsunamiDateTime(
     );
   }
 
+  // FIX — Format 4: "DD MMMM YYYY" atau "DD MMMM YYYY HH:MM:SS"
+  // Contoh: "15 Januari 2024", "15 January 2024 07:30:00"
+  match = raw.match(
+    /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{2}|\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/,
+  );
+  if (match) {
+    const month = MONTH_ALIASES[match[2].toLowerCase()];
+    if (!month) return Number.NEGATIVE_INFINITY;
+
+    return buildTimestamp(
+      Number.parseInt(match[3], 10),
+      month,
+      Number.parseInt(match[1], 10),
+      match[4] ?? timeValue,
+    );
+  }
+
+  // FIX — Format 5: "MMMM DD, YYYY" — "January 15, 2024"
+  match = raw.match(
+    /^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/,
+  );
+  if (match) {
+    const month = MONTH_ALIASES[match[1].toLowerCase()];
+    if (!month) return Number.NEGATIVE_INFINITY;
+
+    return buildTimestamp(
+      Number.parseInt(match[3], 10),
+      month,
+      Number.parseInt(match[2], 10),
+      match[4] ?? timeValue,
+    );
+  }
+
+  // FIX — Format 6: "YYYY/MM/DD" — "2024/01/15"
+  match = raw.match(
+    /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?/,
+  );
+  if (match) {
+    return buildTimestamp(
+      Number.parseInt(match[1], 10),
+      Number.parseInt(match[2], 10),
+      Number.parseInt(match[3], 10),
+      match[4] ?? timeValue,
+    );
+  }
+
   return Number.NEGATIVE_INFINITY;
 }
 
-function parseNumber(value: unknown): number {
-  const parsed = Number.parseFloat(
-    rawText(value)
-      .replace(",", ".")
-      .replace(/[^\d.-]/g, ""),
-  );
+function parseTsunamiTimestamp(value: unknown): number {
+  const parsedTsunamiDate = parseTsunamiDateTime(value);
+  if (isValidTimestamp(parsedTsunamiDate)) return parsedTsunamiDate;
 
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  const parsedNativeDate = Date.parse(rawText(value).replace(/\s*WIB$/i, ""));
+  return Number.isFinite(parsedNativeDate)
+    ? parsedNativeDate
+    : Number.NEGATIVE_INFINITY;
+}
+
+function firstValidTimestamp(...timestamps: number[]): number {
+  return timestamps.find(isValidTimestamp) ?? Number.NEGATIVE_INFINITY;
+}
+
+function parseTsunamiEventKeyTimestamp(value: unknown): number {
+  const match = rawText(value).match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  if (!match) return Number.NEGATIVE_INFINITY;
+
+  return buildTimestamp(
+    Number.parseInt(match[1], 10),
+    Number.parseInt(match[2], 10),
+    Number.parseInt(match[3], 10),
+    `${match[4]}:${match[5]}:${match[6]}`,
+  );
 }
 
 function parseCoordinate(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-
-  const raw = rawText(value);
-  const parsed = parseNumber(raw);
-  if (!Number.isFinite(parsed)) return Number.NaN;
-
-  const upper = raw.toUpperCase();
-  if (upper.includes("LS") || upper.includes("BB")) return -Math.abs(parsed);
-  if (upper.includes("LU") || upper.includes("BT")) return Math.abs(parsed);
-  return parsed;
+  return parseCoordinateText(value) ?? Number.NaN;
 }
 
 function formatLat(value: number): string {
-  return `${Math.abs(value).toFixed(2)}°${value < 0 ? "LS" : "LU"}`;
+  return formatLatText(value);
 }
 
 function formatLon(value: number): string {
-  return `${Math.abs(value).toFixed(2)}°${value >= 0 ? "BT" : "BB"}`;
+  return formatLonText(value);
 }
 
 function buildAssetUrl(path: unknown): string {
@@ -328,8 +405,10 @@ function normalizeWarningEntries(value: unknown): Array<{
   }
 
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>).map(([key, item]) => ({
-      key,
+    const records = value as Record<string, unknown>;
+    const keys = Object.keys(records);
+    return Object.values(records).map((item, index) => ({
+      key: keys[index] ?? String(index),
       value: asRecord(item),
     }));
   }
@@ -363,14 +442,24 @@ function normalizeWarning(
   };
 }
 
-function sortWarnings(warnings: TsunamiHistoryWarning[]): TsunamiHistoryWarning[] {
-  const hasValidTimesent = warnings.some(
-    (warning) => warning.timesentMs !== Number.NEGATIVE_INFINITY,
-  );
+export function getPdSortValue(value: string): number {
+  const match = value.match(/PD[-\s]?(\d+(?:\.\d+)?)/i);
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+}
 
-  if (!hasValidTimesent) return warnings;
+function getWarningPdSortValue(warning: TsunamiHistoryWarning): number {
+  const subjectSortValue = getPdSortValue(warning.subject);
+  if (Number.isFinite(subjectSortValue)) return subjectSortValue;
+  return Math.min(getPdSortValue(warning.warningId), getPdSortValue(warning.id));
+}
 
+export function sortTsunamiWarningsByPd(
+  warnings: TsunamiHistoryWarning[],
+): TsunamiHistoryWarning[] {
   return [...warnings].sort((a, b) => {
+    const aPdSortValue = getWarningPdSortValue(a);
+    const bPdSortValue = getWarningPdSortValue(b);
+    if (aPdSortValue !== bPdSortValue) return aPdSortValue - bPdSortValue;
     if (a.timesentMs !== b.timesentMs) return a.timesentMs - b.timesentMs;
     return a.rawIndex - b.rawIndex;
   });
@@ -387,6 +476,14 @@ function getLatestWarningIndex(
     (warning) => warning.warningId === latestWarningId || warning.id === latestWarningId,
   );
   if (matchingIdIndex >= 0) return matchingIdIndex;
+
+  const latestPdSortValue = getPdSortValue(latestWarningId);
+  if (Number.isFinite(latestPdSortValue)) {
+    const matchingPdIndex = warnings.findIndex(
+      (warning) => getWarningPdSortValue(warning) === latestPdSortValue,
+    );
+    if (matchingPdIndex >= 0) return matchingPdIndex;
+  }
 
   const latestTimesentMs = parseTsunamiDateTime(latestTimesent);
   if (latestTimesentMs !== Number.NEGATIVE_INFINITY) {
@@ -433,20 +530,38 @@ function resolveEventCoordinates(event: Record<string, unknown>): {
   return { latitude, longitude };
 }
 
-function eventSortTime(event: Record<string, unknown>, latestTimesent: string): number {
-  const fromLatestTimesent = parseTsunamiDateTime(latestTimesent);
-  if (fromLatestTimesent !== Number.NEGATIVE_INFINITY) return fromLatestTimesent;
+function eventSortTime(
+  event: Record<string, unknown>,
+  latestTimesent: string,
+  ...eventKeyCandidates: string[]
+): number {
+  return firstValidTimestamp(
+    parseTsunamiDateTime(latestTimesent),
+    parseTsunamiTimestamp(event.updatedAt),
+    parseTsunamiTimestamp(event.createdAt),
+    parseTsunamiDateTime(event.date, event.time),
+    ...eventKeyCandidates.map(parseTsunamiEventKeyTimestamp),
+  );
+}
 
-  const fromDateTime = parseTsunamiDateTime(event.date, event.time);
-  if (fromDateTime !== Number.NEGATIVE_INFINITY) return fromDateTime;
+// FIX: tiebreaker untuk event dengan sortTimeMs yang sama (termasuk NEGATIVE_INFINITY)
+// Menggunakan eventKey secara descending agar urutan tetap deterministic dan konsisten
+function compareEvents(a: TsunamiHistoryEvent, b: TsunamiHistoryEvent): number {
+  if (a.sortTimeMs !== b.sortTimeMs) {
+    // Terbaru di atas; NEGATIVE_INFINITY selalu turun ke bawah
+    if (!isValidTimestamp(a.sortTimeMs) && !isValidTimestamp(b.sortTimeMs)) {
+      // Keduanya invalid — fallback ke eventKey descending
+      return b.eventKey < a.eventKey ? -1 : b.eventKey > a.eventKey ? 1 : 0;
+    }
+    if (!isValidTimestamp(a.sortTimeMs)) return 1;  // a tidak valid → a ke bawah
+    if (!isValidTimestamp(b.sortTimeMs)) return -1; // b tidak valid → b ke bawah
+    return b.sortTimeMs - a.sortTimeMs;
+  }
 
-  const fromUpdatedAt = Date.parse(rawText(event.updatedAt));
-  if (Number.isFinite(fromUpdatedAt)) return fromUpdatedAt;
-
-  const fromCreatedAt = Date.parse(rawText(event.createdAt));
-  if (Number.isFinite(fromCreatedAt)) return fromCreatedAt;
-
-  return Number.NEGATIVE_INFINITY;
+  // Timestamp sama — tiebreaker: eventKey descending (asumsi key lebih besar = lebih baru)
+  if (b.eventKey > a.eventKey) return 1;
+  if (b.eventKey < a.eventKey) return -1;
+  return 0;
 }
 
 function normalizeEvent(
@@ -455,7 +570,7 @@ function normalizeEvent(
   const coords = resolveEventCoordinates(entry.value);
   if (!coords) return null;
 
-  const warnings = sortWarnings(
+  const warnings = sortTsunamiWarningsByPd(
     normalizeWarningEntries(entry.value.warnings).map((warningEntry, index) =>
       normalizeWarning(warningEntry, index),
     ),
@@ -469,7 +584,8 @@ function normalizeEvent(
   );
   const latestWarning = warnings[latestWarningIndex];
   const resolvedLatestTimesent = latestTimesent || rawText(latestWarning?.timesent);
-  const eventKey = rawText(entry.value.eventKey) || entry.key;
+  const firebaseKey = entry.key;
+  const eventKey = rawText(entry.value.eventKey) || firebaseKey;
 
   return {
     id: eventKey,
@@ -491,7 +607,12 @@ function normalizeEvent(
     warnings,
     createdAt: rawText(entry.value.createdAt),
     updatedAt: rawText(entry.value.updatedAt),
-    sortTimeMs: eventSortTime(entry.value, resolvedLatestTimesent),
+    sortTimeMs: eventSortTime(
+      entry.value,
+      resolvedLatestTimesent,
+      eventKey,
+      firebaseKey,
+    ),
   };
 }
 
@@ -508,7 +629,8 @@ export function normalizeTsunamiHistoryEvents(rawData: unknown): TsunamiHistoryE
   return entries
     .map(normalizeEvent)
     .filter((event): event is TsunamiHistoryEvent => Boolean(event))
-    .sort((a, b) => b.sortTimeMs - a.sortTimeMs);
+    // FIX: pakai compareEvents yang punya tiebreaker deterministik
+    .sort(compareEvents);
 }
 
 export function buildTsunamiMapSlides(
@@ -536,21 +658,16 @@ export function eventMatchesTsunamiYear(
   event: TsunamiHistoryEvent,
   year: number,
 ): boolean {
-  const timestampCandidates = [
-    parseTsunamiDateTime(event.latestTimesent),
+  const occurrenceTimestamp = firstValidTimestamp(
     parseTsunamiDateTime(event.date, event.time),
-    Date.parse(event.updatedAt),
-    Date.parse(event.createdAt),
-  ];
+    parseTsunamiEventKeyTimestamp(event.eventKey),
+    parseTsunamiEventKeyTimestamp(event.id),
+    parseTsunamiDateTime(event.latestTimesent),
+  );
 
-  return timestampCandidates.some((timestamp) => {
-    if (!Number.isFinite(timestamp) || timestamp === Number.NEGATIVE_INFINITY) {
-      return false;
-    }
+  if (!isValidTimestamp(occurrenceTimestamp)) return false;
 
-    const parsed = new Date(timestamp);
-    return parsed.getFullYear() === year;
-  });
+  return new Date(occurrenceTimestamp).getFullYear() === year;
 }
 
 export function applyTsunamiHistoryFilters(

@@ -1,6 +1,12 @@
 import EarthquakeMap from "@/components/earthquake-map";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import {
+  formatLatText,
+  formatLonText,
+  parseCoordinateText,
+} from "@/utils/geo";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   endAt,
@@ -13,7 +19,8 @@ import {
   startAt,
 } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Text, View } from "react-native";
+import { Animated, Text, View } from "react-native";
+import { dedupeByKey } from "../utils/dedupe";
 import {
   buildTerdeteksiTimeRange,
   getNowYearMonth,
@@ -27,7 +34,6 @@ import styles from "./styles/gempa-terdeteksi-content";
 const DB_PATH = "gempa_terdeteksi/items";
 const MAX_POINTS = 20;
 const LIST_HIDE_TO_CARD_DELAY_MS = 340;
-const CARD_REPLACE_CLOSE_MS = 180;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,19 +89,14 @@ type Props = {
 // ─── Module-level helpers ─────────────────────────────────────────────────────
 
 function buildQuakeItem(item: any, index: number): QuakeItem | null {
-  let latitude = parseFloat(
-    String(item?.latitude ?? item?.lat ?? item?.coordinates?.latitude ?? ""),
+  const coords = item?.geometry?.coordinates || item?.coordinates;
+  const latitude = parseCoordinateText(
+    item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1],
   );
-  let longitude = parseFloat(
-    String(item?.longitude ?? item?.lon ?? item?.coordinates?.longitude ?? ""),
+  const longitude = parseCoordinateText(
+    item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0],
   );
-
-  if (isNaN(latitude) || isNaN(longitude)) {
-    const coords = item?.geometry?.coordinates;
-    longitude = parseFloat(String(coords?.[0] ?? ""));
-    latitude = parseFloat(String(coords?.[1] ?? ""));
-  }
-  if (isNaN(latitude) || isNaN(longitude)) return null;
+  if (latitude === null || longitude === null) return null;
 
   const props = item?.properties ?? item;
   const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
@@ -116,8 +117,8 @@ function buildQuakeItem(item: any, index: number): QuakeItem | null {
     jam: String(props?.jam ?? jam ?? ""),
     kedalaman: `${parseFloat(String(props?.depth ?? props?.kedalaman ?? "0")).toFixed(1)} km`,
     felt: String(props?.fase ?? props?.felt ?? ""),
-    latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
-    lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+    latText: formatLatText(latitude),
+    lonText: formatLonText(longitude),
   };
 }
 
@@ -170,14 +171,12 @@ export function GempaTerdeteksiHistoryContent({
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
-  const [showCard, setShowCard] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
 
   const mapRef = useRef<MapViewType | null>(null);
-  const showCardRef = useRef(false);             // mirrors showCard — prevents stale closure in PanResponder
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const dataSignatureRef = useRef<string | null>(null);
@@ -185,9 +184,29 @@ export function GempaTerdeteksiHistoryContent({
   const isMountedRef = useRef(true);
   const openCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Animation values
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const clearCardSelection = useCallback(() => {
+    setSelectedIndex(null);
+    setOverrideQuake(null);
+    selectedEventIdRef.current = null;
+    lastExternalIdRef.current = null;
+  }, []);
+
+  const handleSwipeDismiss = useCallback(() => {
+    clearCardSelection();
+    onCardClose?.();
+  }, [clearCardSelection, onCardClose]);
+
+  const {
+    showCard,
+    showCardRef,
+    translateY,
+    opacity,
+    panResponder,
+    openCard: openCardAnimation,
+    dismissCard: dismissCardAnimation,
+    closeCardForReplacement,
+    hideCardImmediately,
+  } = useCardAnimation({ onSwipeDismiss: handleSwipeDismiss });
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -224,68 +243,21 @@ export function GempaTerdeteksiHistoryContent({
   // ── Card animation ─────────────────────────────────────────────────────────
 
   const openCard = useCallback((notifyParent = true) => {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
     if (notifyParent) {
       onCardOpen?.();
     }
-    Animated.parallel([
-      Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
-  }, [translateY, opacity, onCardOpen]);
-
-  const closeCardForReplacement = useCallback(
-    (callback: () => void) => {
-      if (!showCardRef.current) {
-        callback();
-        return;
-      }
-
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: CARD_REPLACE_CLOSE_MS,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: CARD_REPLACE_CLOSE_MS - 40,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        callback();
-      });
-    },
-    [opacity, translateY],
-  );
+    openCardAnimation();
+  }, [onCardOpen, openCardAnimation]);
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
-      if (!showCardRef.current) {
-        onCardClose?.();
-        callback?.();
-        return;
-      }
-      Animated.parallel([
-        Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        setSelectedIndex(null);
-        setOverrideQuake(null);
-        selectedEventIdRef.current = null;
-        lastExternalIdRef.current = null;  // ← add this
+      dismissCardAnimation(() => {
+        clearCardSelection();
         onCardClose?.();
         callback?.();
       });
     },
-    [translateY, opacity, onCardClose],
+    [clearCardSelection, dismissCardAnimation, onCardClose],
   );
 
   const flyToAndOpen = useCallback(
@@ -321,41 +293,6 @@ export function GempaTerdeteksiHistoryContent({
 
   // ── PanResponder ───────────────────────────────────────────────────────────
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          // Dragged far enough — dismiss
-          Animated.parallel([
-            Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-            setSelectedIndex(null);
-            setOverrideQuake(null);
-            selectedEventIdRef.current = null;
-            lastExternalIdRef.current = null;  // ← add this
-            onCardClose?.();
-          });
-        } else {
-          // Snap back
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
-
   // ── Marker press ──────────────────────────────────────────────────────────
 
   const onPressMarker = useCallback(
@@ -382,17 +319,10 @@ export function GempaTerdeteksiHistoryContent({
 
   useEffect(() => {
     if (!isActive) {
-      translateY.setValue(600);
-      opacity.setValue(0);
-      showCardRef.current = false;
-      setShowCard(false);
-      setSelectedIndex(null);
-      setOverrideQuake(null);
-      selectedEventIdRef.current = null;
-      lastExternalIdRef.current = null;
-
+      hideCardImmediately();
+      clearCardSelection();
     }
-  }, [isActive, translateY, opacity]);
+  }, [clearCardSelection, hideCardImmediately, isActive]);
 
   useEffect(() => {
     if (!externalSelection?.eventId) return;
@@ -415,8 +345,8 @@ export function GempaTerdeteksiHistoryContent({
           jam: externalSelection.jam,
           kedalaman: externalSelection.kedalaman,
           felt: externalSelection.felt,
-          latText: `${Math.abs(externalSelection.latitude).toFixed(2)}°${externalSelection.latitude < 0 ? "LS" : "LU"}`,
-          lonText: `${Math.abs(externalSelection.longitude).toFixed(2)}°${externalSelection.longitude >= 0 ? "BT" : "BB"}`,
+          latText: formatLatText(externalSelection.latitude),
+          lonText: formatLonText(externalSelection.longitude),
         };
 
     selectedEventIdRef.current = quake.eventId;
@@ -523,18 +453,12 @@ export function GempaTerdeteksiHistoryContent({
           ),
         );
 
-      // Deduplicate by event id while preserving order
-      const seen = new Set<string>();
-      const normalized: QuakeItem[] = [];
-      for (const item of merged) {
-        const built = buildQuakeItem(item, normalized.length);
-        if (!built) continue;
-        const k = String(built.eventId ?? "");
-        if (!k || seen.has(k)) continue;
-        seen.add(k);
-        normalized.push(built);
-        if (normalized.length >= MAX_POINTS) break;
-      }
+      const builtItems = merged.reduce<QuakeItem[]>((acc, item) => {
+        const built = buildQuakeItem(item, acc.length);
+        if (built) acc.push(built);
+        return acc;
+      }, []);
+      const normalized = dedupeByKey(builtItems, (q) => q.eventId, MAX_POINTS);
 
       const signature = normalized.map((q) => q.eventId).join("|");
       if (signature === dataSignatureRef.current) {

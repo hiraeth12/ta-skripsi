@@ -62,3 +62,29 @@ export function findNearestLocation<T extends GeoLocation>(
     },
   ).loc;
 }
+
+export function parseCoordinateText(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const parsed = Number.parseFloat(
+    raw
+      .replace(",", ".")
+      .replace(/[^\d.-]/g, ""),
+  );
+  if (!Number.isFinite(parsed)) return null;
+
+  const upper = raw.toUpperCase();
+  if (upper.includes("LS") || upper.includes("BB")) return -Math.abs(parsed);
+  if (upper.includes("LU") || upper.includes("BT")) return Math.abs(parsed);
+  return parsed;
+}
+
+export function formatLatText(lat: number) {
+  return `${Math.abs(lat).toFixed(2)}°${lat < 0 ? "LS" : "LU"}`;
+}
+export function formatLonText(lon: number) {
+  return `${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "BT" : "BB"}`;
+}

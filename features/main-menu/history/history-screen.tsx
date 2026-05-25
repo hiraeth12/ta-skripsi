@@ -1,10 +1,13 @@
 import EarthquakeTabBar from "@/components/earthquake-tab-bar";
 import { getApp } from "@/config/firebase-init";
 import { useUserSession } from "@/features/account/user-session-context";
-import { CACHE_KEYS, setCacheData } from "@/utils/cache";
-import { haversineDistanceKm } from "@/utils/geo";
+import {
+  CACHE_KEYS,
+  getPersistentCache,
+  setPersistentCache,
+} from "@/utils/cache";
+import { haversineDistanceKm, parseCoordinateText } from "@/utils/geo";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   endAt,
   get,
@@ -23,6 +26,7 @@ import {
   useRef,
   useState,
   useMemo,
+  type ReactElement,
 } from "react";
 import {
   Animated,
@@ -38,6 +42,7 @@ import {
   TsunamiHistoryContent,
 } from "./components";
 import styles from "./styles/history-screen";
+import { dedupeByKey } from "./utils/dedupe";
 import { readRealtimeNode } from "./utils/read-realtime-node";
 import {
   applyTsunamiHistoryFilters,
@@ -63,6 +68,7 @@ import {
 
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 const ITEM_HEIGHT = 74;
+const LIST_CONTENT_CONTAINER_STYLE = { paddingHorizontal: 12, paddingBottom: 40 };
 const HISTORY_TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI", "RIWAYAT TSUNAMI"] as const;
 type HistoryEarthquakeTab = (typeof HISTORY_TABS)[number];
 
@@ -71,6 +77,7 @@ const TAB_CACHE: Record<HistoryEarthquakeTab, string> = {
   "GEMPA TERDETEKSI": CACHE_KEYS.TERDETEKSI_HISTORY,
   "RIWAYAT TSUNAMI": CACHE_KEYS.TSUNAMI_HISTORY,
 };
+const TSUNAMI_HISTORY_CACHE_VERSION = "v3";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,13 +126,10 @@ function normalizeDirasakan(
     .reduce<ListItem[]>((acc, candidate, index) => {
       const coordStr = String(candidate?.point?.coordinates ?? "");
       const [lonStr, latStr] = coordStr.split(",");
-      const latitude = parseFloat(
-        String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(",", "."),
-      );
-      const longitude = parseFloat(
-        String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(",", "."),
-      );
-      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
+      const latitude = parseCoordinateText(candidate?.latitude ?? candidate?.lat ?? latStr);
+      const longitude = parseCoordinateText(candidate?.longitude ?? candidate?.lon ?? lonStr);
+      if (latitude === null || longitude === null) return acc;
+      const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
 
       acc.push({
         id: String(candidate?.eventid ?? candidate?.eventId ?? `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`),
@@ -134,8 +138,8 @@ function normalizeDirasakan(
         magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
         lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
         waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
-        jarak: `${haversine(userLat, userLon, latitude, longitude).toFixed(1)} km dari lokasi Anda`,
-        distanceKm: haversine(userLat, userLon, latitude, longitude).toFixed(1),
+        jarak: `${distanceKm} km dari lokasi Anda`,
+        distanceKm,
         tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
         jam: String(candidate?.time ?? candidate?.jam ?? ""),
         kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
@@ -166,9 +170,13 @@ function normalizeTerdeteksi(
     )
     .reduce<ListItem[]>((acc, item, index) => {
       const coords = item?.geometry?.coordinates || item?.coordinates;
-      const longitude = parseFloat(String(item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0] ?? ""));
-      const latitude = parseFloat(String(item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? ""));
-      if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
+      const longitude = parseCoordinateText(
+        item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0],
+      );
+      const latitude = parseCoordinateText(
+        item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1],
+      );
+      if (latitude === null || longitude === null) return acc;
 
       const props = item?.properties ?? item;
       const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
@@ -212,6 +220,65 @@ function normalizeTsunamiList(events: TsunamiHistoryEvent[]): ListItem[] {
     headline: event.latestHeadline,
     latestWarningId: event.latestWarningId,
   }));
+}
+
+function parseTsunamiListIdTime(value: unknown): number {
+  const match = String(value ?? "").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  if (!match) return Number.NEGATIVE_INFINITY;
+
+  const timestamp = new Date(
+    Number.parseInt(match[1], 10),
+    Number.parseInt(match[2], 10) - 1,
+    Number.parseInt(match[3], 10),
+    Number.parseInt(match[4], 10),
+    Number.parseInt(match[5], 10),
+    Number.parseInt(match[6], 10),
+  ).getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function sortTsunamiListItems(items: ListItem[]): ListItem[] {
+  return [...items].sort((a, b) => {
+    const aTime = parseTsunamiListIdTime(a.id);
+    const bTime = parseTsunamiListIdTime(b.id);
+
+    if (aTime !== bTime) return bTime - aTime;
+    return String(b.id).localeCompare(String(a.id));
+  });
+}
+
+function isSameListItem(a: ListItem, b: ListItem): boolean {
+  return (
+    a.id === b.id &&
+    a.latitude === b.latitude &&
+    a.longitude === b.longitude &&
+    a.magnitude === b.magnitude &&
+    a.lokasi === b.lokasi &&
+    a.waktu === b.waktu &&
+    a.jarak === b.jarak &&
+    a.distanceKm === b.distanceKm &&
+    a.tanggal === b.tanggal &&
+    a.jam === b.jam &&
+    a.kedalaman === b.kedalaman &&
+    a.felt === b.felt &&
+    (a.shakemap ?? null) === (b.shakemap ?? null) &&
+    a.eventType === b.eventType &&
+    a.status === b.status &&
+    a.headline === b.headline &&
+    a.latestWarningId === b.latestWarningId
+  );
+}
+
+function areSameListItems(a: ListItem[], b: ListItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  for (let index = 0; index < a.length; index += 1) {
+    if (!isSameListItem(a[index], b[index])) return false;
+  }
+
+  return true;
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -266,13 +333,15 @@ function SkeletonList() {
 
 // ─── List card ────────────────────────────────────────────────────────────────
 
+type EarthquakeListItemProps = {
+  item: ListItem;
+  onPress: (item: ListItem) => void;
+};
+
 const EarthquakeListItem = memo(({
   item,
   onPress,
-}: {
-  item: ListItem;
-  onPress: (item: ListItem) => void;
-}) => {
+}: EarthquakeListItemProps) => {
   const magValue = parseFloat(item.magnitude);
   const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
@@ -321,6 +390,85 @@ const EarthquakeListItem = memo(({
         </Text>
       </View>
     </TouchableOpacity>
+  );
+}, (prev, next) => {
+  return prev.onPress === next.onPress && isSameListItem(prev.item, next.item);
+});
+
+type HistoryListPanelProps = {
+  emptyComponent: ReactElement;
+  getItemLayout: (_: unknown, index: number) => {
+    length: number;
+    offset: number;
+    index: number;
+  };
+  items: ListItem[];
+  keyExtractor: (item: ListItem) => string;
+  listLoading: boolean;
+  renderItem: ({ item }: { item: ListItem }) => ReactElement;
+  slideAnim: Animated.Value;
+  title: string;
+};
+
+const HistoryListPanel = memo(function HistoryListPanel({
+  emptyComponent,
+  getItemLayout,
+  items,
+  keyExtractor,
+  listLoading,
+  renderItem,
+  slideAnim,
+  title,
+}: HistoryListPanelProps) {
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: "40%",
+        backgroundColor: "#0C4A6E",
+        paddingTop: 12,
+        elevation: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        zIndex: 10,
+        transform: [{
+          translateY: slideAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 500],
+          }),
+        }],
+      }}
+    >
+      <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
+        <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
+          {title}
+        </Text>
+      </View>
+
+      {listLoading && items.length === 0 ? (
+        <SkeletonList />
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={8}
+          initialNumToRender={6}
+          windowSize={3}
+          updateCellsBatchingPeriod={80}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={LIST_CONTENT_CONTAINER_STYLE}
+          ListEmptyComponent={emptyComponent}
+        />
+      )}
+    </Animated.View>
   );
 });
 
@@ -374,6 +522,7 @@ export default function History() {
         ? "GEMPA TERDETEKSI"
         : "GEMPA DIRASAKAN";
   const now = useMemo(() => new Date(), [])
+  const selectedEventIdParam = asSingle(searchParams.selectedEventId);
 
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -382,10 +531,9 @@ export default function History() {
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
   const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
   const [hasMountedTsunami, setHasMountedTsunami] = useState(initialTab === "RIWAYAT TSUNAMI");
-  // Panel animation: 0 = slid in (visible), LIST_PANEL_HEIGHT% = slid out (hidden)
-  const LIST_PANEL_HEIGHT_PCT = 40; // must match the panel's height below
+  // Panel animation: 0 = slid in (visible), 1 = slid out (hidden)
   const listPanelSlide = useRef(
-    new Animated.Value(asSingle(searchParams.selectedEventId) ? 1 : 0),
+    new Animated.Value(selectedEventIdParam ? 1 : 0),
   ).current;
 
   const showListPanel = useCallback(() => {
@@ -406,6 +554,11 @@ export default function History() {
     }).start();
   }, [listPanelSlide]);
   const [items, setItems] = useState<ListItem[]>([]);
+  const setItemsIfChanged = useCallback((nextItems: ListItem[]) => {
+    setItems((currentItems) =>
+      areSameListItems(currentItems, nextItems) ? currentItems : nextItems,
+    );
+  }, []);
   const [listLoading, setListLoading] = useState(true);
   const [isOpeningFilter, setIsOpeningFilter] = useState(false);
   const [userLocation, setUserLocation] = useState({
@@ -475,38 +628,73 @@ export default function History() {
 
   // ── External selection ────────────────────────────────────────────────────
 
+  const selectedLatitudeParam = asSingle(searchParams.selectedLatitude);
+  const selectedLongitudeParam = asSingle(searchParams.selectedLongitude);
+  const selectedMagnitudeParam = asSingle(searchParams.selectedMagnitude);
+  const selectedLocationParam = asSingle(searchParams.selectedLocation);
+  const selectedWaktuParam = asSingle(searchParams.selectedWaktu);
+  const selectedJarakParam = asSingle(searchParams.selectedJarak);
+  const selectedDistanceKmParam = asSingle(searchParams.selectedDistanceKm);
+  const selectedTanggalParam = asSingle(searchParams.selectedTanggal);
+  const selectedJamParam = asSingle(searchParams.selectedJam);
+  const selectedKedalamanParam = asSingle(searchParams.selectedKedalaman);
+  const selectedFeltParam = asSingle(searchParams.selectedFelt);
+  const selectedShakemapParam = asSingle(searchParams.selectedShakemap);
+  const selectedStatusParam = asSingle(searchParams.selectedStatus);
+  const selectedHeadlineParam = asSingle(searchParams.selectedHeadline);
+  const selectedLatestWarningIdParam = asSingle(searchParams.selectedLatestWarningId);
+
   const externalSelection = useMemo(() => {
-    const eventId = asSingle(searchParams.selectedEventId);
-    const latitude = parseFloat(asSingle(searchParams.selectedLatitude));
-    const longitude = parseFloat(asSingle(searchParams.selectedLongitude));
+    const eventId = selectedEventIdParam;
+    const latitude = parseFloat(selectedLatitudeParam);
+    const longitude = parseFloat(selectedLongitudeParam);
     if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
 
-    const tanggal = asSingle(searchParams.selectedTanggal);
-    const jam = asSingle(searchParams.selectedJam);
-    const waktu = asSingle(searchParams.selectedWaktu);
-    const [fallbackJam, fallbackTanggal] = waktu.split("•").map((p) => p.trim());
+    const tanggal = selectedTanggalParam;
+    const jam = selectedJamParam;
+    const waktu = selectedWaktuParam;
+    const [fallbackJam, fallbackTanggal] = waktu
+      .split("\u2022")
+      .map((p) => p.trim());
     const distanceKm =
-      asSingle(searchParams.selectedDistanceKm) ||
-      asSingle(searchParams.selectedJarak).replace(/[^0-9.,]/g, "") ||
+      selectedDistanceKmParam ||
+      selectedJarakParam.replace(/[^0-9.,]/g, "") ||
       "0";
 
     return {
       eventId,
       latitude,
       longitude,
-      magnitude: asSingle(searchParams.selectedMagnitude) || "-",
-      lokasi: asSingle(searchParams.selectedLocation) || "-",
+      magnitude: selectedMagnitudeParam || "-",
+      lokasi: selectedLocationParam || "-",
       tanggal: tanggal || fallbackTanggal || "",
       jam: jam || fallbackJam || "",
       distanceKm,
-      kedalaman: asSingle(searchParams.selectedKedalaman) || "-",
-      felt: asSingle(searchParams.selectedFelt),
-      shakemap: asSingle(searchParams.selectedShakemap) || null,
-      status: asSingle(searchParams.selectedStatus) || "-",
-      headline: asSingle(searchParams.selectedHeadline) || "-",
-      latestWarningId: asSingle(searchParams.selectedLatestWarningId) || "",
+      kedalaman: selectedKedalamanParam || "-",
+      felt: selectedFeltParam,
+      shakemap: selectedShakemapParam || null,
+      status: selectedStatusParam || "-",
+      headline: selectedHeadlineParam || "-",
+      latestWarningId: selectedLatestWarningIdParam || "",
     };
-  }, [searchParams]);
+  }, [
+    selectedDistanceKmParam,
+    selectedEventIdParam,
+    selectedFeltParam,
+    selectedHeadlineParam,
+    selectedJarakParam,
+    selectedJamParam,
+    selectedKedalamanParam,
+    selectedLatestWarningIdParam,
+    selectedLatitudeParam,
+    selectedLocationParam,
+    selectedLongitudeParam,
+    selectedMagnitudeParam,
+    selectedShakemapParam,
+    selectedStatusParam,
+    selectedTanggalParam,
+    selectedWaktuParam,
+  ]);
 
   const clearSelectionParams = useCallback(() => {
     router.setParams({
@@ -584,9 +772,20 @@ export default function History() {
       return;
     }
 
-    setUserLocation({
+    const nextLocation = {
       lat: roundCoord(session.location.latitude),
       lon: roundCoord(session.location.longitude),
+    };
+
+    setUserLocation((currentLocation) => {
+      if (
+        currentLocation.lat === nextLocation.lat &&
+        currentLocation.lon === nextLocation.lon
+      ) {
+        return currentLocation;
+      }
+
+      return nextLocation;
     });
   }, [session.location]);
 
@@ -596,7 +795,7 @@ export default function History() {
     let isMounted = true;
     const isTsunami = activeTab === "RIWAYAT TSUNAMI";
     const cacheKey = isTsunami
-      ? `${TAB_CACHE[activeTab]}_${effectiveFilter.year}`
+      ? `${TAB_CACHE[activeTab]}_${TSUNAMI_HISTORY_CACHE_VERSION}_${effectiveFilter.year}`
       : `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
     const isDir = activeTab === "GEMPA DIRASAKAN";
     const orderField = isDir ? "date" : "time";
@@ -604,11 +803,10 @@ export default function History() {
     async function fetchData() {
       // Phase 1: serve cache immediately
       try {
-        const raw = await AsyncStorage.getItem(cacheKey);
-        if (raw && isMounted) {
-          const cached: ListItem[] = JSON.parse(raw);
+        const cached = await getPersistentCache<ListItem[]>(cacheKey);
+        if (cached && isMounted) {
           if (cached.length > 0) {
-            setItems(cached);
+            setItemsIfChanged(isTsunami ? sortTsunamiListItems(cached) : cached);
             setListLoading(false);
           }
         }
@@ -624,7 +822,7 @@ export default function History() {
           if (!isMounted) return;
 
           if (!rawTsunamiEvents) {
-            setItems([]);
+            setItemsIfChanged([]);
             setListLoading(false);
             return;
           }
@@ -634,13 +832,12 @@ export default function History() {
             normalizedEvents,
             tsunamiFilters,
           );
-          const normalized = normalizeTsunamiList(filteredEvents);
+          const normalized = sortTsunamiListItems(normalizeTsunamiList(filteredEvents));
 
-          AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
-          setCacheData(cacheKey, normalized);
+          setPersistentCache(cacheKey, normalized);
 
           if (isMounted) {
-            setItems(normalized);
+            setItemsIfChanged(normalized);
             setListLoading(false);
           }
           return;
@@ -663,7 +860,7 @@ export default function History() {
         if (!isMounted) return;
         const hasAnyData = snapshots.some((snapshot) => snapshot.exists());
         if (!hasAnyData) {
-          setItems([]);
+          setItemsIfChanged([]);
           setListLoading(false);
           return;
         }
@@ -692,22 +889,12 @@ export default function History() {
           ),
         );
 
-        // Deduplicate by id while preserving order
-        const seen = new Set<string>();
-        const normalized: typeof filtered = [];
-        for (const it of filtered) {
-          const key = String(it.id ?? "");
-          if (!key) continue;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          normalized.push(it);
-        }
+        const normalized = dedupeByKey(filtered, (item) => item.id);
 
-        AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
-        setCacheData(cacheKey, normalized);
+        setPersistentCache(cacheKey, normalized);
 
         if (isMounted) {
-          setItems(normalized);
+          setItemsIfChanged(normalized);
           setListLoading(false);
         }
       } catch {
@@ -723,6 +910,7 @@ export default function History() {
     activeTab,
     effectiveFilter.year,
     effectiveMonths,
+    setItemsIfChanged,
     tsunamiFilters,
     userLocation.lat,
     userLocation.lon,
@@ -736,13 +924,14 @@ export default function History() {
     (item: ListItem) => {
       router.setParams({ selectedEventId: undefined });
       setTimeout(() => {
-        const nextParams: Record<string, string | undefined> = {
+        const nextParams: Record<string, string> = {
           tab:
             activeTab === "RIWAYAT TSUNAMI"
               ? "tsunami"
               : activeTab === "GEMPA DIRASAKAN"
                 ? "dirasakan"
                 : "terdeteksi",
+          filterYear: String(effectiveFilter.year),
           selectedEventId: item.id,
           selectedLatitude: String(item.latitude),
           selectedLongitude: String(item.longitude),
@@ -759,7 +948,6 @@ export default function History() {
           selectedStatus: item.status ?? "",
           selectedHeadline: item.headline ?? "",
           selectedLatestWarningId: item.latestWarningId ?? "",
-          filterYear: String(effectiveFilter.year),
         };
 
         if (activeTab !== "RIWAYAT TSUNAMI") {
@@ -807,6 +995,12 @@ export default function History() {
     ),
     [activeTab],
   );
+
+  const listTitle = useMemo(() => {
+    if (activeTab === "RIWAYAT TSUNAMI") return "Riwayat Tsunami";
+    if (activeTab === "GEMPA DIRASAKAN") return "Gempa Dirasakan Terbaru";
+    return "Gempa Terdeteksi Terbaru";
+  }, [activeTab]);
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
@@ -888,8 +1082,8 @@ export default function History() {
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
               // When card is dismissed → slide the list panel back in
-              onCardClose={() => showListPanel()}
-              onCardOpen={() => hideListPanel()}
+              onCardClose={showListPanel}
+              onCardOpen={hideListPanel}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={dirasakanActive}
@@ -907,8 +1101,8 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              onCardClose={() => showListPanel()}
-              onCardOpen={() => hideListPanel()}
+              onCardClose={showListPanel}
+              onCardOpen={hideListPanel}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={terdeteksiActive}
@@ -926,8 +1120,8 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              onCardClose={() => showListPanel()}
-              onCardOpen={() => hideListPanel()}
+              onCardClose={showListPanel}
+              onCardOpen={hideListPanel}
               filters={tsunamiFilters}
               isActive={tsunamiActive}
             />
@@ -936,58 +1130,16 @@ export default function History() {
       </Animated.View>
 
       {/* Bottom list panel — slides up from bottom over the map */}
-      <Animated.View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: "40%",
-          backgroundColor: "#0C4A6E",
-          paddingTop: 12,
-          elevation: 10,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          zIndex: 10,
-          // Translate the panel down by its own height (100%) when hidden
-          transform: [{
-            translateY: listPanelSlide.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 500], // large enough to be off-screen
-            }),
-          }],
-        }}
-      >
-          <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-            <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
-              {activeTab === "RIWAYAT TSUNAMI"
-                ? "Riwayat Tsunami"
-                : activeTab === "GEMPA DIRASAKAN"
-                  ? "Gempa Dirasakan Terbaru"
-                  : "Gempa Terdeteksi Terbaru"}
-            </Text>
-          </View>
-
-          {listLoading && items.length === 0 ? (
-            <SkeletonList />
-          ) : (
-            <FlatList
-              data={items}
-              keyExtractor={keyExtractor}
-              renderItem={renderItem}
-              getItemLayout={getItemLayout}
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={8}
-              initialNumToRender={6}
-              windowSize={3}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
-              ListEmptyComponent={listEmpty}
-            />
-          )}
-        </Animated.View>
+      <HistoryListPanel
+        emptyComponent={listEmpty}
+        getItemLayout={getItemLayout}
+        items={items}
+        keyExtractor={keyExtractor}
+        listLoading={listLoading}
+        renderItem={renderItem}
+        slideAnim={listPanelSlide}
+        title={listTitle}
+      />
     </View>
   );
 }

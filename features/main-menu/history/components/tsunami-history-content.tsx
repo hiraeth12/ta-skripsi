@@ -2,12 +2,13 @@ import EarthquakeMap from "@/components/earthquake-map";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { ModalTsunamiInfo } from "@/features/main-menu/earthquake/components/modal-tsunami-info";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import { formatLatText, formatLonText } from "@/utils/geo";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { getDatabase } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ import {
   buildTsunamiMapSlides,
   getWarningTabLabel,
   normalizeTsunamiHistoryEvents,
+  safeText,
   type TsunamiHistoryEvent,
   type TsunamiHistoryFilters,
   type TsunamiHistoryWarning,
@@ -31,7 +33,6 @@ import styles from "./styles/gempa-dirasakan-history-content";
 
 const DB_PATH = "tsunamiEvents";
 const LIST_HIDE_TO_CARD_DELAY_MS = 340;
-const CARD_REPLACE_CLOSE_MS = 180;
 
 const EMPTY_WARNING: TsunamiHistoryWarning = {
   id: "empty",
@@ -86,11 +87,6 @@ type Props = {
   filters?: TsunamiHistoryFilters;
 };
 
-function safeText(value: unknown, fallback = "-"): string {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
 function getLatestWarning(event: TsunamiHistoryEvent | null): TsunamiHistoryWarning {
   if (!event) return EMPTY_WARNING;
   return event.warnings[event.latestWarningIndex] ?? event.warnings[0] ?? EMPTY_WARNING;
@@ -107,8 +103,8 @@ function buildExternalEvent(selection: ExternalSelection): TsunamiHistoryEvent {
     area: safeText(selection.lokasi),
     date: safeText(selection.tanggal),
     time: safeText(selection.jam),
-    latText: `${Math.abs(selection.latitude).toFixed(2)}°${selection.latitude < 0 ? "LS" : "LU"}`,
-    lonText: `${Math.abs(selection.longitude).toFixed(2)}°${selection.longitude >= 0 ? "BT" : "BB"}`,
+    latText: formatLatText(selection.latitude),
+    lonText: formatLonText(selection.longitude),
     latestWarningId: safeText(selection.latestWarningId, ""),
     latestSubject: safeText(selection.status),
     latestHeadline: safeText(selection.headline),
@@ -152,7 +148,6 @@ export function TsunamiHistoryContent({
   filters,
 }: Props) {
   const [events, setEvents] = useState<TsunamiHistoryEvent[]>([]);
-  const [showCard, setShowCard] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideEvent, setOverrideEvent] = useState<TsunamiHistoryEvent | null>(null);
   const [selectedWarningIndex, setSelectedWarningIndex] = useState(0);
@@ -161,13 +156,35 @@ export function TsunamiHistoryContent({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mapRef = useRef<MapViewType | null>(null);
-  const showCardRef = useRef(false);
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
   const openCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+
+  const clearCardSelection = useCallback(() => {
+    setTsunamiInfoVisible(false);
+    setSelectedIndex(null);
+    setOverrideEvent(null);
+    selectedEventIdRef.current = null;
+    lastExternalIdRef.current = null;
+  }, []);
+
+  const handleSwipeDismiss = useCallback(() => {
+    clearCardSelection();
+    onCardClose?.();
+  }, [clearCardSelection, onCardClose]);
+
+  const {
+    showCard,
+    showCardRef,
+    translateY,
+    opacity,
+    panResponder,
+    openCard: openCardAnimation,
+    dismissCard: dismissCardAnimation,
+    closeCardForReplacement,
+    hideCardImmediately,
+  } = useCardAnimation({ onSwipeDismiss: handleSwipeDismiss });
 
   const activeEvent: TsunamiHistoryEvent | null =
     selectedIndex !== null && events[selectedIndex]
@@ -205,68 +222,19 @@ export function TsunamiHistoryContent({
   );
 
   const openCard = useCallback((notifyParent = true) => {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
     if (notifyParent) onCardOpen?.();
-    Animated.parallel([
-      Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
-  }, [onCardOpen, opacity, translateY]);
-
-  const closeCardForReplacement = useCallback(
-    (callback: () => void) => {
-      if (!showCardRef.current) {
-        callback();
-        return;
-      }
-
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: CARD_REPLACE_CLOSE_MS,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: CARD_REPLACE_CLOSE_MS - 40,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        callback();
-      });
-    },
-    [opacity, translateY],
-  );
+    openCardAnimation();
+  }, [onCardOpen, openCardAnimation]);
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
-      if (!showCardRef.current) {
-        onCardClose?.();
-        callback?.();
-        return;
-      }
-
-      Animated.parallel([
-        Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        setTsunamiInfoVisible(false);
-        setSelectedIndex(null);
-        setOverrideEvent(null);
-        selectedEventIdRef.current = null;
-        lastExternalIdRef.current = null;
+      dismissCardAnimation(() => {
+        clearCardSelection();
         onCardClose?.();
         callback?.();
       });
     },
-    [onCardClose, opacity, translateY],
+    [clearCardSelection, dismissCardAnimation, onCardClose],
   );
 
   const flyToAndOpen = useCallback(
@@ -318,29 +286,6 @@ export function TsunamiHistoryContent({
     [closeCardForReplacement, events, onCardOpen, selectEvent],
   );
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          dismissCard();
-          return;
-        }
-
-        Animated.parallel([
-          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-        ]).start();
-      },
-    }),
-  ).current;
-
   useEffect(() => {
     return () => {
       if (openCardTimeoutRef.current) clearTimeout(openCardTimeoutRef.current);
@@ -349,17 +294,10 @@ export function TsunamiHistoryContent({
 
   useEffect(() => {
     if (!isActive) {
-      translateY.setValue(600);
-      opacity.setValue(0);
-      showCardRef.current = false;
-      setShowCard(false);
-      setTsunamiInfoVisible(false);
-      setSelectedIndex(null);
-      setOverrideEvent(null);
-      selectedEventIdRef.current = null;
-      lastExternalIdRef.current = null;
+      hideCardImmediately();
+      clearCardSelection();
     }
-  }, [isActive, opacity, translateY]);
+  }, [clearCardSelection, hideCardImmediately, isActive]);
 
   useEffect(() => {
     onListDataChange?.(listItems);
@@ -463,13 +401,6 @@ export function TsunamiHistoryContent({
     onListSelectionHandled?.();
   }, [events, onListSelectionHandled, selectedListEventId, selectEvent]);
 
-//   const stateText = useMemo(() => {
-//     if (loading) return "Memuat riwayat tsunami...";
-//     if (errorMessage) return errorMessage;
-//     if (events.length === 0) return "Data tsunami belum tersedia.";
-//     return null;
-//   }, [errorMessage, events.length, loading]);
-
   return (
     <View style={styles.container}>
       <EarthquakeMap
@@ -491,12 +422,6 @@ export function TsunamiHistoryContent({
       />
 
       <View style={styles.topControls}>{tabBar}</View>
-
-      {/* {stateText && (
-        <View style={localStyles.statePill}>
-          <Text style={localStyles.stateText}>{stateText}</Text>
-        </View>
-      )} */}
 
       {showCard && activeEvent && (
         <Animated.View
