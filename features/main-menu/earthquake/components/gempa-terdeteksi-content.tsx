@@ -1,12 +1,12 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import EarthquakeMap from "@/components/earthquake-map";
 import type { MapViewType } from "@/constants/map";
-import { shareQuake } from "@/utils/share"
+import { shareQuake } from "@/utils/share";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
+  AppState,
   PanResponder,
   Text,
   TouchableOpacity,
@@ -48,14 +48,14 @@ export default function GempaTerdeteksi({
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
+    useState(false);
 
   const showNetworkError = useCallback(() => {
     if (networkErrorShownRef.current) return;
     networkErrorShownRef.current = true;
     setNetworkErrorModalVisible(true);
   }, []);
-
 
   const panResponder = useRef(
     PanResponder.create({
@@ -160,41 +160,66 @@ export default function GempaTerdeteksi({
     }
   }
 
-  const hasFetchedRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const latestEventIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+  const isFirstLoadRef = useRef(true);
+  const pollDelayRef = useRef(30_000);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isOfflineRef = useRef(false);
 
   useEffect(() => {
     if (!isActive) return;
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-
+    isMountedRef.current = true;
     abortRef.current = new AbortController();
 
-    async function fetchLatestQuake() {
-      onLoadingChange?.(true);
+    type FetchResult = { changed: boolean; ok: boolean };
+
+    async function fetchLatestQuake(silent = true): Promise<FetchResult> {
+      if (!silent) onLoadingChange?.(true);
       try {
-        if (!API_URL) {
-          return;
-        }
+        if (!API_URL) return { changed: false, ok: true };
+
         const url = `${API_URL.trim()}${Date.now()}`;
         const res = await fetch(url, { signal: abortRef.current?.signal });
         const data = await res.json();
 
         const features = data?.features;
-        if (!Array.isArray(features) || features.length === 0) return;
+        if (!Array.isArray(features) || features.length === 0)
+          return { changed: false, ok: true };
+
         const sorted = [...features].sort((a, b) => {
           const tA = a?.properties?.time ?? "";
           const tB = b?.properties?.time ?? "";
           return tB.localeCompare(tA);
         });
         const latest = sorted[0];
-        if (!latest) return;
+        if (!latest) return { changed: false, ok: true };
 
         const props = latest?.properties ?? {};
         const coords = latest?.geometry?.coordinates;
         const longitude = parseFloat(coords?.[0] ?? "0");
         const latitude = parseFloat(coords?.[1] ?? "0");
-        if (isNaN(latitude) || isNaN(longitude)) return;
+        if (isNaN(latitude) || isNaN(longitude)) return { changed: false, ok: true };
+
+        const eventId = `${props.time ?? ""}_${latitude}_${longitude}`;
+        const isSameEvent = eventId && eventId === latestEventIdRef.current;
+        if (isSameEvent) return { changed: false, ok: true };
+
+        latestEventIdRef.current = eventId;
+
+        const wasOffline = isOfflineRef.current;
+        if (wasOffline) {
+          isOfflineRef.current = false;
+          networkErrorShownRef.current = false;
+          setNetworkErrorModalVisible(false);
+          setTimeout(() => {
+            mapRef.current?.animateToRegion(
+              { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
+              800,
+            );
+          }, 350);
+        }
 
         const [tanggal, jamRaw] = (props.time ?? "").split(" ");
         const jam = (jamRaw ?? "").split(".")[0];
@@ -214,29 +239,65 @@ export default function GempaTerdeteksi({
           lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
         });
 
-        mapRef.current?.animateToRegion(
-          { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
-          800,
-        );
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
+        if (!wasOffline) {
+          mapRef.current?.animateToRegion(
+            { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
+            isFirstLoadRef.current ? 800 : 600,
+          );
+        }
+        isFirstLoadRef.current = false;
 
-        // Perbaikan: Hanya panggil satu metode untuk menampilkan error
-        if (
-          !networkErrorShownRef.current &&
-          e instanceof TypeError &&
-          (e as Error).message.includes('Network')
-        ) {
-          // Cukup panggil fungsi ini, karena di dalamnya sudah mengeset ref dan state
+        return { changed: true, ok: true };
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return { changed: false, ok: true };
+        isOfflineRef.current = true;
+        if (e instanceof TypeError && (e as Error).message.includes("Network")) {
           showNetworkError();
         }
+        return { changed: false, ok: false };
       } finally {
         onLoadingChange?.(false);
       }
     }
 
-    fetchLatestQuake();
-    return () => abortRef.current?.abort();
+    function clearPollTimer() {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    }
+
+    function scheduleNextPoll({ changed, ok }: FetchResult) {
+      if (!isMountedRef.current) return;
+      if (!ok) {
+        pollDelayRef.current = Math.min(pollDelayRef.current + 15_000, 120_000);
+      } else {
+        pollDelayRef.current = changed
+          ? 30_000
+          : Math.min(pollDelayRef.current + 10_000, 120_000);
+      }
+      clearPollTimer();
+      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
+    }
+
+    async function runPollingLoop() {
+      const result = await fetchLatestQuake(true);
+      scheduleNextPoll(result);
+    }
+
+    fetchLatestQuake(false).then(scheduleNextPoll);
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && isMountedRef.current && isActive) {
+        pollDelayRef.current = 30_000;
+        clearPollTimer();
+        runPollingLoop();
+      }
+    });
+
+    return () => {
+      isMountedRef.current = false;
+      clearPollTimer();
+      abortRef.current?.abort();
+      appStateSub.remove();
+    };
   }, [isActive, onLoadingChange, showNetworkError]);
 
   return (
@@ -247,15 +308,28 @@ export default function GempaTerdeteksi({
         markerCoordinate={
           latestQuake
             ? {
-              latitude: latestQuake.latitude,
-              longitude: latestQuake.longitude,
-              magnitude: latestQuake.magnitude,
-              depth: latestQuake.kedalaman,
-            }
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                magnitude: latestQuake.magnitude,
+                depth: latestQuake.kedalaman,
+              }
             : null
         }
         onMapPress={() => dismissCard()}
-        onMarkerPress={() => openCard()}
+        onMarkerPress={() => {
+          if (latestQuake) {
+            mapRef.current?.animateToRegion(
+              {
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                latitudeDelta: 2,
+                longitudeDelta: 2,
+              },
+              600,
+            );
+          }
+          openCard();
+        }}
       />
 
       <View style={styles.topControls}>
@@ -387,4 +461,3 @@ export default function GempaTerdeteksi({
     </View>
   );
 }
-

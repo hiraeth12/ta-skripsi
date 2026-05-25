@@ -105,6 +105,7 @@ export const CACHE_KEYS = {
   TSUNAMI: 'tsunami_latest',
   DIRASAKAN_HISTORY: 'earthquake_dirasakan_history',
   TERDETEKSI_HISTORY: 'earthquake_terdeteksi_history',
+  TSUNAMI_HISTORY: 'tsunami_history',
   USER_LOCATION: 'user_location',
   USER_PROFILE: 'user_profile',
 } as const;

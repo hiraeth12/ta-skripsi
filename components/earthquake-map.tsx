@@ -3,6 +3,7 @@ import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import patahanGeoJson from "../assets/geojson/patahan.geojson";
 
 import type { MapViewType } from "../constants/map";
 import { DEFAULT_MAP_REGION } from "../constants/map";
@@ -210,21 +211,6 @@ function getZoomLevelFromRegion(region: MapRegion): number {
   return Math.max(2, Math.min(Math.log2(360 / safeDelta), 16));
 }
 
-function isCoordinateInBounds(
-  coordinate: MarkerCoordinate,
-  bounds: ViewportBounds,
-): boolean {
-  const isLatOk =
-    coordinate.latitude <= bounds.north && coordinate.latitude >= bounds.south;
-  const isLonOk =
-    bounds.west > bounds.east
-      ? coordinate.longitude >= bounds.west ||
-        coordinate.longitude <= bounds.east
-      : coordinate.longitude >= bounds.west &&
-        coordinate.longitude <= bounds.east;
-  return isLatOk && isLonOk;
-}
-
 function buildWaveCircleGeometry(
   center: { latitude: number; longitude: number },
   radiusMeters: number,
@@ -374,15 +360,12 @@ const EarthquakeMap = memo(
       duration: number;
     } | null>(null);
 
-    const hasMultipleMarkers =
-      Array.isArray(markerCoordinates) && markerCoordinates.length > 0;
-    const shouldTrackViewport = hasMultipleMarkers || !!onViewportBoundsChange;
     const resolvedInitialRegion = initialRegion ?? DEFAULT_MAP_REGION;
 
-    const [viewportBounds, setViewportBounds] = useState<ViewportBounds>(() =>
+    const [, setViewportBounds] = useState<ViewportBounds>(() =>
       calculateViewportBounds(resolvedInitialRegion, viewportPaddingRatio),
     );
-    const [hasMeasuredViewport, setHasMeasuredViewport] = useState(false);
+    const [, setHasMeasuredViewport] = useState(false);
     const [innerWaveProgress, setInnerWaveProgress] = useState(0);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [faultLinesVisible, setFaultLinesVisible] = useState(showFaultLines);
@@ -481,12 +464,31 @@ const EarthquakeMap = memo(
       [applyCameraMove],
     );
 
+    // Tambah animateToRegion ke deps array
     useEffect(() => {
       mapRef.current = { animateToRegion };
       return () => {
         mapRef.current = null;
       };
-    }, [animateToRegion, mapRef]);
+    }, [animateToRegion, mapRef]); // ← pastikan animateToRegion ada di sini
+
+    useEffect(() => {
+      if (!markerCoordinate) return;
+      if (
+        !isFinite(markerCoordinate.latitude) ||
+        !isFinite(markerCoordinate.longitude)
+      )
+        return;
+      animateToRegion(
+        {
+          latitude: markerCoordinate.latitude,
+          longitude: markerCoordinate.longitude,
+          latitudeDelta: 3.5,
+          longitudeDelta: 3.5,
+        },
+        600,
+      );
+    }, [markerCoordinate]);
 
     const highlightPolygonGeometries = useMemo(() => {
       return (highlightPolygons ?? []).map((p) => ({
@@ -574,10 +576,7 @@ const EarthquakeMap = memo(
           />
 
           {showFaultLines && faultLinesVisible && (
-            <Mapbox.ShapeSource
-              id="faults"
-              shape={require("../assets/geojson/patahan.geojson")}
-            >
+            <Mapbox.ShapeSource id="faults" shape={patahanGeoJson}>
               <Mapbox.LineLayer
                 id="fault-lines"
                 style={{

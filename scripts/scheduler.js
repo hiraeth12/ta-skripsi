@@ -6,6 +6,7 @@
 import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import { syncTsunamiEvents } from "./sync-tsunami-events.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +82,14 @@ async function syncGempaTerdeteksi() {
   return runScript("db-gempa-terdeteksi-history.js");
 }
 
+async function syncTsunamiWarning() {
+  const result = await syncTsunamiEvents();
+  if (!result.ok) {
+    throw new Error(result.reason || "Failed to sync tsunami warning");
+  }
+  return result;
+}
+
 schedule(
   "sync:gempa-dirasakan:latest",
   300000,
@@ -91,6 +100,12 @@ schedule(
   "sync:gempa-terdeteksi:history",
   900000,
   syncGempaTerdeteksi
+);
+
+schedule(
+  "sync:tsunami-warning",
+  300000,
+  syncTsunamiWarning
 );
 
 process.on("SIGINT", () => {

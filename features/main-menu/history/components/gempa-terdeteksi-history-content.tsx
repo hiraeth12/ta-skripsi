@@ -552,9 +552,6 @@ export function GempaTerdeteksiHistoryContent({
       setQuakes(normalized);
       onLoadingChange?.(false);
 
-      if (!showCardRef.current) return;
-      if (foundIndex >= 0) setSelectedIndex(foundIndex);
-
       if (isFirstLoad.current && normalized[0]) {
         isFirstLoad.current = false;
         mapRef.current?.animateToRegion(
@@ -567,6 +564,9 @@ export function GempaTerdeteksiHistoryContent({
           800,
         );
       }
+
+      if (!showCardRef.current) return;
+      if (foundIndex >= 0) setSelectedIndex(foundIndex);
     };
 
     void runFetch();

@@ -4,7 +4,7 @@ import { UserSessionProvider, useUserSession } from "@/features/account/user-ses
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Image,
   InteractionManager,
@@ -33,13 +33,6 @@ const TAB_MAP: Record<string, string> = {
 const MAIN_TAB_ROUTES = new Set(Object.values(ROUTE_MAP));
 const NOTIFIKASI_PATH = "/main-menu/notifikasi";
 
-// ─── Auth Guard ───────────────────────────────────────────────────────────────
-
-/**
- * FIX (Security): Pastikan user sudah login sebelum bisa mengakses main-menu.
- * Jika session expired atau user belum login, redirect ke halaman login.
- * Komponen ini harus berada di dalam UserSessionProvider.
- */
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUserSession();
   const router = useRouter();
@@ -49,7 +42,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!loading && !user) {
       router.replace("/starter/login");
     }
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   // Jangan render konten selama session masih dicek atau user tidak ada
   if (loading || !user) return null;
@@ -63,8 +56,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
  * FIX (Security): Tangkap crash dari Provider agar tidak expose stack trace
  * atau data sensitif ke layar. Tampilkan fallback UI yang aman.
  */
-import React from "react";
-
 interface ErrorBoundaryState {
   hasError: boolean;
 }

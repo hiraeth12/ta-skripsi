@@ -1,4 +1,4 @@
-export type HistoryTabKey = "dirasakan" | "terdeteksi";
+export type HistoryTabKey = "dirasakan" | "terdeteksi" | "tsunami";
 
 export type YearMonthFilter = {
   year: number;
@@ -7,6 +7,7 @@ export type YearMonthFilter = {
 
 export const EARLIEST_YEAR = 2023;
 export const DIRASAKAN_FIRST = { year: 2026, month: 4 } as const;
+export const TSUNAMI_FIRST = { year: 2019, month: 1 } as const;
 
 export const MONTH_NAMES_ID = [
   "Januari",
@@ -35,26 +36,28 @@ export function lastDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+function getFirstAvailableMonth(tab: HistoryTabKey): YearMonthFilter {
+  if (tab === "dirasakan") return DIRASAKAN_FIRST;
+  if (tab === "tsunami") return TSUNAMI_FIRST;
+  return { year: EARLIEST_YEAR, month: 1 };
+}
+
 export function clampYearMonth(
   input: YearMonthFilter,
   tab: HistoryTabKey,
   now: Date = new Date(),
 ): YearMonthFilter {
   const current = getNowYearMonth(now);
+  const first = getFirstAvailableMonth(tab);
   let year = input.year;
   let month = input.month;
 
-  if (!Number.isFinite(year) || year < EARLIEST_YEAR) year = EARLIEST_YEAR;
+  if (!Number.isFinite(year) || year < first.year) year = first.year;
   if (!Number.isFinite(month) || month < 1) month = 1;
   if (month > 12) month = 12;
 
-  if (tab === "dirasakan") {
-    if (year < DIRASAKAN_FIRST.year) {
-      year = DIRASAKAN_FIRST.year;
-      month = DIRASAKAN_FIRST.month;
-    } else if (year === DIRASAKAN_FIRST.year && month < DIRASAKAN_FIRST.month) {
-      month = DIRASAKAN_FIRST.month;
-    }
+  if (year === first.year && month < first.month) {
+    month = first.month;
   }
 
   if (year > current.year) {
@@ -73,9 +76,9 @@ export function isYearDisabled(
   now: Date = new Date(),
 ): boolean {
   const current = getNowYearMonth(now);
-  if (year < EARLIEST_YEAR) return true;
+  const first = getFirstAvailableMonth(tab);
+  if (year < first.year) return true;
   if (year > current.year) return true;
-  if (tab === "dirasakan" && year < DIRASAKAN_FIRST.year) return true;
   return false;
 }
 
@@ -86,12 +89,10 @@ export function isMonthDisabled(
   now: Date = new Date(),
 ): boolean {
   const current = getNowYearMonth(now);
+  const first = getFirstAvailableMonth(tab);
   if (year === current.year && month > current.month) return true;
-  if (tab === "dirasakan") {
-    if (year < DIRASAKAN_FIRST.year) return true;
-    if (year === DIRASAKAN_FIRST.year && month < DIRASAKAN_FIRST.month) return true;
-  }
-  if (year < EARLIEST_YEAR) return true;
+  if (year < first.year) return true;
+  if (year === first.year && month < first.month) return true;
   return false;
 }
 
