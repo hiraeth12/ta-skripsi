@@ -1,5 +1,6 @@
 import EarthquakeTabBar, {
-  type EarthquakeTab,
+  EARTHQUAKE_MAP_TABS,
+  type EarthquakeMapTab,
 } from "@/components/earthquake-tab-bar";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
@@ -7,17 +8,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import GempaDirasakan from "./components/gempa-dirasakan-content";
 import GempaTerdeteksi from "./components/gempa-terdeteksi-content";
+import TsunamiContent from "./components/tsunami-content";
 
 export default function Earthquake() {
   const { tab } = useLocalSearchParams<{ tab?: string | string[] }>();
   const isFocused = useIsFocused();
-  const [activeTab, setActiveTab] = useState<EarthquakeTab>("GEMPA DIRASAKAN");
+  const [activeTab, setActiveTab] =
+    useState<EarthquakeMapTab>("GEMPA DIRASAKAN");
   const [loading, setLoading] = useState(false);
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(true);
   const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(false);
+  const [hasMountedTsunami, setHasMountedTsunami] = useState(false);
 
   useEffect(() => {
     const rawTab = Array.isArray(tab) ? tab[0] : tab;
+    if (rawTab === "TSUNAMI") {
+      setActiveTab("TSUNAMI");
+      return;
+    }
     if (rawTab === "GEMPA TERDETEKSI") {
       setActiveTab("GEMPA TERDETEKSI");
       return;
@@ -32,26 +40,29 @@ export default function Earthquake() {
       setHasMountedDirasakan(true);
       return;
     }
-    setHasMountedTerdeteksi(true);
+    if (activeTab === "GEMPA TERDETEKSI") {
+      setHasMountedTerdeteksi(true);
+      return;
+    }
+    setHasMountedTsunami(true);
   }, [activeTab]);
 
-  const handleTabPress = useCallback((nextTab: EarthquakeTab) => {
+  const handleTabPress = useCallback((nextTab: EarthquakeMapTab) => {
     setActiveTab(nextTab);
   }, []);
 
-  const tabBar = useMemo(
-    () => (
-      <EarthquakeTabBar
-        activeTab={activeTab}
-        onTabPress={handleTabPress}
-        disabled={loading}
-      />
-    ),
-    [activeTab, handleTabPress, loading],
-  );
+  const renderTabBar = useCallback(() => (
+  <EarthquakeTabBar
+    activeTab={activeTab}
+    onTabPress={handleTabPress}
+    disabled={loading}
+    tabs={EARTHQUAKE_MAP_TABS}
+  />
+), [activeTab, handleTabPress, loading]);
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
+  const tsunamiActive = isFocused && activeTab === "TSUNAMI";
 
   return (
     <View style={styles.container}>
@@ -64,7 +75,7 @@ export default function Earthquake() {
           pointerEvents={activeTab === "GEMPA DIRASAKAN" ? "auto" : "none"}
         >
           <GempaDirasakan
-            tabBar={tabBar}
+            tabBar={renderTabBar()}
             onLoadingChange={setLoading}
             isActive={dirasakanActive}
           />
@@ -80,9 +91,25 @@ export default function Earthquake() {
           pointerEvents={activeTab === "GEMPA TERDETEKSI" ? "auto" : "none"}
         >
           <GempaTerdeteksi
-            tabBar={tabBar}
+            tabBar={renderTabBar()}
             onLoadingChange={setLoading}
             isActive={terdeteksiActive}
+          />
+        </View>
+      )}
+
+      {hasMountedTsunami && (
+        <View
+          style={[
+            styles.tabPane,
+            activeTab !== "TSUNAMI" && styles.hiddenPane,
+          ]}
+          pointerEvents={activeTab === "TSUNAMI" ? "auto" : "none"}
+        >
+          <TsunamiContent
+            tabBar={renderTabBar()}
+            onLoadingChange={setLoading}
+            isActive={tsunamiActive}
           />
         </View>
       )}

@@ -1,7 +1,6 @@
-import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
+import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { Animated, Modal, StyleSheet, Text, View } from "react-native";
 
 export type GempaBumiNotificationData = {
@@ -25,13 +24,36 @@ export function GempaBumiNotificationModal({
   closeInSecond?: number;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const player = useAudioPlayer(require("../../assets/sounds/eq_eva.wav"));
 
   // Animations
   const scaleValue = useRef(new Animated.Value(0.5)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
   const blinkValue = useRef(new Animated.Value(0.4)).current;
+
+  const handleClose = useCallback(() => {
+    try {
+      if (player && player.playing) {
+        player.pause();
+      }
+    } catch {}
+
+    // Close pop-up animation
+    Animated.parallel([
+      Animated.timing(scaleValue, {
+        toValue: 0.5,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityValue, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+    });
+  }, [player, scaleValue, opacityValue, onClose]);
 
   // Sound and entry animation
   useEffect(() => {
@@ -89,9 +111,9 @@ export function GempaBumiNotificationModal({
         if (player && player.playing) {
           player.pause();
         }
-      } catch (e) {}
+      } catch {}
     };
-  }, [visible, player]);
+  }, [visible, player, blinkValue, opacityValue, scaleValue]);
 
   // Auto close effect
   useEffect(() => {
@@ -102,31 +124,7 @@ export function GempaBumiNotificationModal({
       }, 6000);
     }
     return () => clearTimeout(timer);
-  }, [visible, closeInSecond]);
-
-  const handleClose = () => {
-    try {
-      if (player && player.playing) {
-        player.pause();
-      }
-    } catch (e) {}
-
-    // Close pop-up animation
-    Animated.parallel([
-      Animated.timing(scaleValue, {
-        toValue: 0.5,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityValue, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onClose();
-    });
-  };
+  }, [visible, closeInSecond, handleClose]);
 
   if (!visible) return null;
 

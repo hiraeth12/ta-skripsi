@@ -1,6 +1,4 @@
-import EarthquakeTabBar, {
-  type EarthquakeTab,
-} from "@/components/earthquake-tab-bar";
+import EarthquakeTabBar from "@/components/earthquake-tab-bar";
 import { getApp } from "@/config/firebase-init";
 import { useUserSession } from "@/features/account/user-session-context";
 import { CACHE_KEYS, setCacheData } from "@/utils/cache";
@@ -37,8 +35,16 @@ import {
 import {
   GempaDirasakanHistoryContent,
   GempaTerdeteksiHistoryContent,
+  TsunamiHistoryContent,
 } from "./components";
 import styles from "./styles/history-screen";
+import { readRealtimeNode } from "./utils/read-realtime-node";
+import {
+  applyTsunamiHistoryFilters,
+  normalizeTsunamiHistoryEvents,
+  type TsunamiHistoryEvent,
+  type TsunamiHistoryFilters,
+} from "./utils/tsunami-history";
 import {
   buildDirasakanDateRange,
   buildTerdeteksiTimeRange,
@@ -57,10 +63,13 @@ import {
 
 const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 const ITEM_HEIGHT = 74;
+const HISTORY_TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI", "RIWAYAT TSUNAMI"] as const;
+type HistoryEarthquakeTab = (typeof HISTORY_TABS)[number];
 
-const TAB_CACHE: Record<EarthquakeTab, string> = {
+const TAB_CACHE: Record<HistoryEarthquakeTab, string> = {
   "GEMPA DIRASAKAN": CACHE_KEYS.DIRASAKAN_HISTORY ?? "dirasakan_history",
   "GEMPA TERDETEKSI": CACHE_KEYS.TERDETEKSI_HISTORY,
+  "RIWAYAT TSUNAMI": CACHE_KEYS.TSUNAMI_HISTORY,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,6 +88,10 @@ type ListItem = {
   kedalaman: string;
   felt: string;
   shakemap?: string | null;
+  eventType?: "quake" | "tsunami";
+  status?: string;
+  headline?: string;
+  latestWarningId?: string;
 };
 
 type HaversineFn = (a: number, b: number, c: number, d: number) => number;
@@ -180,6 +193,27 @@ function normalizeTerdeteksi(
     }, []);
 }
 
+function normalizeTsunamiList(events: TsunamiHistoryEvent[]): ListItem[] {
+  return events.map((event) => ({
+    id: event.eventKey,
+    latitude: event.latitude,
+    longitude: event.longitude,
+    magnitude: event.magnitude,
+    lokasi: event.area,
+    waktu: `${event.time} • ${event.date}`,
+    jarak: "",
+    distanceKm: "",
+    tanggal: event.date,
+    jam: event.time,
+    kedalaman: event.depth,
+    felt: "",
+    eventType: "tsunami",
+    status: event.latestSubject,
+    headline: event.latestHeadline,
+    latestWarningId: event.latestWarningId,
+  }));
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -242,11 +276,12 @@ const EarthquakeListItem = memo(({
   const magValue = parseFloat(item.magnitude);
   const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
+  const isTsunami = item.eventType === "tsunami";
 
   return (
     <TouchableOpacity
       activeOpacity={0.8}
-      onPress={() => onPress(item)}
+      onPress={handlePress}
       style={{
         backgroundColor: "#FFFFFF",
         borderRadius: 8,
@@ -280,7 +315,9 @@ const EarthquakeListItem = memo(({
           {item.tanggal} • {item.jam}
         </Text>
         <Text style={{ color: "#64748B", fontSize: 10 }} numberOfLines={1}>
-          Kedalaman: {item.kedalaman} • {item.distanceKm} km dari Anda
+          {isTsunami
+            ? `Kedalaman: ${item.kedalaman} • ${item.status || "-"}`
+            : `Kedalaman: ${item.kedalaman} • ${item.distanceKm} km dari Anda`}
         </Text>
       </View>
     </TouchableOpacity>
@@ -324,19 +361,27 @@ export default function History() {
     selectedKedalaman?: string;
     selectedFelt?: string;
     selectedShakemap?: string;
+    selectedStatus?: string;
+    selectedHeadline?: string;
+    selectedLatestWarningId?: string;
   }>();
 
   const tabParam = asSingle(searchParams.tab);
-  const initialTab: EarthquakeTab =
-    tabParam === "terdeteksi" ? "GEMPA TERDETEKSI" : "GEMPA DIRASAKAN";
+  const initialTab: HistoryEarthquakeTab =
+    tabParam === "tsunami"
+      ? "RIWAYAT TSUNAMI"
+      : tabParam === "terdeteksi"
+        ? "GEMPA TERDETEKSI"
+        : "GEMPA DIRASAKAN";
   const now = useMemo(() => new Date(), [])
 
   // ── State ──────────────────────────────────────────────────────────────────
 
-  const [activeTab, setActiveTab] = useState<EarthquakeTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<HistoryEarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
   const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
+  const [hasMountedTsunami, setHasMountedTsunami] = useState(initialTab === "RIWAYAT TSUNAMI");
   // Panel animation: 0 = slid in (visible), LIST_PANEL_HEIGHT% = slid out (hidden)
   const LIST_PANEL_HEIGHT_PCT = 40; // must match the panel's height below
   const listPanelSlide = useRef(
@@ -380,24 +425,53 @@ export default function History() {
       year: Number.isFinite(rawYear) ? rawYear : fallback.year,
       month: Number.isFinite(rawMonth) ? rawMonth : fallback.month,
     };
-    const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+    const tabKey: HistoryTabKey =
+      activeTab === "RIWAYAT TSUNAMI"
+        ? "tsunami"
+        : activeTab === "GEMPA TERDETEKSI"
+          ? "terdeteksi"
+          : "dirasakan";
     return clampYearMonth(base, tabKey, now);
   }, [activeTab, now, rawMonth, rawYear]);
-  const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+  const tabKey: HistoryTabKey =
+    activeTab === "RIWAYAT TSUNAMI"
+      ? "tsunami"
+      : activeTab === "GEMPA TERDETEKSI"
+        ? "terdeteksi"
+        : "dirasakan";
   const effectiveMonths = useMemo(() => {
     const baseMonths = rawMonths.length > 0
       ? rawMonths
       : [effectiveFilter.month];
     return normalizeFilterMonths(baseMonths, effectiveFilter.year, tabKey, now);
   }, [effectiveFilter.month, effectiveFilter.year, now, rawMonths, tabKey]);
+  const tsunamiFilters = useMemo<TsunamiHistoryFilters>(
+    () => ({
+      year: effectiveFilter.year,
+    }),
+    [effectiveFilter.year],
+  );
 
   // ── Tab param sync ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     const incoming = asSingle(searchParams.tab);
+    if (incoming === "tsunami") setActiveTab("RIWAYAT TSUNAMI");
     if (incoming === "terdeteksi") setActiveTab("GEMPA TERDETEKSI");
     else if (incoming === "dirasakan") setActiveTab("GEMPA DIRASAKAN");
   }, [searchParams.tab]);
+
+  useEffect(() => {
+    if (activeTab === "GEMPA DIRASAKAN") {
+      setHasMountedDirasakan(true);
+      return;
+    }
+    if (activeTab === "GEMPA TERDETEKSI") {
+      setHasMountedTerdeteksi(true);
+      return;
+    }
+    setHasMountedTsunami(true);
+  }, [activeTab]);
 
   // ── External selection ────────────────────────────────────────────────────
 
@@ -428,6 +502,9 @@ export default function History() {
       kedalaman: asSingle(searchParams.selectedKedalaman) || "-",
       felt: asSingle(searchParams.selectedFelt),
       shakemap: asSingle(searchParams.selectedShakemap) || null,
+      status: asSingle(searchParams.selectedStatus) || "-",
+      headline: asSingle(searchParams.selectedHeadline) || "-",
+      latestWarningId: asSingle(searchParams.selectedLatestWarningId) || "",
     };
   }, [searchParams]);
 
@@ -438,12 +515,14 @@ export default function History() {
       selectedWaktu: undefined, selectedJarak: undefined, selectedDistanceKm: undefined,
       selectedTanggal: undefined, selectedJam: undefined, selectedKedalaman: undefined,
       selectedFelt: undefined, selectedShakemap: undefined,
+      selectedStatus: undefined, selectedHeadline: undefined,
+      selectedLatestWarningId: undefined,
     });
   }, [router]);
 
   // ── Tab handlers ───────────────────────────────────────────────────────────
 
-  const handleAppTabPress = useCallback((tab: EarthquakeTab) => {
+  const handleAppTabPress = useCallback((tab: HistoryEarthquakeTab) => {
     // FIX: Clear stale externalSelection params when switching tabs.
     // Without this, the params persist in the URL and when the content component
     // for the newly-active tab mounts/activates it reads the old params and calls
@@ -452,7 +531,8 @@ export default function History() {
     setActiveTab(tab);
     showListPanel();
     if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
-    else setHasMountedTerdeteksi(true);
+    else if (tab === "GEMPA TERDETEKSI") setHasMountedTerdeteksi(true);
+    else setHasMountedTsunami(true);
   }, [clearSelectionParams, showListPanel]);
 
   const handleExternalSelectionHandled = useCallback(() => {
@@ -462,17 +542,34 @@ export default function History() {
   const handleFilterPress = useCallback(() => {
     if (isOpeningFilter) return;
     setIsOpeningFilter(true);
+    const nextParams: Record<string, string> = {
+      tab:
+        activeTab === "RIWAYAT TSUNAMI"
+          ? "tsunami"
+          : activeTab === "GEMPA DIRASAKAN"
+            ? "dirasakan"
+            : "terdeteksi",
+      filterYear: String(effectiveFilter.year),
+      returnTo: pathname,
+    };
+
+    if (activeTab !== "RIWAYAT TSUNAMI") {
+      nextParams.filterMonth = String(effectiveMonths[0]);
+      nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
+    }
+
     router.push({
       pathname: "/main-menu/filter-gempa-screen",
-      params: {
-        tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
-        filterYear: String(effectiveFilter.year),
-        filterMonth: String(effectiveMonths[0]),
-        filterMonths: serializeFilterMonths(effectiveMonths),
-        returnTo: pathname,
-      },
+      params: nextParams,
     });
-  }, [activeTab, effectiveFilter.year, effectiveMonths, isOpeningFilter, pathname, router]);
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveMonths,
+    isOpeningFilter,
+    pathname,
+    router,
+  ]);
 
   useEffect(() => {
     if (isFocused) {
@@ -497,7 +594,10 @@ export default function History() {
 
   useEffect(() => {
     let isMounted = true;
-    const cacheKey = `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
+    const isTsunami = activeTab === "RIWAYAT TSUNAMI";
+    const cacheKey = isTsunami
+      ? `${TAB_CACHE[activeTab]}_${effectiveFilter.year}`
+      : `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
     const isDir = activeTab === "GEMPA DIRASAKAN";
     const orderField = isDir ? "date" : "time";
 
@@ -518,6 +618,34 @@ export default function History() {
       try {
         const app = getApp();
         const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+
+        if (isTsunami) {
+          const rawTsunamiEvents = await readRealtimeNode(db, DATABASE_URL, "tsunamiEvents");
+          if (!isMounted) return;
+
+          if (!rawTsunamiEvents) {
+            setItems([]);
+            setListLoading(false);
+            return;
+          }
+
+          const normalizedEvents = normalizeTsunamiHistoryEvents(rawTsunamiEvents);
+          const filteredEvents = applyTsunamiHistoryFilters(
+            normalizedEvents,
+            tsunamiFilters,
+          );
+          const normalized = normalizeTsunamiList(filteredEvents);
+
+          AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
+          setCacheData(cacheKey, normalized);
+
+          if (isMounted) {
+            setItems(normalized);
+            setListLoading(false);
+          }
+          return;
+        }
+
         const snapshots = await Promise.all(
           effectiveMonths.map(async (month) => {
             const range = isDir
@@ -591,7 +719,14 @@ export default function History() {
     setListLoading(true);
     void fetchData();
     return () => { isMounted = false; };
-  }, [activeTab, effectiveFilter.year, effectiveMonths, userLocation.lat, userLocation.lon]);
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveMonths,
+    tsunamiFilters,
+    userLocation.lat,
+    userLocation.lon,
+  ]);
 
   // ── List item press → fly to marker ──────────────────────────────────────
   // Sets params which the content component reads as externalSelection.
@@ -601,8 +736,13 @@ export default function History() {
     (item: ListItem) => {
       router.setParams({ selectedEventId: undefined });
       setTimeout(() => {
-        router.setParams({
-          tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
+        const nextParams: Record<string, string | undefined> = {
+          tab:
+            activeTab === "RIWAYAT TSUNAMI"
+              ? "tsunami"
+              : activeTab === "GEMPA DIRASAKAN"
+                ? "dirasakan"
+                : "terdeteksi",
           selectedEventId: item.id,
           selectedLatitude: String(item.latitude),
           selectedLongitude: String(item.longitude),
@@ -616,15 +756,29 @@ export default function History() {
           selectedKedalaman: item.kedalaman,
           selectedFelt: item.felt,
           selectedShakemap: item.shakemap ?? "",
+          selectedStatus: item.status ?? "",
+          selectedHeadline: item.headline ?? "",
+          selectedLatestWarningId: item.latestWarningId ?? "",
           filterYear: String(effectiveFilter.year),
-          filterMonth: String(effectiveMonths[0]),
-          filterMonths: serializeFilterMonths(effectiveMonths),
-        });
+        };
+
+        if (activeTab !== "RIWAYAT TSUNAMI") {
+          nextParams.filterMonth = String(effectiveMonths[0]);
+          nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
+        }
+
+        router.setParams(nextParams);
       }, 0);
       // Slide list panel away so map is full screen during fly-in
       hideListPanel();
     },
-    [activeTab, effectiveFilter.year, effectiveMonths, router, hideListPanel],
+    [
+      activeTab,
+      effectiveFilter.year,
+      effectiveMonths,
+      hideListPanel,
+      router,
+    ],
   );
 
   // ── FlatList helpers ──────────────────────────────────────────────────────
@@ -646,13 +800,28 @@ export default function History() {
   const listEmpty = useMemo(
     () => (
       <Text style={{ color: "#E6F4FF", textAlign: "center", marginTop: 10, fontSize: 12 }}>
-        Data gempa belum tersedia.
+        {activeTab === "RIWAYAT TSUNAMI"
+          ? "Data tsunami belum tersedia."
+          : "Data gempa belum tersedia."}
       </Text>
     ),
-    [],
+    [activeTab],
   );
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
+
+  const periodLabel = useMemo(() => {
+    if (activeTab !== "RIWAYAT TSUNAMI") {
+      return `${effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} ${effectiveFilter.year}`;
+    }
+
+    const parts = [String(effectiveFilter.year)];
+    return parts.join(" • ");
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveMonths,
+  ]);
 
   const tabBar = useMemo(
     () => (
@@ -661,11 +830,12 @@ export default function History() {
           activeTab={activeTab}
           onTabPress={handleAppTabPress}
           disabled={loading}
+          tabs={HISTORY_TABS}
         />
         <View style={styles.designSection}>
           <View style={styles.periodChip}>
             <Text style={styles.periodChipText}>
-              {effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} {effectiveFilter.year}
+              {periodLabel}
             </Text>
           </View>
           <View style={styles.actionRow}>
@@ -683,11 +853,12 @@ export default function History() {
         </View>
       </View>
     ),
-    [activeTab, effectiveFilter.year, effectiveMonths, handleAppTabPress, handleFilterPress, isOpeningFilter, loading],
+    [activeTab, handleAppTabPress, handleFilterPress, isOpeningFilter, loading, periodLabel],
   );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
+  const tsunamiActive = isFocused && activeTab === "RIWAYAT TSUNAMI";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -744,6 +915,24 @@ export default function History() {
             />
           </View>
         )}
+
+        {hasMountedTsunami && (
+          <View
+            style={[styles.tabPane, activeTab !== "RIWAYAT TSUNAMI" && styles.hiddenPane]}
+            pointerEvents={activeTab === "RIWAYAT TSUNAMI" ? "auto" : "none"}
+          >
+            <TsunamiHistoryContent
+              tabBar={tabBar}
+              onLoadingChange={setLoading}
+              externalSelection={externalSelection}
+              onListSelectionHandled={handleExternalSelectionHandled}
+              onCardClose={() => showListPanel()}
+              onCardOpen={() => hideListPanel()}
+              filters={tsunamiFilters}
+              isActive={tsunamiActive}
+            />
+          </View>
+        )}
       </Animated.View>
 
       {/* Bottom list panel — slides up from bottom over the map */}
@@ -773,7 +962,11 @@ export default function History() {
       >
           <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
             <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
-              {activeTab === "GEMPA DIRASAKAN" ? "Gempa Dirasakan Terbaru" : "Gempa Terdeteksi Terbaru"}
+              {activeTab === "RIWAYAT TSUNAMI"
+                ? "Riwayat Tsunami"
+                : activeTab === "GEMPA DIRASAKAN"
+                  ? "Gempa Dirasakan Terbaru"
+                  : "Gempa Terdeteksi Terbaru"}
             </Text>
           </View>
 

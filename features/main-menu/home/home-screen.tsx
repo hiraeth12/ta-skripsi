@@ -877,9 +877,12 @@ export default function Home() {
                 }}
                 hasShakeMap={!!tsunamiData?.shakemap}
                 onShare={handleShareTsunami}
-                onCardPress={() => {
-                  // TODO: Navigate to a tsunami detail route when one exists.
-                }}
+                onCardPress={() =>
+                  router.push({
+                    pathname: "/main-menu/earthquake",
+                    params: { tab: "TSUNAMI" },
+                  })
+                }
               />
             </View>
           </ScrollView>

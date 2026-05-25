@@ -1,6 +1,6 @@
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { ModalShakeMap } from "@/components/modal-shakemap";
-import { shareQuake } from "@/utils/share"
+import { shareQuake } from "@/utils/share";
 import { haversineDistanceKm } from "@/utils/geo";
 import {
   getRealisticShakeRadiiMeters,
@@ -378,7 +378,20 @@ export default function GempaDirasakan({
             : null
         }
         onMapPress={() => dismissCard()}
-        onMarkerPress={() => openCard()}
+        onMarkerPress={() => {
+          if (latestQuake) {
+            mapRef.current?.animateToRegion(
+              {
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                latitudeDelta: 2,
+                longitudeDelta: 2,
+              },
+              600,
+            );
+          }
+          openCard();
+        }}
       />
 
       <View style={styles.topControls}>

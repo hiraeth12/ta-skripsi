@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import styles from "./styles/filter-gempa-screen";
 import {
   clampYearMonth,
+  EARLIEST_YEAR,
   getNowYearMonth,
   isMonthDisabled,
   isYearDisabled,
@@ -13,10 +14,9 @@ import {
   normalizeFilterMonths,
   parseFilterMonthsParam,
   serializeFilterMonths,
+  TSUNAMI_FIRST,
   type HistoryTabKey,
 } from "./utils/filter";
-
-const YEAR_START = 2023;
 
 function asSingle(value?: string | string[]): string {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -47,7 +47,13 @@ export default function FilterGempaScreen() {
     returnTo?: string;
   }>();
   const now = useMemo(() => new Date(), []);
-  const tab: HistoryTabKey = params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const tab: HistoryTabKey =
+    params.tab === "tsunami"
+      ? "tsunami"
+      : params.tab === "terdeteksi"
+        ? "terdeteksi"
+        : "dirasakan";
+  const isTsunami = tab === "tsunami";
   const nowDefault = getNowYearMonth(now);
   const incomingYear = Number.parseInt(String(params.filterYear ?? ""), 10);
   const incomingMonth = Number.parseInt(String(params.filterMonth ?? ""), 10);
@@ -88,14 +94,19 @@ export default function FilterGempaScreen() {
       now,
     );
     const months = normalizeFilterMonths(selectedMonths, clamped.year, tab, now);
+    const nextParams: Record<string, string> = {
+      tab,
+      filterYear: String(clamped.year),
+    };
+
+    if (!isTsunami) {
+      nextParams.filterMonth = String(months[0]);
+      nextParams.filterMonths = serializeFilterMonths(months);
+    }
+
     router.replace({
       pathname: "/main-menu/history",
-      params: {
-        tab,
-        filterYear: String(clamped.year),
-        filterMonth: String(months[0]),
-        filterMonths: serializeFilterMonths(months),
-      },
+      params: nextParams,
     });
   };
 
@@ -109,14 +120,19 @@ export default function FilterGempaScreen() {
     }
 
     if (returnBasePath === "/main-menu/history") {
+      const nextParams: Record<string, string> = {
+        tab,
+        filterYear: String(initialFilter.year),
+      };
+
+      if (!isTsunami) {
+        nextParams.filterMonth = String(initialMonths[0] ?? initialFilter.month);
+        nextParams.filterMonths = serializeFilterMonths(initialMonths);
+      }
+
       router.replace({
         pathname: "/main-menu/history",
-        params: {
-          tab,
-          filterYear: String(initialFilter.year),
-          filterMonth: String(initialMonths[0] ?? initialFilter.month),
-          filterMonths: serializeFilterMonths(initialMonths),
-        },
+        params: nextParams,
       });
       return;
     }
@@ -132,16 +148,21 @@ export default function FilterGempaScreen() {
 
   const years = useMemo(() => {
     const currentYear = now.getFullYear();
+    const startYear = isTsunami ? TSUNAMI_FIRST.year - 1 : EARLIEST_YEAR;
     const list: number[] = [];
-    for (let year = YEAR_START; year <= currentYear; year += 1) {
+    for (let year = startYear; year <= currentYear; year += 1) {
       list.push(year);
     }
     return list;
-  }, [now]);
+  }, [isTsunami, now]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Filter</Text>
@@ -231,6 +252,7 @@ export default function FilterGempaScreen() {
             )}
           </View>
 
+          {!isTsunami && (
           <View style={styles.sectionContainer}>
             <TouchableOpacity
               style={[
@@ -310,6 +332,7 @@ export default function FilterGempaScreen() {
               </View>
             )}
           </View>
+          )}
 
           {/* === FOOTER BUTTONS === */}
           <View style={styles.footer}>
@@ -330,7 +353,7 @@ export default function FilterGempaScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
