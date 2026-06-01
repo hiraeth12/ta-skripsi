@@ -1,4 +1,4 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import { router } from "expo-router";
 import { Image, Text, View } from "react-native";
 import { styles } from "../styles/success-new-password-styles";

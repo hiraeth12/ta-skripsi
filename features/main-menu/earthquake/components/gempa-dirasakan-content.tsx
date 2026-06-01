@@ -1,24 +1,21 @@
+import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
-import { ModalShakeMap } from "@/components/modal-shakemap";
-import { shareQuake } from "@/utils/share";
-import { haversineDistanceKm } from "@/utils/geo";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import { useNetworkError } from "@/hooks/use-network-error";
+import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import {
-  getRealisticShakeRadiiMeters,
-  parseDepthKm,
+    getRealisticShakeRadiiMeters,
+    parseDepthKm,
 } from "@/utils/earthquake-impact";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { formatLatText, formatLonText, haversineDistanceKm } from "@/utils/geo";
+import { shareQuake } from "@/utils/share";
+import { Feather } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  AppState,
-  PanResponder,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
 
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
@@ -32,7 +29,6 @@ const REFERENCE_LOCATION = {
   longitude: 107.6191,
 };
 
-// Module-level singleton — not recreated on every poll
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 
 type LatestQuake = {
@@ -62,30 +58,27 @@ export default function GempaDirasakan({
   isActive = true,
 }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
-  const [showCard, setShowCard] = useState(false);
-  const showCardRef = useRef(false);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
-    useState(false);
+
+  const {
+    showCard,
+    translateY,
+    opacity,
+    btnOpacity,
+    panResponder,
+    openCard,
+    dismissCard,
+  } = useCardAnimation();
+
   const latestEventId = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isFetching = useRef(false);
-  const pollDelayRef = useRef(MIN_POLL_MS);
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const networkErrorShownRef = useRef(false);
-  const isOfflineRef = useRef(false); // true when last fetch failed due to network loss
-  const mapRef = useRef<MapViewType | null>(null);
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const btnOpacity = useRef(new Animated.Value(0)).current;
 
-  const showNetworkError = useCallback(() => {
-    if (networkErrorShownRef.current) return;
-    networkErrorShownRef.current = true;
-    setNetworkErrorModalVisible(true);
-  }, []);
+  const isOfflineRef = useRef(false);
+  const mapRef = useRef<MapViewType | null>(null);
+  const { networkErrorVisible, showNetworkError, dismissNetworkError } =
+    useNetworkError();
 
   const waveOverlays = useMemo(() => {
     if (!latestQuake) return [];
@@ -110,127 +103,24 @@ export default function GempaDirasakan({
     ];
   }, [latestQuake]);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: 600,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 180,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-          });
-        } else {
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
-
-  function openCard() {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    btnOpacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(btnOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
-  function dismissCard(callback?: () => void) {
-    if (showCardRef.current) {
-      showCardRef.current = false;
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(btnOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowCard(false);
-        callback?.();
-      });
-    } else {
-      callback?.();
-    }
-  }
-
-  useEffect(() => {
-    if (!isActive) return;
-    isMountedRef.current = true;
-
-    type FetchResult = {
+  const fetchLatestQuake = useCallback(
+    async (
+      silent = true,
+      abortSignal?: AbortSignal,
+    ): Promise<{
       changed: boolean;
       ok: boolean;
       latitude?: number;
       longitude?: number;
-    };
-
-    async function fetchLatestQuake(silent = true): Promise<FetchResult> {
+    }> => {
       if (isFetching.current) return { changed: false, ok: true };
       isFetching.current = true;
       if (!silent) onLoadingChange?.(true);
       try {
         if (!API_URL) return { changed: false, ok: true };
-        const res = await fetch(`${API_URL.trim()}${Date.now()}`);
+        const res = await fetch(`${API_URL.trim()}${Date.now()}`, {
+          signal: abortSignal,
+        });
         const raw = await res.text();
         let latest: any = null;
         let globalIdentifier = "";
@@ -263,8 +153,7 @@ export default function GempaDirasakan({
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
           isOfflineRef.current = false;
-          networkErrorShownRef.current = false;
-          setNetworkErrorModalVisible(false);
+          dismissNetworkError();
           setTimeout(() => {
             mapRef.current?.animateToRegion(
               { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
@@ -293,8 +182,8 @@ export default function GempaDirasakan({
             jam: latest.time ?? "",
             kedalaman: latest.depth ?? "",
             felt: latest.felt ?? "",
-            latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
-            lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+            latText: formatLatText(latitude),
+            lonText: formatLonText(longitude),
           });
 
           if (!wasOffline) {
@@ -307,8 +196,8 @@ export default function GempaDirasakan({
         }
 
         return { changed: !isSameEvent, ok: true, latitude, longitude };
-      } catch {
-        // Mark as offline and show the error modal
+      } catch (err: any) {
+        if (err?.name === "AbortError") return { changed: false, ok: false };
         isOfflineRef.current = true;
         showNetworkError();
         return { changed: false, ok: false };
@@ -316,50 +205,16 @@ export default function GempaDirasakan({
         if (!silent) onLoadingChange?.(false);
         isFetching.current = false;
       }
-    }
+    },
+    [onLoadingChange, showNetworkError, dismissNetworkError],
+  );
 
-    function clearPollTimer() {
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-    }
-    function scheduleNextPoll({ changed, ok }: FetchResult) {
-      if (!isMountedRef.current) return;
-      // Back off slower when offline so we don't hammer a dead connection
-      if (!ok) {
-        pollDelayRef.current = Math.min(
-          pollDelayRef.current + 15_000,
-          MAX_POLL_MS,
-        );
-      } else {
-        pollDelayRef.current = changed
-          ? MIN_POLL_MS
-          : Math.min(pollDelayRef.current + 10_000, MAX_POLL_MS);
-      }
-      clearPollTimer();
-      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
-    }
-    async function runPollingLoop() {
-      const result = await fetchLatestQuake(true);
-      scheduleNextPoll(result);
-    }
+  usePollingWithBackoff(fetchLatestQuake, {
+    isActive,
+    minMs: MIN_POLL_MS,
+    maxMs: MAX_POLL_MS,
+  });
 
-    fetchLatestQuake(false).then(scheduleNextPoll);
-
-    const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && isMountedRef.current && isActive) {
-        pollDelayRef.current = MIN_POLL_MS;
-        clearPollTimer();
-        runPollingLoop();
-      }
-    });
-
-    return () => {
-      isMountedRef.current = false;
-      clearPollTimer();
-      appStateSub.remove();
-    };
-  }, [isActive, onLoadingChange, showNetworkError]);
-
-  // FIX 3: NetworkErrorModal is now inside the single root <View>, not after it
   return (
     <View style={styles.container}>
       <EarthquakeMap
@@ -424,24 +279,28 @@ export default function GempaDirasakan({
               icon="triangle-wave"
               value={latestQuake.magnitude}
               label="Magnitudo"
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={latestQuake.kedalaman}
               label="Kedalaman"
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.latText}
               label="LS"
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.lonText}
               label="BT"
+              styles={styles}
             />
           </View>
           <View style={styles.separator} />
@@ -449,22 +308,26 @@ export default function GempaDirasakan({
             icon="location"
             label="Lokasi Gempa :"
             value={latestQuake.wilayah}
+            styles={styles}
           />
           <DetailItem
             icon="time-outline"
             label="Waktu :"
             value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
+            styles={styles}
           />
           <DetailItem
             icon="walk-outline"
             label="Jarak :"
             value={`${latestQuake.distanceKm} km`}
+            styles={styles}
           />
           {!!latestQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
               label="Wilayah Dirasakan (Skala MMI) :"
               value={latestQuake.felt}
+              styles={styles}
             />
           )}
           <TouchableOpacity
@@ -488,30 +351,9 @@ export default function GempaDirasakan({
       />
 
       <NetworkErrorModal
-        visible={networkErrorModalVisible}
-        onClose={() => {
-          setNetworkErrorModalVisible(false);
-          networkErrorShownRef.current = false;
-        }}
+        visible={networkErrorVisible}
+        onClose={dismissNetworkError}
       />
     </View>
   );
 }
-
-const StatItem = ({ icon, value, label }: any) => (
-  <View style={styles.statTopItem}>
-    <MaterialCommunityIcons name={icon} size={20} color="#0369A1" />
-    <Text style={styles.statTopValue}>{value}</Text>
-    <Text style={styles.statTopLabel}>{label}</Text>
-  </View>
-);
-
-const DetailItem = ({ icon, label, value }: any) => (
-  <View style={styles.infoRow}>
-    <Ionicons name={icon} size={18} color="#1E6F9F" style={styles.infoIcon} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);

@@ -1,20 +1,20 @@
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
-import EarthquakeMap from "@/components/earthquake-map";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import type { MapViewType } from "@/constants/map";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import { useNetworkError } from "@/hooks/use-network-error";
+import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
+import { formatLatText, formatLonText } from "@/utils/geo";
 import { shareQuake } from "@/utils/share";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  AppState,
-  PanResponder,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useCallback, useRef, useState } from "react";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
+const MIN_POLL_MS = 30_000;
+const MAX_POLL_MS = 120_000;
 
 type LatestQuake = {
   latitude: number;
@@ -41,147 +41,39 @@ export default function GempaTerdeteksi({
   isActive = true,
 }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
-  const [showCard, setShowCard] = useState(false);
-  const showCardRef = useRef(false);
-  const networkErrorShownRef = useRef(false);
   const mapRef = useRef<MapViewType | null>(null);
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const btnOpacity = useRef(new Animated.Value(0)).current;
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
-    useState(false);
+  const { networkErrorVisible, showNetworkError, dismissNetworkError } =
+    useNetworkError();
 
-  const showNetworkError = useCallback(() => {
-    if (networkErrorShownRef.current) return;
-    networkErrorShownRef.current = true;
-    setNetworkErrorModalVisible(true);
-  }, []);
+  const {
+    showCard,
+    translateY,
+    opacity,
+    btnOpacity,
+    panResponder,
+    openCard,
+    dismissCard,
+  } = useCardAnimation();
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: 600,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 180,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-          });
-        } else {
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
-
-  function openCard() {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    btnOpacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(btnOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-
-  function dismissCard(callback?: () => void) {
-    if (showCardRef.current) {
-      showCardRef.current = false;
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(btnOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowCard(false);
-        callback?.();
-      });
-    } else {
-      callback?.();
-    }
-  }
-
-  const abortRef = useRef<AbortController | null>(null);
   const latestEventIdRef = useRef<string | null>(null);
-  const isMountedRef = useRef(true);
   const isFirstLoadRef = useRef(true);
-  const pollDelayRef = useRef(30_000);
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFetchingRef = useRef(false);
   const isOfflineRef = useRef(false);
 
-  useEffect(() => {
-    if (!isActive) return;
-    isMountedRef.current = true;
-    abortRef.current = new AbortController();
-
-    type FetchResult = { changed: boolean; ok: boolean };
-
-    async function fetchLatestQuake(silent = true): Promise<FetchResult> {
+  const fetchLatestQuake = useCallback(
+    async (
+      silent = true,
+      abortSignal: AbortSignal,
+    ): Promise<{ changed: boolean; ok: boolean }> => {
+      if (isFetchingRef.current) return { changed: false, ok: true };
+      isFetchingRef.current = true;
       if (!silent) onLoadingChange?.(true);
+
       try {
         if (!API_URL) return { changed: false, ok: true };
 
         const url = `${API_URL.trim()}${Date.now()}`;
-        const res = await fetch(url, { signal: abortRef.current?.signal });
+        const res = await fetch(url, { signal: abortSignal });
         const data = await res.json();
 
         const features = data?.features;
@@ -200,19 +92,16 @@ export default function GempaTerdeteksi({
         const coords = latest?.geometry?.coordinates;
         const longitude = parseFloat(coords?.[0] ?? "0");
         const latitude = parseFloat(coords?.[1] ?? "0");
-        if (isNaN(latitude) || isNaN(longitude)) return { changed: false, ok: true };
+        if (isNaN(latitude) || isNaN(longitude))
+          return { changed: false, ok: true };
 
         const eventId = `${props.time ?? ""}_${latitude}_${longitude}`;
         const isSameEvent = eventId && eventId === latestEventIdRef.current;
-        if (isSameEvent) return { changed: false, ok: true };
-
-        latestEventIdRef.current = eventId;
 
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
           isOfflineRef.current = false;
-          networkErrorShownRef.current = false;
-          setNetworkErrorModalVisible(false);
+          dismissNetworkError();
           setTimeout(() => {
             mapRef.current?.animateToRegion(
               { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
@@ -220,6 +109,10 @@ export default function GempaTerdeteksi({
             );
           }, 350);
         }
+
+        if (isSameEvent) return { changed: false, ok: true };
+
+        latestEventIdRef.current = eventId;
 
         const [tanggal, jamRaw] = (props.time ?? "").split(" ");
         const jam = (jamRaw ?? "").split(".")[0];
@@ -235,8 +128,8 @@ export default function GempaTerdeteksi({
           jam: jam ?? "",
           kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
           felt: props.fase ?? "",
-          latText: `${absLat}°${latitude < 0 ? "LS" : "LU"}`,
-          lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
+          latText: formatLatText(latitude),
+          lonText: formatLonText(longitude),
         });
 
         if (!wasOffline) {
@@ -249,56 +142,29 @@ export default function GempaTerdeteksi({
 
         return { changed: true, ok: true };
       } catch (e) {
-        if ((e as Error).name === "AbortError") return { changed: false, ok: true };
+        if ((e as Error).name === "AbortError")
+          return { changed: false, ok: false };
         isOfflineRef.current = true;
-        if (e instanceof TypeError && (e as Error).message.includes("Network")) {
+        if (
+          e instanceof TypeError &&
+          (e as Error).message.includes("Network")
+        ) {
           showNetworkError();
         }
         return { changed: false, ok: false };
       } finally {
-        onLoadingChange?.(false);
+        if (!silent) onLoadingChange?.(false);
+        isFetchingRef.current = false;
       }
-    }
+    },
+    [dismissNetworkError, onLoadingChange, showNetworkError],
+  );
 
-    function clearPollTimer() {
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-    }
-
-    function scheduleNextPoll({ changed, ok }: FetchResult) {
-      if (!isMountedRef.current) return;
-      if (!ok) {
-        pollDelayRef.current = Math.min(pollDelayRef.current + 15_000, 120_000);
-      } else {
-        pollDelayRef.current = changed
-          ? 30_000
-          : Math.min(pollDelayRef.current + 10_000, 120_000);
-      }
-      clearPollTimer();
-      pollTimerRef.current = setTimeout(runPollingLoop, pollDelayRef.current);
-    }
-
-    async function runPollingLoop() {
-      const result = await fetchLatestQuake(true);
-      scheduleNextPoll(result);
-    }
-
-    fetchLatestQuake(false).then(scheduleNextPoll);
-
-    const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && isMountedRef.current && isActive) {
-        pollDelayRef.current = 30_000;
-        clearPollTimer();
-        runPollingLoop();
-      }
-    });
-
-    return () => {
-      isMountedRef.current = false;
-      clearPollTimer();
-      abortRef.current?.abort();
-      appStateSub.remove();
-    };
-  }, [isActive, onLoadingChange, showNetworkError]);
+  usePollingWithBackoff(fetchLatestQuake, {
+    isActive,
+    minMs: MIN_POLL_MS,
+    maxMs: MAX_POLL_MS,
+  });
 
   return (
     <View style={styles.container}>
@@ -359,104 +225,69 @@ export default function GempaTerdeteksi({
           </View>
 
           <View style={styles.statsTopRow}>
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="triangle-wave"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.magnitude}</Text>
-              <Text style={styles.statTopLabel}>Magnitudo</Text>
-            </View>
+            <StatItem
+              icon="triangle-wave"
+              value={latestQuake.magnitude}
+              label="Magnitudo"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons name="rss" size={20} color="#0369A1" />
-              <Text style={styles.statTopValue}>{latestQuake.kedalaman}</Text>
-              <Text style={styles.statTopLabel}>Kedalaman</Text>
-            </View>
+            <StatItem
+              icon="rss"
+              value={latestQuake.kedalaman}
+              label="Kedalaman"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.latText}</Text>
-              <Text style={styles.statTopLabel}>LS</Text>
-            </View>
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.latText}
+              label="LS"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.lonText}</Text>
-              <Text style={styles.statTopLabel}>BT</Text>
-            </View>
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.lonText}
+              label="BT"
+              styles={styles}
+            />
           </View>
 
           <View style={styles.separator} />
 
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="location"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>Lokasi Gempa :</Text>
-              <Text style={styles.infoValue}>{latestQuake.wilayah}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="calendar-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>Tanggal :</Text>
-              <Text style={styles.infoValue}>{latestQuake.tanggal}</Text>
-            </View>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>Jam :</Text>
-              <Text style={styles.infoValue}>{latestQuake.jam}</Text>
-            </View>
-          </View>
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={latestQuake.wilayah}
+            styles={styles}
+          />
+          <DetailItem
+            icon="calendar-outline"
+            label="Tanggal :"
+            value={latestQuake.tanggal}
+            styles={styles}
+          />
+          <DetailItem
+            icon="time-outline"
+            label="Jam :"
+            value={latestQuake.jam}
+            styles={styles}
+          />
           {!!latestQuake.felt && (
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={18}
-                color="#1E6F9F"
-                style={styles.infoIcon}
-              />
-              <View style={styles.infoTextFlex}>
-                <Text style={styles.infoLabel}>Fase :</Text>
-                <Text style={styles.infoValue}>{latestQuake.felt}</Text>
-              </View>
-            </View>
+            <DetailItem
+              icon="alert-circle-outline"
+              label="Fase :"
+              value={latestQuake.felt}
+              styles={styles}
+            />
           )}
         </Animated.View>
       )}
 
       <NetworkErrorModal
-        visible={networkErrorModalVisible}
-        onClose={() => {
-          setNetworkErrorModalVisible(false);
-          networkErrorShownRef.current = false;
-        }}
+        visible={networkErrorVisible}
+        onClose={dismissNetworkError}
       />
     </View>
   );

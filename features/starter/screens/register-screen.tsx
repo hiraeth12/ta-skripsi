@@ -1,22 +1,16 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { saveFcmTokenToDatabase } from "@/utils/fcm";
 import { Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import {
-  createUserWithEmailAndPassword,
-  getAuth,
+    createUserWithEmailAndPassword,
+    getAuth,
 } from "@react-native-firebase/auth";
 import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { styles } from "../styles/register-styles";
 
@@ -131,7 +125,6 @@ export default function Register() {
       )
     : {};
 
-
   const showCustomAlert = (
     title: string,
     message: string,
@@ -147,69 +140,71 @@ export default function Register() {
     });
   };
 
-  const handleRegister = (_event: import("react-native").GestureResponderEvent): void => {
+  const handleRegister = (
+    _event: import("react-native").GestureResponderEvent,
+  ): void => {
     void (async () => {
-    setSubmitted(true);
+      setSubmitted(true);
 
-    const validationErrors = validate(
-      trimmedFirstName,
-      trimmedLastName,
-      trimmedEmail,
-      trimmedPassword,
-      trimmedConfirm,
-    );
-
-    if (Object.keys(validationErrors).length > 0) {
-      const firstError = Object.values(validationErrors)[0]!;
-      showCustomAlert("Input Tidak Valid", firstError, "error");
-      return;
-    }
-
-    if (isLoading) return;
-    setIsLoading(true);
-
-    try {
-      const app = getApp();
-      const authInstance = getAuth(app);
-      const userCredential = await createUserWithEmailAndPassword(
-        authInstance,
+      const validationErrors = validate(
+        trimmedFirstName,
+        trimmedLastName,
         trimmedEmail,
         trimmedPassword,
+        trimmedConfirm,
       );
 
-      const uid = userCredential.user.uid;
-      const database = FIREBASE_DATABASE_URL
-        ? getDatabase(app, FIREBASE_DATABASE_URL)
-        : getDatabase(app);
+      if (Object.keys(validationErrors).length > 0) {
+        const firstError = Object.values(validationErrors)[0]!;
+        showCustomAlert("Input Tidak Valid", firstError, "error");
+        return;
+      }
 
-      await Promise.all([
-        set(ref(database, `users/${uid}`), {
-          email: trimmedEmail,
-          firstName: trimmedFirstName,
-          lastName: trimmedLastName,
-          createdAt: Date.now(),
-        }),
-        saveFcmTokenToDatabase(uid).catch((err) => {
-          console.warn("[FCM] Gagal menyimpan token FCM:", err);
-        }),
-      ]);
+      if (isLoading) return;
+      setIsLoading(true);
 
-      showCustomAlert(
-        "Registrasi Berhasil",
-        "Akun berhasil dibuat. Silakan login.",
-        "success",
-        () => router.push("/starter/login"),
-      );
-    } catch (e) {
-      const error = e as { code?: string };
-      showCustomAlert(
-        "Registrasi Gagal",
-        getFirebaseErrorMessage(error?.code),
-        "error",
-      );
-    } finally {
-      setIsLoading(false);
-    }
+      try {
+        const app = getApp();
+        const authInstance = getAuth(app);
+        const userCredential = await createUserWithEmailAndPassword(
+          authInstance,
+          trimmedEmail,
+          trimmedPassword,
+        );
+
+        const uid = userCredential.user.uid;
+        const database = FIREBASE_DATABASE_URL
+          ? getDatabase(app, FIREBASE_DATABASE_URL)
+          : getDatabase(app);
+
+        await Promise.all([
+          set(ref(database, `users/${uid}`), {
+            email: trimmedEmail,
+            firstName: trimmedFirstName,
+            lastName: trimmedLastName,
+            createdAt: Date.now(),
+          }),
+          saveFcmTokenToDatabase(uid).catch((err) => {
+            console.warn("[FCM] Gagal menyimpan token FCM:", err);
+          }),
+        ]);
+
+        showCustomAlert(
+          "Registrasi Berhasil",
+          "Akun berhasil dibuat. Silakan login.",
+          "success",
+          () => router.push("/starter/login"),
+        );
+      } catch (e) {
+        const error = e as { code?: string };
+        showCustomAlert(
+          "Registrasi Gagal",
+          getFirebaseErrorMessage(error?.code),
+          "error",
+        );
+      } finally {
+        setIsLoading(false);
+      }
     })();
   };
 

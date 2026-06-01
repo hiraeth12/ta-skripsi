@@ -1,46 +1,46 @@
+import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
-import { ModalShakeMap } from "@/components/modal-shakemap";
-import Skeleton from "@/components/skeleton";
-import {
-  CACHE_KEYS,
-  getCachedData,
-  getPersistentCache,
-  setCacheData,
-} from "@/utils/cache";
-import {
-  haversineDistanceKm,
-  findNearestLocation,
-  GeoLocation,
-} from "@/utils/geo";
-import { calculateTimeAgo } from "@/utils/date";
-import { shareQuake } from "@/utils/share";
-import { computeStatus } from "@/utils/earthquake";
-import {DEFAULT_LOCATION} from "@/constants/map";
+import Skeleton from "@/components/ui/skeleton";
+import { DEFAULT_LOCATION } from "@/constants/map";
 import { useUserSession } from "@/features/account/user-session-context";
+import {
+    CACHE_KEYS,
+    getCachedData,
+    getPersistentCache,
+    setCacheData,
+} from "@/utils/cache";
+import { calculateTimeAgo } from "@/utils/date";
+import { computeStatus } from "@/utils/earthquake";
+import {
+    findNearestLocation,
+    GeoLocation,
+    haversineDistanceKm,
+} from "@/utils/geo";
+import { shareQuake } from "@/utils/share";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { get, getDatabase, ref } from "@react-native-firebase/database";
 import {
-  getDownloadURL,
-  getStorage,
-  ref as storageRef,
+    getDownloadURL,
+    getStorage,
+    ref as storageRef,
 } from "@react-native-firebase/storage";
 import { useRouter } from "expo-router";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AppState,
-  AppStateStatus,
-  Dimensions,
-  Image,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    AppState,
+    AppStateStatus,
+    Dimensions,
+    Image,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { DirasakanCard } from "./components/dirasakan-card";
 import { InfoModal } from "./components/info-modal";
@@ -54,8 +54,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL ?? "";
-const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL ?? "";
-const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
+const TERDETEKSI_API_URL =
+  process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL ?? "";
+const TSUNAMI_API_URL =
+  process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
 const DB_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() ?? "";
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
@@ -172,7 +174,9 @@ function parseDirasakanPayload(latest: unknown): {
   if (!latest || typeof latest !== "object") return null;
   const l = latest as Record<string, unknown>;
 
-  const coordStr = String((l?.point as Record<string, unknown>)?.coordinates ?? "");
+  const coordStr = String(
+    (l?.point as Record<string, unknown>)?.coordinates ?? "",
+  );
   if (!coordStr) return null;
 
   return {
@@ -201,7 +205,10 @@ function getTsunamiInfoItems(parsed: Record<string, unknown>): unknown[] {
 }
 
 function parseTsunamiTimesent(value: unknown): number {
-  const text = String(value ?? "").trim().replace(/\s*WIB$/i, "").trim();
+  const text = String(value ?? "")
+    .trim()
+    .replace(/\s*WIB$/i, "")
+    .trim();
   const match = text.match(
     /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/,
   );
@@ -223,9 +230,8 @@ function getLatestTsunamiInfo(items: unknown[]): unknown | null {
   if (items.length === 0) return null;
 
   const rankedItems = items.map((item, index) => {
-    const record = item && typeof item === "object"
-      ? (item as Record<string, unknown>)
-      : {};
+    const record =
+      item && typeof item === "object" ? (item as Record<string, unknown>) : {};
     return {
       item,
       index,
@@ -238,16 +244,20 @@ function getLatestTsunamiInfo(items: unknown[]): unknown | null {
 
   if (!hasTimesent) return items[items.length - 1];
 
-  return [...rankedItems].sort((a, b) => {
-    if (b.time !== a.time) return b.time - a.time;
-    return b.index - a.index;
-  })[0]?.item ?? null;
+  return (
+    [...rankedItems].sort((a, b) => {
+      if (b.time !== a.time) return b.time - a.time;
+      return b.index - a.index;
+    })[0]?.item ?? null
+  );
 }
 
 function parseTsunamiPayload(latest: unknown): TsunamiQuake | null {
   if (!latest || typeof latest !== "object") return null;
   const l = latest as Record<string, unknown>;
-  const coordStr = String((l.point as Record<string, unknown>)?.coordinates ?? "");
+  const coordStr = String(
+    (l.point as Record<string, unknown>)?.coordinates ?? "",
+  );
   const coordinates = parsePointCoordinates(coordStr);
 
   return {
@@ -346,15 +356,21 @@ export default function Home() {
     () => getCachedData(CACHE_KEYS.TSUNAMI) ?? null,
   );
 
-  const [dirasakanShakeMapUrl, setDirasakanShakeMapUrl] = useState<string | null>(null);
-  const [activeShakeMapUrl, setActiveShakeMapUrl] = useState<string | null>(null);
+  const [dirasakanShakeMapUrl, setDirasakanShakeMapUrl] = useState<
+    string | null
+  >(null);
+  const [activeShakeMapUrl, setActiveShakeMapUrl] = useState<string | null>(
+    null,
+  );
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [infoVisibleDirasakan, setInfoVisibleDirasakan] = useState(false);
   const [infoVisibleTerdeteksi, setInfoVisibleTerdeteksi] = useState(false);
   const [infoVisibleTsunami, setInfoVisibleTsunami] = useState(false);
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
+    useState(false);
 
-  const [userLocation, setUserLocation] = useState<UserLocation>(DEFAULT_LOCATION);
+  const [userLocation, setUserLocation] =
+    useState<UserLocation>(DEFAULT_LOCATION);
   const [locationImageUrl, setLocationImageUrl] = useState<string | null>(null);
   const [locationImageLoading, setLocationImageLoading] = useState(true);
   const [userName, setUserName] = useState("Pengguna");
@@ -371,7 +387,8 @@ export default function Home() {
 
   const status = useMemo(() => computeStatus(dirasakanData), [dirasakanData]);
   const timeAgo = useMemo(
-    () => calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? ""),
+    () =>
+      calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? ""),
     [dirasakanData?.tanggal, dirasakanData?.jam],
   );
 
@@ -408,18 +425,22 @@ export default function Home() {
   useEffect(() => {
     let isMounted = true;
     async function hydrateLatestFromStorage() {
-      const [cachedDirasakan, cachedTerdeteksi, cachedTsunami] = await Promise.all([
-        getPersistentCache<DirasakanQuake>(CACHE_KEYS.DIRASAKAN),
-        getPersistentCache<TerdeteksiQuake>(CACHE_KEYS.TERDETEKSI),
-        getPersistentCache<TsunamiQuake>(CACHE_KEYS.TSUNAMI),
-      ]);
+      const [cachedDirasakan, cachedTerdeteksi, cachedTsunami] =
+        await Promise.all([
+          getPersistentCache<DirasakanQuake>(CACHE_KEYS.DIRASAKAN),
+          getPersistentCache<TerdeteksiQuake>(CACHE_KEYS.TERDETEKSI),
+          getPersistentCache<TsunamiQuake>(CACHE_KEYS.TSUNAMI),
+        ]);
       if (!isMounted) return;
       if (!dirasakanData && cachedDirasakan) setDirasakanData(cachedDirasakan);
-      if (!terdeteksiData && cachedTerdeteksi) setTerdeteksiData(cachedTerdeteksi);
+      if (!terdeteksiData && cachedTerdeteksi)
+        setTerdeteksiData(cachedTerdeteksi);
       if (!tsunamiData && cachedTsunami) setTsunamiData(cachedTsunami);
     }
     hydrateLatestFromStorage();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // ── User data + location image ────────────────────────────────────────────
@@ -436,7 +457,8 @@ export default function Home() {
         const database = DB_URL ? getDatabase(app, DB_URL) : getDatabase(app);
 
         if (sessionProfileName && isMounted) {
-          const firstName = sessionProfileName.split(" ")[0] || sessionProfileName;
+          const firstName =
+            sessionProfileName.split(" ")[0] || sessionProfileName;
           setUserName((prev) => (prev === firstName ? prev : firstName));
         }
 
@@ -445,7 +467,11 @@ export default function Home() {
         let locationName: string =
           sessionLocationName || sessionProfileLocation || "Lokasi Saya";
 
-        if (locationName === "Lokasi GPS" && !isNaN(userLat) && !isNaN(userLon)) {
+        if (
+          locationName === "Lokasi GPS" &&
+          !isNaN(userLat) &&
+          !isNaN(userLon)
+        ) {
           const locations = await getLocationsData(database);
           if (locations) {
             const nearest = findNearestLocation(userLat, userLon, locations);
@@ -467,7 +493,9 @@ export default function Home() {
         const cachedImageUrl = getCachedData<string>(imageCacheKey);
         if (cachedImageUrl) {
           if (isMounted) {
-            setLocationImageUrl((prev) => prev === cachedImageUrl ? prev : cachedImageUrl);
+            setLocationImageUrl((prev) =>
+              prev === cachedImageUrl ? prev : cachedImageUrl,
+            );
             setLocationImageLoading(false);
           }
           return;
@@ -477,7 +505,9 @@ export default function Home() {
         const entry = locations?.find((l) => l?.name === locationName) ?? null;
 
         if (entry?.image) {
-          const url = await getDownloadURL(storageRef(getStorage(app), entry.image));
+          const url = await getDownloadURL(
+            storageRef(getStorage(app), entry.image),
+          );
           setCacheData(imageCacheKey, url, 3_600_000);
           if (isMounted)
             setLocationImageUrl((prev) => (prev === url ? prev : url));
@@ -490,7 +520,9 @@ export default function Home() {
     }
 
     fetchUserData();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [
     sessionUserId,
     sessionLatitude,
@@ -549,7 +581,12 @@ export default function Home() {
       const lonCoord = formatCoord(longitude);
 
       const data: DirasakanQuake = {
-        distanceKm: haversineDistanceKm(uLat, uLon, latitude, longitude).toFixed(1),
+        distanceKm: haversineDistanceKm(
+          uLat,
+          uLon,
+          latitude,
+          longitude,
+        ).toFixed(1),
         magnitude: p.magnitude,
         kedalaman: p.kedalaman,
         latText: `${latCoord.text}°${latCoord.latLabel}`,
@@ -568,9 +605,13 @@ export default function Home() {
         // FIX (Bug): cek apakah data benar-benar baru sebelum setState
         // Cegah re-render dan re-mount EarthquakeMap saat data sama
         setDirasakanData((prev) =>
-          prev?.tanggal === data.tanggal && prev?.jam === data.jam ? prev : data,
+          prev?.tanggal === data.tanggal && prev?.jam === data.jam
+            ? prev
+            : data,
         );
-        setDirasakanShakeMapUrl(p.shakemap ? buildShakemapUrl(p.shakemap) : null);
+        setDirasakanShakeMapUrl(
+          p.shakemap ? buildShakemapUrl(p.shakemap) : null,
+        );
       }
     }
 
@@ -583,17 +624,32 @@ export default function Home() {
       // FIX (Bug): cek response.ok
       if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
-      const body = await res.json() as { features?: unknown[] };
+      const body = (await res.json()) as { features?: unknown[] };
       const features = body?.features;
-      if (!Array.isArray(features) || features.length === 0 || !isMounted) return;
+      if (!Array.isArray(features) || features.length === 0 || !isMounted)
+        return;
 
       const latest = [...features].sort((a, b) => {
-        const aTime = String((a as Record<string, unknown>)?.properties
-          ? ((a as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? ""
-          : "");
-        const bTime = String((b as Record<string, unknown>)?.properties
-          ? ((b as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? ""
-          : "");
+        const aTime = String(
+          (a as Record<string, unknown>)?.properties
+            ? ((
+                (a as Record<string, unknown>).properties as Record<
+                  string,
+                  unknown
+                >
+              )?.time ?? "")
+            : "",
+        );
+        const bTime = String(
+          (b as Record<string, unknown>)?.properties
+            ? ((
+                (b as Record<string, unknown>).properties as Record<
+                  string,
+                  unknown
+                >
+              )?.time ?? "")
+            : "",
+        );
         return bTime.localeCompare(aTime);
       })[0];
 
@@ -606,7 +662,12 @@ export default function Home() {
       const lonCoord = formatCoord(parsed.longitude);
 
       const data: TerdeteksiQuake = {
-        distanceKm: haversineDistanceKm(uLat, uLon, parsed.latitude, parsed.longitude).toFixed(1),
+        distanceKm: haversineDistanceKm(
+          uLat,
+          uLon,
+          parsed.latitude,
+          parsed.longitude,
+        ).toFixed(1),
         magnitude: parsed.magnitude,
         kedalaman: parsed.kedalaman,
         latText: `${latCoord.text}°${latCoord.latLabel}`,
@@ -623,7 +684,9 @@ export default function Home() {
       // FIX (Bug): cek apakah data benar-benar baru
       if (isMounted) {
         setTerdeteksiData((prev) =>
-          prev?.tanggal === data.tanggal && prev?.jam === data.jam ? prev : data,
+          prev?.tanggal === data.tanggal && prev?.jam === data.jam
+            ? prev
+            : data,
         );
       }
     }
@@ -658,7 +721,11 @@ export default function Home() {
 
     async function fetchAll() {
       try {
-        await Promise.all([fetchDirasakan(), fetchTerdeteksi(), fetchTsunami()]);
+        await Promise.all([
+          fetchDirasakan(),
+          fetchTerdeteksi(),
+          fetchTsunami(),
+        ]);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           showNetworkError();
@@ -752,7 +819,9 @@ export default function Home() {
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
               <Text style={styles.statLabel}>JARAK GEMPA</Text>
               {dirasakanData ? (
-                <Text style={styles.statValue}>{`${dirasakanData.distanceKm} km`}</Text>
+                <Text
+                  style={styles.statValue}
+                >{`${dirasakanData.distanceKm} km`}</Text>
               ) : (
                 <Skeleton width={60} height={14} borderRadius={4} />
               )}
@@ -831,7 +900,9 @@ export default function Home() {
                 <Text style={styles.sectionTitle}>
                   Gempabumi Terakhir Terdeteksi
                 </Text>
-                <TouchableOpacity onPress={() => setInfoVisibleTerdeteksi(true)}>
+                <TouchableOpacity
+                  onPress={() => setInfoVisibleTerdeteksi(true)}
+                >
                   <Ionicons
                     name="information-circle-outline"
                     size={25}

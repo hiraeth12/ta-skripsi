@@ -1,9 +1,15 @@
-import EarthquakeMap from "@/components/earthquake-map";
-import { ModalShakeMap } from "@/components/modal-shakemap";
+import EarthquakeMap from "@/components/ui/earthquake-map";
+import { ModalShakeMap } from "@/components/ui/modal-shakemap";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
-import { haversineDistanceKm } from "@/utils/geo";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import {
+    formatLatText,
+    formatLonText,
+    haversineDistanceKm,
+    parseCoordinateText,
+} from "@/utils/geo";
 import {
     endAt,
     get,
@@ -14,13 +20,8 @@ import {
     startAt,
 } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-    Animated,
-    PanResponder,
-    Text,
-    TouchableOpacity,
-    View
-} from "react-native";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
+import { dedupeByKey } from "../utils/dedupe";
 import {
     buildDirasakanDateRange,
     getNowYearMonth,
@@ -36,7 +37,6 @@ const DB_PATH = "gempa_dirasakan/items";
 const MAX_POINTS = 20;
 const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
 const LIST_HIDE_TO_CARD_DELAY_MS = 340;
-const CARD_REPLACE_CLOSE_MS = 180;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -96,34 +96,33 @@ type Props = {
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
 
-function parseWithHemisphere(value: unknown, negToken: string, posToken: string): number {
-  const raw = String(value ?? "").trim();
-  if (!raw) return NaN;
-  const numeric = parseFloat(raw.replace(",", "."));
-  if (isNaN(numeric)) return NaN;
-  const upper = raw.toUpperCase();
-  if (upper.includes(negToken)) return -Math.abs(numeric);
-  if (upper.includes(posToken)) return Math.abs(numeric);
-  return numeric;
-}
-
-function parseQuakeCoords(candidate: any): { latitude: number; longitude: number } | null {
+function parseQuakeCoords(
+  candidate: any,
+): { latitude: number; longitude: number } | null {
   const coordStr = String(candidate?.point?.coordinates ?? "");
   const [lonStr, latStr] = coordStr.split(",");
 
-  let latitude = parseWithHemisphere(latStr, "LS", "LU");
-  if (isNaN(latitude)) latitude = parseWithHemisphere(candidate?.latitude ?? candidate?.lat, "LS", "LU");
-  if (isNaN(latitude)) latitude = parseWithHemisphere(candidate?.coordinates?.latitude, "LS", "LU");
+  let latitude = parseCoordinateText(latStr);
+  if (latitude === null)
+    latitude = parseCoordinateText(candidate?.latitude ?? candidate?.lat);
+  if (latitude === null)
+    latitude = parseCoordinateText(candidate?.coordinates?.latitude);
 
-  let longitude = parseWithHemisphere(lonStr, "BB", "BT");
-  if (isNaN(longitude)) longitude = parseWithHemisphere(candidate?.longitude ?? candidate?.lon, "BB", "BT");
-  if (isNaN(longitude)) longitude = parseWithHemisphere(candidate?.coordinates?.longitude, "BB", "BT");
+  let longitude = parseCoordinateText(lonStr);
+  if (longitude === null)
+    longitude = parseCoordinateText(candidate?.longitude ?? candidate?.lon);
+  if (longitude === null)
+    longitude = parseCoordinateText(candidate?.coordinates?.longitude);
 
-  if (isNaN(latitude) || isNaN(longitude)) return null;
+  if (latitude === null || longitude === null) return null;
   return { latitude, longitude };
 }
 
-function buildQuakeItem(candidate: any, index: number, haversine: (a: number, b: number, c: number, d: number) => number): QuakeItem | null {
+function buildQuakeItem(
+  candidate: any,
+  index: number,
+  haversine: (a: number, b: number, c: number, d: number) => number,
+): QuakeItem | null {
   const coords = parseQuakeCoords(candidate);
   if (!coords) return null;
   const { latitude, longitude } = coords;
@@ -137,43 +136,31 @@ function buildQuakeItem(candidate: any, index: number, haversine: (a: number, b:
 
   return {
     eventId: String(
-      candidate?.eventId ?? candidate?.id ?? candidate?.eventid ??
-      `${candidate?.tanggal ?? candidate?.date ?? ""}-${candidate?.jam ?? candidate?.time ?? ""}-${index}`,
+      candidate?.eventId ??
+        candidate?.id ??
+        candidate?.eventid ??
+        `${candidate?.tanggal ?? candidate?.date ?? ""}-${candidate?.jam ?? candidate?.time ?? ""}-${index}`,
     ),
     latitude,
     longitude,
     distanceKm,
     magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-    wilayah: String(candidate?.wilayah ?? candidate?.area ?? candidate?.lokasi ?? candidate?.place ?? ""),
+    wilayah: String(
+      candidate?.wilayah ??
+        candidate?.area ??
+        candidate?.lokasi ??
+        candidate?.place ??
+        "",
+    ),
     tanggal: String(candidate?.tanggal ?? candidate?.date ?? ""),
     jam: String(candidate?.jam ?? candidate?.time ?? ""),
     kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
     felt: String(candidate?.felt ?? ""),
-    latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
-    lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+    latText: formatLatText(latitude),
+    lonText: formatLonText(longitude),
     shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
   };
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const StatItem = ({ icon, value, label }: { icon: string; value: string; label: string }) => (
-  <View style={styles.statTopItem}>
-    <MaterialCommunityIcons name={icon as any} size={20} color="#0369A1" />
-    <Text style={styles.statTopValue}>{value}</Text>
-    <Text style={styles.statTopLabel}>{label}</Text>
-  </View>
-);
-
-const DetailItem = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
-  <View style={styles.infoRow}>
-    <Ionicons name={icon as any} size={18} color="#1E6F9F" style={styles.infoIcon} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -193,20 +180,31 @@ export function GempaDirasakanHistoryContent({
 }: Props) {
   const now = useMemo(() => new Date(), []);
   const fallback = getNowYearMonth(now);
-  const effectiveYear = Number.isFinite(filterYear) ? filterYear! : fallback.year;
+  const effectiveYear = Number.isFinite(filterYear)
+    ? filterYear!
+    : fallback.year;
   const effectiveMonths = useMemo(
-    () => normalizeFilterMonths(filterMonths ?? [fallback.month], effectiveYear, "dirasakan", now),
+    () =>
+      normalizeFilterMonths(
+        filterMonths ?? [fallback.month],
+        effectiveYear,
+        "dirasakan",
+        now,
+      ),
     [effectiveYear, fallback.month, filterMonths, now],
   );
   const ranges = useMemo(
-    () => effectiveMonths.map((month) => ({ month, ...buildDirasakanDateRange(effectiveYear, month) })),
+    () =>
+      effectiveMonths.map((month) => ({
+        month,
+        ...buildDirasakanDateRange(effectiveYear, month),
+      })),
     [effectiveMonths, effectiveYear],
   );
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
-  const [showCard, setShowCard] = useState(false);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
@@ -214,7 +212,6 @@ export function GempaDirasakanHistoryContent({
   // ── Refs ───────────────────────────────────────────────────────────────────
 
   const mapRef = useRef<MapViewType | null>(null);
-  const showCardRef = useRef(false);
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const dataSignatureRef = useRef<string | null>(null);
@@ -222,9 +219,29 @@ export function GempaDirasakanHistoryContent({
   const isMountedRef = useRef(true);
   const openCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Animation values
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const clearCardSelection = useCallback(() => {
+    setSelectedIndex(null);
+    setOverrideQuake(null);
+    selectedEventIdRef.current = null;
+    lastExternalIdRef.current = null;
+  }, []);
+
+  const handleSwipeDismiss = useCallback(() => {
+    clearCardSelection();
+    onCardClose?.();
+  }, [clearCardSelection, onCardClose]);
+
+  const {
+    showCard,
+    showCardRef,
+    translateY,
+    opacity,
+    panResponder,
+    openCard: openCardAnimation,
+    dismissCard: dismissCardAnimation,
+    closeCardForReplacement,
+    hideCardImmediately,
+  } = useCardAnimation({ onSwipeDismiss: handleSwipeDismiss });
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -263,57 +280,20 @@ export function GempaDirasakanHistoryContent({
 
   // ── Card animation ─────────────────────────────────────────────────────────
 
-  const openCard = useCallback((notifyParent = true) => {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
-    if (notifyParent) {
-      onCardOpen?.();
-    }
-    Animated.parallel([
-      Animated.spring(translateY, { toValue: 0, bounciness: 4, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
-  }, [translateY, opacity, onCardOpen]);
-
-  const closeCardForReplacement = useCallback(
-    (callback: () => void) => {
-      if (!showCardRef.current) {
-        callback();
-        return;
+  const openCard = useCallback(
+    (notifyParent = true) => {
+      if (notifyParent) {
+        onCardOpen?.();
       }
-
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: CARD_REPLACE_CLOSE_MS,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: CARD_REPLACE_CLOSE_MS - 40,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        callback();
-      });
+      openCardAnimation();
     },
-    [opacity, translateY],
+    [onCardOpen, openCardAnimation],
   );
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
-      if (!showCardRef.current) {
-        onCardClose?.();
-        callback?.();
-        return;
-      }
-
       // Re-centre map without offset when card closes
-      if (activeQuake) {
+      if (showCardRef.current && activeQuake) {
         mapRef.current?.animateToRegion(
           {
             latitude: activeQuake.latitude,
@@ -325,21 +305,19 @@ export function GempaDirasakanHistoryContent({
         );
       }
 
-      Animated.parallel([
-        Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        setSelectedIndex(null);        // FIX: clear so polling can't reopen card
-        setOverrideQuake(null);
-        selectedEventIdRef.current = null; // FIX: clear so polling has nothing to track
-        lastExternalIdRef.current = null;  // FIX: allow same item to reopen card after dismiss
+      dismissCardAnimation(() => {
+        clearCardSelection();
         onCardClose?.();
         callback?.();
       });
     },
-    [translateY, opacity, onCardClose, activeQuake],
+    [
+      activeQuake,
+      clearCardSelection,
+      dismissCardAnimation,
+      onCardClose,
+      showCardRef,
+    ],
   );
 
   // ── Fly-to-marker with offset ──────────────────────────────────────────────
@@ -377,41 +355,6 @@ export function GempaDirasakanHistoryContent({
 
   // ── PanResponder ───────────────────────────────────────────────────────────
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          // Dragged far enough — dismiss
-          Animated.parallel([
-            Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-            setSelectedIndex(null);        // FIX
-            setOverrideQuake(null);
-            selectedEventIdRef.current = null; // FIX
-            lastExternalIdRef.current = null;  // FIX: allow same item to reopen card after swipe-dismiss
-            onCardClose?.();
-          });
-        } else {
-          // Snap back
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
-
   // ── Marker press ──────────────────────────────────────────────────────────
 
   const onPressMarker = useCallback(
@@ -439,17 +382,11 @@ export function GempaDirasakanHistoryContent({
 
   useEffect(() => {
     if (!isActive) {
-      translateY.setValue(600);
-      opacity.setValue(0);
-      showCardRef.current = false;
-      setShowCard(false);
-      setSelectedIndex(null);        // FIX
-      setOverrideQuake(null);
-      selectedEventIdRef.current = null; // FIX
-      lastExternalIdRef.current = null;  // FIX: so re-activating tab doesn't block same-item re-open
-      isFirstLoad.current = true;    // Re-arm fly-in for next activation
+      hideCardImmediately();
+      clearCardSelection();
+      isFirstLoad.current = true; // Re-arm fly-in for next activation
     }
-  }, [isActive, translateY, opacity]);
+  }, [clearCardSelection, hideCardImmediately, isActive]);
 
   // ── Fly to newest quake when tab becomes active ────────────────────────────
 
@@ -468,8 +405,8 @@ export function GempaDirasakanHistoryContent({
       800,
     );
     isFirstLoad.current = false;
-  // Only re-run when isActive flips to true — not on every quakes change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when isActive flips to true — not on every quakes change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
   // ── External selection (from history list row press) ─────────────────────
@@ -480,7 +417,9 @@ export function GempaDirasakanHistoryContent({
     if (!isActive) return;
     lastExternalIdRef.current = externalSelection.eventId;
 
-    const targetIndex = quakes.findIndex((q) => q.eventId === externalSelection.eventId);
+    const targetIndex = quakes.findIndex(
+      (q) => q.eventId === externalSelection.eventId,
+    );
 
     const quake: QuakeItem =
       targetIndex >= 0
@@ -496,8 +435,8 @@ export function GempaDirasakanHistoryContent({
             jam: externalSelection.jam,
             kedalaman: externalSelection.kedalaman,
             felt: externalSelection.felt,
-            latText: `${Math.abs(externalSelection.latitude).toFixed(2)}°${externalSelection.latitude < 0 ? "LS" : "LU"}`,
-            lonText: `${Math.abs(externalSelection.longitude).toFixed(2)}°${externalSelection.longitude >= 0 ? "BT" : "BB"}`,
+            latText: formatLatText(externalSelection.latitude),
+            lonText: formatLonText(externalSelection.longitude),
             shakemap: externalSelection.shakemap,
           };
 
@@ -513,13 +452,21 @@ export function GempaDirasakanHistoryContent({
 
     flyToAndOpen(quake);
     onListSelectionHandled?.();
-  }, [externalSelection, isActive, quakes, flyToAndOpen, onListSelectionHandled]);
+  }, [
+    externalSelection,
+    isActive,
+    quakes,
+    flyToAndOpen,
+    onListSelectionHandled,
+  ]);
 
   // ── selectedListEventId (direct list row tap) ─────────────────────────────
 
   useEffect(() => {
     if (!selectedListEventId || quakes.length === 0) return;
-    const targetIndex = quakes.findIndex((q) => q.eventId === selectedListEventId);
+    const targetIndex = quakes.findIndex(
+      (q) => q.eventId === selectedListEventId,
+    );
     if (targetIndex < 0) {
       onListSelectionHandled?.();
       return;
@@ -590,16 +537,28 @@ export function GempaDirasakanHistoryContent({
 
       const merged = candidates
         .sort((a, b) => {
-          const keyA = String(a?.eventid ?? a?.eventId ?? a?.timesent ?? `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`);
-          const keyB = String(b?.eventid ?? b?.eventId ?? b?.timesent ?? `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`);
+          const keyA = String(
+            a?.eventid ??
+              a?.eventId ??
+              a?.timesent ??
+              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
+          );
+          const keyB = String(
+            b?.eventid ??
+              b?.eventId ??
+              b?.timesent ??
+              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
+          );
           return keyB.localeCompare(keyA);
         })
         .filter((candidate) =>
-          effectiveMonths.some((month) => matchesDirasakanMonth(
-            candidate?.tanggal ?? candidate?.date,
-            effectiveYear,
-            month,
-          )),
+          effectiveMonths.some((month) =>
+            matchesDirasakanMonth(
+              candidate?.tanggal ?? candidate?.date,
+              effectiveYear,
+              month,
+            ),
+          ),
         )
         .reduce<QuakeItem[]>((acc, candidate, index) => {
           const item = buildQuakeItem(candidate, index, haversineDistanceKm);
@@ -608,17 +567,7 @@ export function GempaDirasakanHistoryContent({
         }, [])
         .slice(0, MAX_POINTS);
 
-      // Deduplicate by eventId preserving order
-      const seen = new Set<string>();
-      const normalized: QuakeItem[] = [];
-      for (const q of merged) {
-        const k = String(q.eventId ?? "");
-        if (!k) continue;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        normalized.push(q);
-        if (normalized.length >= MAX_POINTS) break;
-      }
+      const normalized = dedupeByKey(merged, (q) => q.eventId, MAX_POINTS);
 
       const signature = normalized.map((q) => q.eventId).join("|");
       if (signature === dataSignatureRef.current) {
@@ -687,7 +636,10 @@ export function GempaDirasakanHistoryContent({
 
       {showCard && activeQuake && (
         <Animated.View
-          style={[styles.locationCard, { transform: [{ translateY }], opacity }]}
+          style={[
+            styles.locationCard,
+            { transform: [{ translateY }], opacity },
+          ]}
         >
           {/* Drag handle */}
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
@@ -696,34 +648,69 @@ export function GempaDirasakanHistoryContent({
 
           {/* Stats row */}
           <View style={styles.statsTopRow}>
-            <StatItem icon="triangle-wave" value={activeQuake.magnitude} label="Magnitudo" />
+            <StatItem
+              icon="triangle-wave"
+              value={activeQuake.magnitude}
+              label="Magnitudo"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="rss" value={activeQuake.kedalaman} label="Kedalaman" />
+            <StatItem
+              icon="rss"
+              value={activeQuake.kedalaman}
+              label="Kedalaman"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={activeQuake.latText} label="LS" />
+            <StatItem
+              icon="compass-outline"
+              value={activeQuake.latText}
+              label="LS"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={activeQuake.lonText} label="BT" />
+            <StatItem
+              icon="compass-outline"
+              value={activeQuake.lonText}
+              label="BT"
+              styles={styles}
+            />
           </View>
 
           <View style={styles.separator} />
 
-          <DetailItem icon="location" label="Lokasi Gempa :" value={activeQuake.wilayah} />
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={activeQuake.wilayah}
+            styles={styles}
+          />
           <DetailItem
             icon="time-outline"
             label="Waktu :"
             value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
+            styles={styles}
           />
-          <DetailItem icon="walk-outline" label="Jarak :" value={`${activeQuake.distanceKm} km`} />
+          <DetailItem
+            icon="walk-outline"
+            label="Jarak :"
+            value={`${activeQuake.distanceKm} km`}
+            styles={styles}
+          />
           {!!activeQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
               label="Wilayah Dirasakan (Skala MMI) :"
               value={activeQuake.felt}
+              styles={styles}
             />
           )}
 
           <TouchableOpacity
-            style={[styles.simulasiBtn, !shakeMapUrl && styles.simulasiBtnDisabled]}
+            style={[
+              styles.simulasiBtn,
+              !shakeMapUrl && styles.simulasiBtnDisabled,
+            ]}
             activeOpacity={0.8}
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}

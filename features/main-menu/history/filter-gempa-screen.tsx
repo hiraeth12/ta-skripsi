@@ -45,6 +45,7 @@ export default function FilterGempaScreen() {
     filterMonth?: string;
     filterMonths?: string;
     returnTo?: string;
+    restoreListPanel?: string;
   }>();
   const now = useMemo(() => new Date(), []);
   const tab: HistoryTabKey =
@@ -57,7 +58,9 @@ export default function FilterGempaScreen() {
   const nowDefault = getNowYearMonth(now);
   const incomingYear = Number.parseInt(String(params.filterYear ?? ""), 10);
   const incomingMonth = Number.parseInt(String(params.filterMonth ?? ""), 10);
-  const incomingMonths = parseFilterMonthsParam(String(params.filterMonths ?? ""));
+  const incomingMonths = parseFilterMonthsParam(
+    String(params.filterMonths ?? ""),
+  );
   const initialFilter = clampYearMonth(
     {
       year: Number.isFinite(incomingYear) ? incomingYear : nowDefault.year,
@@ -93,7 +96,12 @@ export default function FilterGempaScreen() {
       tab,
       now,
     );
-    const months = normalizeFilterMonths(selectedMonths, clamped.year, tab, now);
+    const months = normalizeFilterMonths(
+      selectedMonths,
+      clamped.year,
+      tab,
+      now,
+    );
     const nextParams: Record<string, string> = {
       tab,
       filterYear: String(clamped.year),
@@ -102,6 +110,11 @@ export default function FilterGempaScreen() {
     if (!isTsunami) {
       nextParams.filterMonth = String(months[0]);
       nextParams.filterMonths = serializeFilterMonths(months);
+    }
+
+    if (asSingle(params.restoreListPanel) === "1") {
+      nextParams.restoreListPanel = "1";
+      nextParams.restoreListPanelToken = String(Date.now());
     }
 
     router.replace({
@@ -126,7 +139,9 @@ export default function FilterGempaScreen() {
       };
 
       if (!isTsunami) {
-        nextParams.filterMonth = String(initialMonths[0] ?? initialFilter.month);
+        nextParams.filterMonth = String(
+          initialMonths[0] ?? initialFilter.month,
+        );
         nextParams.filterMonths = serializeFilterMonths(initialMonths);
       }
 
@@ -199,115 +214,46 @@ export default function FilterGempaScreen() {
                 </Text>
               </View>
               <Feather
-                name={expandedSection === "year" ? "chevron-up" : "chevron-down"}
+                name={
+                  expandedSection === "year" ? "chevron-up" : "chevron-down"
+                }
                 size={20}
                 color={expandedSection === "year" ? "#0C4A6E" : "#fff"}
               />
             </TouchableOpacity>
             {expandedSection === "year" && (
               <View style={styles.accordionContent}>
-                {years.map((year, index) => {
-                  const disabled = isYearDisabled(year, tab, now);
-                  const isSelected = selectedYear === year;
-                  return (
-                    <TouchableOpacity
-                      key={year}
-                      style={[
-                        styles.listItem,
-                        index === years.length - 1 && { borderBottomWidth: 0 },
-                        disabled && { opacity: 0.45 },
-                      ]}
-                      disabled={disabled}
-                      onPress={() => {
-                        const next = clampYearMonth(
-                          { year, month: selectedMonths[0] ?? initialFilter.month },
-                          tab,
-                          now,
-                        );
-                        setSelectedYear(next.year);
-                        setSelectedMonths((prev) =>
-                          normalizeFilterMonths(prev, next.year, tab, now),
-                        );
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.listItemText,
-                          isSelected && styles.listItemSelectedText,
-                        ]}
-                      >
-                        {year}
-                      </Text>
-                      {isSelected && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color="#0891B2"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-
-          {!isTsunami && (
-          <View style={styles.sectionContainer}>
-            <TouchableOpacity
-              style={[
-                styles.accordionHeader,
-                expandedSection === "month" && styles.accordionHeaderActive,
-              ]}
-              activeOpacity={0.8}
-              onPress={() => toggleSection("month")}
-            >
-              <View style={styles.headerLeft}>
-                <Feather
-                  name="calendar"
-                  size={18}
-                  color={expandedSection === "month" ? "#0C4A6E" : "#fff"}
-                />
-                <Text
-                  style={[
-                    styles.headerText,
-                    expandedSection === "month" && { color: "#0C4A6E" },
-                  ]}
+                <ScrollView
+                  style={{ maxHeight: 220 }}
+                  nestedScrollEnabled={true}
                 >
-                  Pilih Bulan
-                </Text>
-              </View>
-              <Feather
-                name={expandedSection === "month" ? "chevron-up" : "chevron-down"}
-                size={20}
-                color={expandedSection === "month" ? "#0C4A6E" : "#fff"}
-              />
-            </TouchableOpacity>
-
-            {expandedSection === "month" && (
-              <View style={styles.accordionContent}>
-                <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled={true}>
-                  {MONTH_NAMES_ID.map((label, idx) => {
-                    const month = idx + 1;
-                    const disabled = isMonthDisabled(selectedYear, month, tab, now);
-                    const isSelected = selectedMonths.includes(month);
+                  {years.map((year, index) => {
+                    const disabled = isYearDisabled(year, tab, now);
+                    const isSelected = selectedYear === year;
                     return (
                       <TouchableOpacity
-                        key={label}
+                        key={year}
                         style={[
                           styles.listItem,
-                          idx === MONTH_NAMES_ID.length - 1 && { borderBottomWidth: 0 },
+                          index === years.length - 1 && {
+                            borderBottomWidth: 0,
+                          },
                           disabled && { opacity: 0.45 },
                         ]}
                         disabled={disabled}
                         onPress={() => {
-                          setSelectedMonths((prev) => {
-                            if (prev.includes(month)) {
-                              const next = prev.filter((m) => m !== month);
-                              return normalizeFilterMonths(next, selectedYear, tab, now);
-                            }
-                            return normalizeFilterMonths([...prev, month], selectedYear, tab, now);
-                          });
+                          const next = clampYearMonth(
+                            {
+                              year,
+                              month: selectedMonths[0] ?? initialFilter.month,
+                            },
+                            tab,
+                            now,
+                          );
+                          setSelectedYear(next.year);
+                          setSelectedMonths((prev) =>
+                            normalizeFilterMonths(prev, next.year, tab, now),
+                          );
                         }}
                       >
                         <Text
@@ -316,7 +262,7 @@ export default function FilterGempaScreen() {
                             isSelected && styles.listItemSelectedText,
                           ]}
                         >
-                          {label}
+                          {year}
                         </Text>
                         {isSelected && (
                           <Ionicons
@@ -332,6 +278,109 @@ export default function FilterGempaScreen() {
               </View>
             )}
           </View>
+
+          {!isTsunami && (
+            <View style={styles.sectionContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.accordionHeader,
+                  expandedSection === "month" && styles.accordionHeaderActive,
+                ]}
+                activeOpacity={0.8}
+                onPress={() => toggleSection("month")}
+              >
+                <View style={styles.headerLeft}>
+                  <Feather
+                    name="calendar"
+                    size={18}
+                    color={expandedSection === "month" ? "#0C4A6E" : "#fff"}
+                  />
+                  <Text
+                    style={[
+                      styles.headerText,
+                      expandedSection === "month" && { color: "#0C4A6E" },
+                    ]}
+                  >
+                    Pilih Bulan
+                  </Text>
+                </View>
+                <Feather
+                  name={
+                    expandedSection === "month" ? "chevron-up" : "chevron-down"
+                  }
+                  size={20}
+                  color={expandedSection === "month" ? "#0C4A6E" : "#fff"}
+                />
+              </TouchableOpacity>
+
+              {expandedSection === "month" && (
+                <View style={styles.accordionContent}>
+                  <ScrollView
+                    style={{ maxHeight: 220 }}
+                    nestedScrollEnabled={true}
+                  >
+                    {MONTH_NAMES_ID.map((label, idx) => {
+                      const month = idx + 1;
+                      const disabled = isMonthDisabled(
+                        selectedYear,
+                        month,
+                        tab,
+                        now,
+                      );
+                      const isSelected = selectedMonths.includes(month);
+                      return (
+                        <TouchableOpacity
+                          key={label}
+                          style={[
+                            styles.listItem,
+                            idx === MONTH_NAMES_ID.length - 1 && {
+                              borderBottomWidth: 0,
+                            },
+                            disabled && { opacity: 0.45 },
+                          ]}
+                          disabled={disabled}
+                          onPress={() => {
+                            setSelectedMonths((prev) => {
+                              if (prev.includes(month)) {
+                                const next = prev.filter((m) => m !== month);
+                                return normalizeFilterMonths(
+                                  next,
+                                  selectedYear,
+                                  tab,
+                                  now,
+                                );
+                              }
+                              return normalizeFilterMonths(
+                                [...prev, month],
+                                selectedYear,
+                                tab,
+                                now,
+                              );
+                            });
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.listItemText,
+                              isSelected && styles.listItemSelectedText,
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={20}
+                              color="#0891B2"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
           )}
 
           {/* === FOOTER BUTTONS === */}

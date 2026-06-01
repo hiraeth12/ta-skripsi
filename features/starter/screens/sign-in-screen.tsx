@@ -1,4 +1,4 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import { useRouter } from "expo-router";
 import { Image, View } from "react-native";
 import { styles } from "../styles/sign-in-styles";
@@ -28,4 +28,3 @@ export default function SignIn() {
     </View>
   );
 }
-

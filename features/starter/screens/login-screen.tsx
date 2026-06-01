@@ -1,23 +1,25 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { saveFcmTokenToDatabase } from "@/utils/fcm";
 import { Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "@react-native-firebase/auth";
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+} from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { styles } from "../styles/login-styles";
-
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,9 +32,11 @@ function getFirebaseAuthError(code: string | undefined): string {
     "auth/network-request-failed": "Tidak ada koneksi internet.",
     "auth/user-disabled": "Akun ini telah dinonaktifkan.",
   };
-  return messages[code ?? ""] ?? "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.";
+  return (
+    messages[code ?? ""] ??
+    "Periksa email/kata sandi dan koneksi internet, lalu coba lagi."
+  );
 }
-
 
 export default function Login() {
   const router = useRouter();
@@ -68,12 +72,20 @@ export default function Login() {
     }
 
     if (!EMAIL_REGEX.test(trimmedEmail)) {
-      showCustomAlert("Input Tidak Valid", "Silakan masukkan alamat email yang valid.", "error");
+      showCustomAlert(
+        "Input Tidak Valid",
+        "Silakan masukkan alamat email yang valid.",
+        "error",
+      );
       return;
     }
 
     if (!trimmedPassword) {
-      showCustomAlert("Input Belum Lengkap", "Kata sandi wajib diisi.", "error");
+      showCustomAlert(
+        "Input Belum Lengkap",
+        "Kata sandi wajib diisi.",
+        "error",
+      );
       return;
     }
 
@@ -149,7 +161,9 @@ export default function Login() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={() => router.push("/starter/forgot-password")}>
+        <TouchableOpacity
+          onPress={() => router.push("/starter/forgot-password")}
+        >
           <Text style={styles.forgotPassword}>Lupa Kata Sandi?</Text>
         </TouchableOpacity>
 

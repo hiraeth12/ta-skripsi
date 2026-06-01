@@ -1,4 +1,4 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
@@ -146,9 +146,7 @@ export const TsunamiCard = ({
           icon="time-outline"
           label="Waktu :"
           value={
-            data
-              ? `${safeValue(data.tanggal)}, ${safeValue(data.jam)}`
-              : "-"
+            data ? `${safeValue(data.tanggal)}, ${safeValue(data.jam)}` : "-"
           }
         />
         <DetailItem
