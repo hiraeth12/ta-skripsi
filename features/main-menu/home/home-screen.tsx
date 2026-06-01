@@ -1,8 +1,14 @@
 import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
+import PullToRefresh from "@/components/ui/pull-to-refresh";
 import Skeleton from "@/components/ui/skeleton";
 import { DEFAULT_LOCATION } from "@/constants/map";
-import { useUserSession } from "@/features/account/user-session-context";
+import type { ProfileData } from "@/features/main-menu/account/data/profile";
+import {
+    fetchUserSessionData,
+    type UserLocation,
+} from "@/features/main-menu/account/session";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import {
     CACHE_KEYS,
     getCachedData,
@@ -94,12 +100,14 @@ type TerdeteksiQuake = {
   longitude: number;
 };
 
-type UserLocation = { latitude: number; longitude: number; name: string };
-
 interface FirebaseLocation extends GeoLocation {
   name: string;
   image?: string;
 }
+
+type ApplyHomeUserDataOptions = {
+  showImageLoading?: boolean;
+};
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -376,10 +384,19 @@ export default function Home() {
   const [userName, setUserName] = useState("Pengguna");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const networkErrorShownRef = useRef(false);
   const appStatePrevRef = useRef<AppStateStatus>(AppState.currentState);
   const userLocationRef = useRef(userLocation);
+  const refreshInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     userLocationRef.current = userLocation;
@@ -414,11 +431,101 @@ export default function Home() {
   // ── Derived session values ────────────────────────────────────────────────
 
   const sessionUserId = session.user?.uid;
-  const sessionProfileName = session.profile?.name ?? "";
-  const sessionProfileLocation = session.profile?.location ?? "";
-  const sessionLatitude = session.location?.latitude;
-  const sessionLongitude = session.location?.longitude;
-  const sessionLocationName = session.location?.name ?? "";
+
+  const applyHomeUserData = useCallback(
+    async (
+      profile: ProfileData | null,
+      location: UserLocation | null,
+      options: ApplyHomeUserDataOptions = {},
+    ) => {
+      const app = getApp();
+      const authUser = getAuth(app).currentUser;
+      if (!sessionUserId && !authUser) return null;
+
+      const database = DB_URL ? getDatabase(app, DB_URL) : getDatabase(app);
+
+      if (profile?.name && isMountedRef.current) {
+        const firstName = profile.name.split(" ")[0] || profile.name;
+        setUserName((prev) => (prev === firstName ? prev : firstName));
+      }
+
+      const userLat = location?.latitude ?? NaN;
+      const userLon = location?.longitude ?? NaN;
+      let locationName = location?.name || profile?.location || "Lokasi Saya";
+      let nextLocation: UserLocation | null = null;
+
+      if (
+        locationName === "Lokasi GPS" &&
+        Number.isFinite(userLat) &&
+        Number.isFinite(userLon)
+      ) {
+        const locations = await getLocationsData(database);
+        const nearest = locations
+          ? findNearestLocation(userLat, userLon, locations)
+          : null;
+        if (nearest?.name) locationName = nearest.name;
+      }
+
+      if (Number.isFinite(userLat) && Number.isFinite(userLon)) {
+        nextLocation = {
+          latitude: userLat,
+          longitude: userLon,
+          name: locationName,
+        };
+        userLocationRef.current = nextLocation;
+        if (isMountedRef.current) {
+          setUserLocation((prev) =>
+            prev.latitude === nextLocation!.latitude &&
+            prev.longitude === nextLocation!.longitude &&
+            prev.name === nextLocation!.name
+              ? prev
+              : nextLocation!,
+          );
+        }
+      }
+
+      if (!locationName) return nextLocation;
+
+      if (options.showImageLoading !== false && isMountedRef.current) {
+        setLocationImageLoading(true);
+      }
+
+      try {
+        const imageCacheKey = `location_image_${locationName}`;
+        const cachedImageUrl = getCachedData<string>(imageCacheKey);
+        if (cachedImageUrl) {
+          if (isMountedRef.current) {
+            setLocationImageUrl((prev) =>
+              prev === cachedImageUrl ? prev : cachedImageUrl,
+            );
+          }
+          return nextLocation;
+        }
+
+        const locations = await getLocationsData(database);
+        const entry = locations?.find((l) => l?.name === locationName) ?? null;
+
+        if (entry?.image) {
+          const url = await getDownloadURL(
+            storageRef(getStorage(app), entry.image),
+          );
+          setCacheData(imageCacheKey, url, 3_600_000);
+          if (isMountedRef.current) {
+            setLocationImageUrl((prev) => (prev === url ? prev : url));
+          }
+        } else if (isMountedRef.current) {
+          setLocationImageUrl(null);
+        }
+      } catch {
+        if (isMountedRef.current) setLocationImageUrl(null);
+      } finally {
+        if (isMountedRef.current) setLocationImageLoading(false);
+      }
+
+      return nextLocation;
+    },
+    [sessionUserId],
+  );
 
   // ── Hydrate cache on mount ────────────────────────────────────────────────
 
@@ -446,91 +553,10 @@ export default function Home() {
   // ── User data + location image ────────────────────────────────────────────
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function fetchUserData() {
-      try {
-        const app = getApp();
-        const authUser = getAuth(app).currentUser;
-        if (!sessionUserId && !authUser) return;
-
-        const database = DB_URL ? getDatabase(app, DB_URL) : getDatabase(app);
-
-        if (sessionProfileName && isMounted) {
-          const firstName =
-            sessionProfileName.split(" ")[0] || sessionProfileName;
-          setUserName((prev) => (prev === firstName ? prev : firstName));
-        }
-
-        const userLat = sessionLatitude ?? NaN;
-        const userLon = sessionLongitude ?? NaN;
-        let locationName: string =
-          sessionLocationName || sessionProfileLocation || "Lokasi Saya";
-
-        if (
-          locationName === "Lokasi GPS" &&
-          !isNaN(userLat) &&
-          !isNaN(userLon)
-        ) {
-          const locations = await getLocationsData(database);
-          if (locations) {
-            const nearest = findNearestLocation(userLat, userLon, locations);
-            if (nearest?.name) locationName = nearest.name;
-          }
-        }
-
-        if (!isNaN(userLat) && !isNaN(userLon) && isMounted) {
-          setUserLocation((prev) =>
-            prev.latitude === userLat &&
-            prev.longitude === userLon &&
-            prev.name === locationName
-              ? prev
-              : { latitude: userLat, longitude: userLon, name: locationName },
-          );
-        }
-
-        const imageCacheKey = `location_image_${locationName}`;
-        const cachedImageUrl = getCachedData<string>(imageCacheKey);
-        if (cachedImageUrl) {
-          if (isMounted) {
-            setLocationImageUrl((prev) =>
-              prev === cachedImageUrl ? prev : cachedImageUrl,
-            );
-            setLocationImageLoading(false);
-          }
-          return;
-        }
-
-        const locations = await getLocationsData(database);
-        const entry = locations?.find((l) => l?.name === locationName) ?? null;
-
-        if (entry?.image) {
-          const url = await getDownloadURL(
-            storageRef(getStorage(app), entry.image),
-          );
-          setCacheData(imageCacheKey, url, 3_600_000);
-          if (isMounted)
-            setLocationImageUrl((prev) => (prev === url ? prev : url));
-        }
-      } catch {
-        // Silently ignore — UI akan tampil dengan data default
-      } finally {
-        if (isMounted) setLocationImageLoading(false);
-      }
-    }
-
-    fetchUserData();
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    sessionUserId,
-    sessionLatitude,
-    sessionLocationName,
-    sessionLongitude,
-    sessionProfileLocation,
-    sessionProfileName,
-  ]);
+    applyHomeUserData(session.profile, session.location).catch(() => {
+      if (isMountedRef.current) setLocationImageLoading(false);
+    });
+  }, [applyHomeUserData, session.location, session.profile]);
 
   useEffect(() => {
     setCurrentDate(new Date());
@@ -538,17 +564,16 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-    const abort = new AbortController();
-
-    async function fetchDirasakan() {
+  const fetchLatestHomeCards = useCallback(
+    async (
+      location: UserLocation = userLocationRef.current,
+      signal?: AbortSignal,
+    ) => {
+      async function fetchDirasakan() {
       // FIX (Security): cek URL sebelum fetch, bukan pakai `!` assertion
       if (!DIRASAKAN_API_URL) return;
 
-      const res = await fetch(withCacheBuster(DIRASAKAN_API_URL), {
-        signal: abort.signal,
-      });
+      const res = await fetch(withCacheBuster(DIRASAKAN_API_URL), { signal });
       // FIX (Bug): cek response.ok sebelum parse — sebelumnya langsung .text()
       if (!res.ok) throw new Error(`dirasakan fetch failed: ${res.status}`);
 
@@ -565,7 +590,7 @@ export default function Home() {
         latest = Array.isArray(info) ? info[0] : info;
       }
 
-      if (!latest || !isMounted) return;
+      if (!latest || signal?.aborted || !isMountedRef.current) return;
 
       // FIX (Security): pakai helper sanitasi, bukan akses `any` langsung
       const p = parseDirasakanPayload(latest);
@@ -576,7 +601,7 @@ export default function Home() {
       const longitude = parseFloat(lonStr);
       if (isNaN(latitude) || isNaN(longitude)) return;
 
-      const { latitude: uLat, longitude: uLon } = userLocationRef.current;
+      const { latitude: uLat, longitude: uLon } = location;
       const latCoord = formatCoord(latitude);
       const lonCoord = formatCoord(longitude);
 
@@ -601,11 +626,13 @@ export default function Home() {
       };
 
       setCacheData(CACHE_KEYS.DIRASAKAN, data);
-      if (isMounted) {
+      if (isMountedRef.current && !signal?.aborted) {
         // FIX (Bug): cek apakah data benar-benar baru sebelum setState
         // Cegah re-render dan re-mount EarthquakeMap saat data sama
         setDirasakanData((prev) =>
-          prev?.tanggal === data.tanggal && prev?.jam === data.jam
+          prev?.tanggal === data.tanggal &&
+          prev?.jam === data.jam &&
+          prev?.distanceKm === data.distanceKm
             ? prev
             : data,
         );
@@ -618,15 +645,18 @@ export default function Home() {
     async function fetchTerdeteksi() {
       if (!TERDETEKSI_API_URL) return;
 
-      const res = await fetch(withCacheBuster(TERDETEKSI_API_URL), {
-        signal: abort.signal,
-      });
+      const res = await fetch(withCacheBuster(TERDETEKSI_API_URL), { signal });
       // FIX (Bug): cek response.ok
       if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
       const body = (await res.json()) as { features?: unknown[] };
       const features = body?.features;
-      if (!Array.isArray(features) || features.length === 0 || !isMounted)
+      if (
+        !Array.isArray(features) ||
+        features.length === 0 ||
+        signal?.aborted ||
+        !isMountedRef.current
+      )
         return;
 
       const latest = [...features].sort((a, b) => {
@@ -657,7 +687,7 @@ export default function Home() {
       const parsed = parseTerdeteksiPayload(latest);
       if (!parsed) return;
 
-      const { latitude: uLat, longitude: uLon } = userLocationRef.current;
+      const { latitude: uLat, longitude: uLon } = location;
       const latCoord = formatCoord(parsed.latitude);
       const lonCoord = formatCoord(parsed.longitude);
 
@@ -682,9 +712,11 @@ export default function Home() {
 
       setCacheData(CACHE_KEYS.TERDETEKSI, data);
       // FIX (Bug): cek apakah data benar-benar baru
-      if (isMounted) {
+      if (isMountedRef.current && !signal?.aborted) {
         setTerdeteksiData((prev) =>
-          prev?.tanggal === data.tanggal && prev?.jam === data.jam
+          prev?.tanggal === data.tanggal &&
+          prev?.jam === data.jam &&
+          prev?.distanceKm === data.distanceKm
             ? prev
             : data,
         );
@@ -694,21 +726,19 @@ export default function Home() {
     async function fetchTsunami() {
       if (!TSUNAMI_API_URL) return;
 
-      const res = await fetch(withCacheBuster(TSUNAMI_API_URL), {
-        signal: abort.signal,
-      });
+      const res = await fetch(withCacheBuster(TSUNAMI_API_URL), { signal });
       if (!res.ok) throw new Error(`tsunami fetch failed: ${res.status}`);
 
       const raw = await res.text();
       const parsed = xmlParser.parse(raw) as Record<string, unknown>;
       const latest = getLatestTsunamiInfo(getTsunamiInfoItems(parsed));
-      if (!latest || !isMounted) return;
+      if (!latest || signal?.aborted || !isMountedRef.current) return;
 
       const data = parseTsunamiPayload(latest);
       if (!data) return;
 
       setCacheData(CACHE_KEYS.TSUNAMI, data);
-      if (isMounted) {
+      if (isMountedRef.current && !signal?.aborted) {
         setTsunamiData((prev) =>
           prev?.tanggal === data.tanggal &&
           prev?.jam === data.jam &&
@@ -719,13 +749,20 @@ export default function Home() {
       }
     }
 
+      await Promise.all([fetchDirasakan(), fetchTerdeteksi(), fetchTsunami()]);
+
+    },
+    [],
+  );
+
+  // ── Scroll handler ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const abort = new AbortController();
+
     async function fetchAll() {
       try {
-        await Promise.all([
-          fetchDirasakan(),
-          fetchTerdeteksi(),
-          fetchTsunami(),
-        ]);
+        await fetchLatestHomeCards(userLocationRef.current, abort.signal);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           showNetworkError();
@@ -734,7 +771,6 @@ export default function Home() {
     }
 
     fetchAll();
-    // Polling adaptif: 30 detik saat foreground — lebih responsif dari 60 detik
     const INTERVAL_FOREGROUND = 30_000;
     const interval = setInterval(fetchAll, INTERVAL_FOREGROUND);
 
@@ -749,14 +785,54 @@ export default function Home() {
     });
 
     return () => {
-      isMounted = false;
       clearInterval(interval);
       appStateSub.remove();
       abort.abort();
     };
-  }, []);
+  }, [fetchLatestHomeCards, showNetworkError]);
 
-  // ── Scroll handler ────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+
+    refreshInFlightRef.current = true;
+    setRefreshing(true);
+
+    try {
+      const app = getApp();
+      const auth = getAuth(app);
+      const currentUser = auth.currentUser;
+      let locationForCards = userLocationRef.current;
+
+      if (currentUser) {
+        const next = await fetchUserSessionData(currentUser);
+        session.setProfile(next.profile);
+        session.setLocation(next.location);
+
+        const appliedLocation = await applyHomeUserData(
+          next.profile,
+          next.location,
+          { showImageLoading: false },
+        );
+        if (appliedLocation) locationForCards = appliedLocation;
+      } else {
+        const appliedLocation = await applyHomeUserData(
+          session.profile,
+          session.location,
+          { showImageLoading: false },
+        );
+        if (appliedLocation) locationForCards = appliedLocation;
+      }
+
+      await fetchLatestHomeCards(locationForCards);
+    } catch (e) {
+      if (e instanceof Error && e.name !== "AbortError") {
+        showNetworkError();
+      }
+    } finally {
+      refreshInFlightRef.current = false;
+      if (isMountedRef.current) setRefreshing(false);
+    }
+  }, [applyHomeUserData, fetchLatestHomeCards, session, showNetworkError]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -772,10 +848,7 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
-      >
+      <PullToRefresh refreshing={refreshing} onRefresh={handleRefresh}>
         {/* Greeting */}
         <View style={styles.greetingRow}>
           <View>
@@ -970,7 +1043,7 @@ export default function Home() {
             ))}
           </View>
         </View>
-      </ScrollView>
+      </PullToRefresh>
 
       {/* Modals */}
       <InfoModal
