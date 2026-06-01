@@ -3,10 +3,10 @@ import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import patahanGeoJson from "../assets/geojson/patahan.geojson";
+import patahanGeoJson from "@/assets/geojson/patahan.geojson";
 
-import type { MapViewType } from "../constants/map";
-import { DEFAULT_MAP_REGION } from "../constants/map";
+import type { MapViewType } from "../../constants/map";
+import { DEFAULT_MAP_REGION } from "../../constants/map";
 
 const SENSOR_SEISMIC_URL = process.env.EXPO_PUBLIC_SENSOR_SEISMIC_URL || "";
 const SENSOR_SEISMIC_GLOBAL =
@@ -753,7 +753,7 @@ const EarthquakeMap = memo(
             ]}
           >
             <Image
-              source={require("../assets/images/logo-bmkg-2010.png")}
+              source={require("@/assets/images/logo-bmkg-2010.png")}
               style={styles.brandLogo}
               resizeMode="contain"
             />

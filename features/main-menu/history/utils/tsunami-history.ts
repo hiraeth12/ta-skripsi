@@ -1,15 +1,19 @@
 import type {
-  TsunamiMapSlide,
   TsunamiObsArea,
-  TsunamiWzArea,
-} from "@/features/main-menu/earthquake/components/modal-tsunami-info";
-import {
-  formatLatText,
-  formatLonText,
-  parseCoordinateText,
-} from "@/utils/geo";
+  TsunamiWzArea
+} from "@/components/modal-tsunami-info";
+import { formatLatText, formatLonText, parseCoordinateText } from "@/utils/geo";
 
-const MAP_ASSET_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
+import {
+  asRecord,
+  buildAssetUrl,
+  hasAnyRecordValue,
+  normalizeArray,
+  parseObsAreas,
+  parseWzAreas,
+  rawText,
+  safeText,
+} from "@/utils/tsunami-shared-utils";
 
 export type TsunamiHistoryFilters = {
   year?: number;
@@ -96,32 +100,16 @@ const MONTH_ALIASES: Record<string, number> = {
   december: 12,
 };
 
-export function normalizeArray<T>(value: T | T[] | null | undefined): T[] {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-function rawText(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-export function safeText(value: unknown, fallback = "-"): string {
-  const text = rawText(value);
-  return text || fallback;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 function normalizeYear(value: number): number {
   if (value < 100) return 2000 + value;
   return value;
 }
 
-function parseClock(value: unknown): { hour: number; minute: number; second: number } {
+function parseClock(value: unknown): {
+  hour: number;
+  minute: number;
+  second: number;
+} {
   const match = rawText(value)
     .replace(/\s*WIB$/i, "")
     .match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -141,7 +129,11 @@ function buildTimestamp(
   day: number,
   timeValue?: unknown,
 ): number {
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day)
+  ) {
     return Number.NEGATIVE_INFINITY;
   }
 
@@ -291,7 +283,9 @@ function firstValidTimestamp(...timestamps: number[]): number {
 }
 
 function parseTsunamiEventKeyTimestamp(value: unknown): number {
-  const match = rawText(value).match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  const match = rawText(value).match(
+    /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/,
+  );
   if (!match) return Number.NEGATIVE_INFINITY;
 
   return buildTimestamp(
@@ -314,21 +308,10 @@ function formatLon(value: number): string {
   return formatLonText(value);
 }
 
-function buildAssetUrl(path: unknown): string {
-  const value = rawText(path);
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value)) return value;
-  return `${MAP_ASSET_BASE}/${value}`;
-}
-
-function hasAnyRecordValue(
-  record: Record<string, unknown>,
-  keys: string[],
-): boolean {
-  return keys.some((key) => rawText(record[key]) !== "");
-}
-
-function normalizeNestedRecords(value: unknown, directKeys: string[]): Record<string, unknown>[] {
+function normalizeNestedRecords(
+  value: unknown,
+  directKeys: string[],
+): Record<string, unknown>[] {
   const direct = asRecord(value);
 
   if (hasAnyRecordValue(direct, directKeys)) {
@@ -346,49 +329,6 @@ function normalizeNestedRecords(value: unknown, directKeys: string[]): Record<st
   }
 
   return normalizeArray(value).map((item) => asRecord(item));
-}
-
-function parseWzAreas(value: unknown): TsunamiWzArea[] {
-  return normalizeNestedRecords(value, ["province", "district", "level", "date", "time"])
-    .filter((area) =>
-      hasAnyRecordValue(area, ["province", "district", "level", "date", "time"]),
-    )
-    .map((area) => ({
-      province: safeText(area.province),
-      district: safeText(area.district),
-      level: safeText(area.level),
-      date: safeText(area.date),
-      time: safeText(area.time),
-    }));
-}
-
-function parseObsAreas(value: unknown): TsunamiObsArea[] {
-  return normalizeNestedRecords(value, [
-    "location",
-    "loclatitude",
-    "loclongitude",
-    "height",
-    "date",
-    "time",
-  ])
-    .filter((area) =>
-      hasAnyRecordValue(area, [
-        "location",
-        "loclatitude",
-        "loclongitude",
-        "height",
-        "date",
-        "time",
-      ]),
-    )
-    .map((area) => ({
-      location: safeText(area.location),
-      loclatitude: safeText(area.loclatitude),
-      loclongitude: safeText(area.loclongitude),
-      height: safeText(area.height),
-      date: safeText(area.date),
-      time: safeText(area.time),
-    }));
 }
 
 function normalizeWarningEntries(value: unknown): Array<{
@@ -420,7 +360,8 @@ function normalizeWarning(
   entry: { key: string; value: Record<string, unknown> },
   index: number,
 ): TsunamiHistoryWarning {
-  const warningId = rawText(entry.value.warningId) || entry.key || `warning-${index + 1}`;
+  const warningId =
+    rawText(entry.value.warningId) || entry.key || `warning-${index + 1}`;
   const timesent = safeText(entry.value.timesent);
 
   return {
@@ -450,7 +391,10 @@ export function getPdSortValue(value: string): number {
 function getWarningPdSortValue(warning: TsunamiHistoryWarning): number {
   const subjectSortValue = getPdSortValue(warning.subject);
   if (Number.isFinite(subjectSortValue)) return subjectSortValue;
-  return Math.min(getPdSortValue(warning.warningId), getPdSortValue(warning.id));
+  return Math.min(
+    getPdSortValue(warning.warningId),
+    getPdSortValue(warning.id),
+  );
 }
 
 export function sortTsunamiWarningsByPd(
@@ -473,7 +417,8 @@ function getLatestWarningIndex(
   if (warnings.length === 0) return 0;
 
   const matchingIdIndex = warnings.findIndex(
-    (warning) => warning.warningId === latestWarningId || warning.id === latestWarningId,
+    (warning) =>
+      warning.warningId === latestWarningId || warning.id === latestWarningId,
   );
   if (matchingIdIndex >= 0) return matchingIdIndex;
 
@@ -518,7 +463,10 @@ function resolveEventCoordinates(event: Record<string, unknown>): {
   let latitude = parseCoordinate(event.latitude);
   let longitude = parseCoordinate(event.longitude);
 
-  if ((!Number.isFinite(latitude) || !Number.isFinite(longitude)) && event.coordinates) {
+  if (
+    (!Number.isFinite(latitude) || !Number.isFinite(longitude)) &&
+    event.coordinates
+  ) {
     const [lonText, latText] = rawText(event.coordinates)
       .split(",")
       .map((part) => part.trim());
@@ -553,7 +501,7 @@ function compareEvents(a: TsunamiHistoryEvent, b: TsunamiHistoryEvent): number {
       // Keduanya invalid — fallback ke eventKey descending
       return b.eventKey < a.eventKey ? -1 : b.eventKey > a.eventKey ? 1 : 0;
     }
-    if (!isValidTimestamp(a.sortTimeMs)) return 1;  // a tidak valid → a ke bawah
+    if (!isValidTimestamp(a.sortTimeMs)) return 1; // a tidak valid → a ke bawah
     if (!isValidTimestamp(b.sortTimeMs)) return -1; // b tidak valid → b ke bawah
     return b.sortTimeMs - a.sortTimeMs;
   }
@@ -564,9 +512,10 @@ function compareEvents(a: TsunamiHistoryEvent, b: TsunamiHistoryEvent): number {
   return 0;
 }
 
-function normalizeEvent(
-  entry: { key: string; value: Record<string, unknown> },
-): TsunamiHistoryEvent | null {
+function normalizeEvent(entry: {
+  key: string;
+  value: Record<string, unknown>;
+}): TsunamiHistoryEvent | null {
   const coords = resolveEventCoordinates(entry.value);
   if (!coords) return null;
 
@@ -583,7 +532,8 @@ function normalizeEvent(
     latestTimesent,
   );
   const latestWarning = warnings[latestWarningIndex];
-  const resolvedLatestTimesent = latestTimesent || rawText(latestWarning?.timesent);
+  const resolvedLatestTimesent =
+    latestTimesent || rawText(latestWarning?.timesent);
   const firebaseKey = entry.key;
   const eventKey = rawText(entry.value.eventKey) || firebaseKey;
 
@@ -600,8 +550,12 @@ function normalizeEvent(
     latText: formatLat(coords.latitude),
     lonText: formatLon(coords.longitude),
     latestWarningId: latestWarningId || rawText(latestWarning?.warningId),
-    latestSubject: safeText(entry.value.latestSubject || latestWarning?.subject),
-    latestHeadline: safeText(entry.value.latestHeadline || latestWarning?.headline),
+    latestSubject: safeText(
+      entry.value.latestSubject || latestWarning?.subject,
+    ),
+    latestHeadline: safeText(
+      entry.value.latestHeadline || latestWarning?.headline,
+    ),
     latestTimesent: safeText(resolvedLatestTimesent),
     latestWarningIndex,
     warnings,
@@ -616,42 +570,30 @@ function normalizeEvent(
   };
 }
 
-export function normalizeTsunamiHistoryEvents(rawData: unknown): TsunamiHistoryEvent[] {
+export function normalizeTsunamiHistoryEvents(
+  rawData: unknown,
+): TsunamiHistoryEvent[] {
   const entries = Array.isArray(rawData)
-    ? rawData.map((value, index) => ({ key: String(index), value: asRecord(value) }))
+    ? rawData.map((value, index) => ({
+        key: String(index),
+        value: asRecord(value),
+      }))
     : rawData && typeof rawData === "object"
-      ? Object.entries(rawData as Record<string, unknown>).map(([key, value]) => ({
-          key,
-          value: asRecord(value),
-        }))
+      ? Object.entries(rawData as Record<string, unknown>).map(
+          ([key, value]) => ({
+            key,
+            value: asRecord(value),
+          }),
+        )
       : [];
 
-  return entries
-    .map(normalizeEvent)
-    .filter((event): event is TsunamiHistoryEvent => Boolean(event))
-    // FIX: pakai compareEvents yang punya tiebreaker deterministik
-    .sort(compareEvents);
-}
-
-export function buildTsunamiMapSlides(
-  warning?: TsunamiHistoryWarning | null,
-): TsunamiMapSlide[] {
-  if (!warning) return [];
-
-  return [
-    { title: "Shakemap / Peta Guncangan", imageUrl: warning.shakemap },
-    { title: "WZMap / Peta Zona Peringatan", imageUrl: warning.wzmap },
-    { title: "TTMap / Peta Waktu Tiba Tsunami", imageUrl: warning.ttmap },
-    {
-      title: "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height",
-      imageUrl: warning.sshmap,
-    },
-  ].filter((slide) => rawText(slide.imageUrl));
-}
-
-export function getWarningTabLabel(subject: string, index: number): string {
-  const match = subject.match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
-  return match ? `PD-${match[1]}` : `Update ${index + 1}`;
+  return (
+    entries
+      .map(normalizeEvent)
+      .filter((event): event is TsunamiHistoryEvent => Boolean(event))
+      // FIX: pakai compareEvents yang punya tiebreaker deterministik
+      .sort(compareEvents)
+  );
 }
 
 export function eventMatchesTsunamiYear(

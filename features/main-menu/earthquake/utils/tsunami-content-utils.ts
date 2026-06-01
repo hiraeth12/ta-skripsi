@@ -3,7 +3,16 @@ import type {
   TsunamiMapSlide,
   TsunamiObsArea,
   TsunamiWzArea,
-} from "../components/modal-tsunami-info";
+} from "../../../../components/modal-tsunami-info";
+
+import {
+  asRecord,
+  buildAssetUrl,
+  normalizeArray,
+  parseObsAreas,
+  parseWzAreas,
+  rawText
+} from "@/utils/tsunami-shared-utils";
 
 const MAP_ASSET_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const xmlParser = new XMLParser({ ignoreAttributes: false });
@@ -68,21 +77,6 @@ export function safeText(value: unknown, fallback = "-"): string {
   return text || fallback;
 }
 
-function rawText(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function normalizeArray<T>(value: T | T[] | null | undefined): T[] {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
 function withCacheBuster(url: string): string {
   const base = url.trim();
   if (!base) return "";
@@ -90,13 +84,6 @@ function withCacheBuster(url: string): string {
     return `${base}${Date.now()}`;
   }
   return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
-}
-
-function buildAssetUrl(path: string): string {
-  const value = path.trim();
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value)) return value;
-  return `${MAP_ASSET_BASE}/${value}`;
 }
 
 export function getInfoItems(parsed: Record<string, unknown>): unknown[] {
@@ -159,13 +146,6 @@ function getEventGroupKey(
   return rawText(info.eventid) || `tsunami-${Date.now()}`;
 }
 
-function hasAnyRecordValue(
-  record: Record<string, unknown>,
-  keys: string[],
-): boolean {
-  return keys.some((key) => rawText(record[key]) !== "");
-}
-
 export function buildTsunamiMapSlides(
   warning: TsunamiWarning,
 ): TsunamiMapSlide[] {
@@ -187,63 +167,6 @@ export function buildTsunamiMapSlides(
       imageUrl: warning.sshmap,
     },
   ].filter((slide) => slide.imageUrl);
-}
-
-function parseWzAreas(value: unknown): TsunamiWzArea[] {
-  return normalizeArray<unknown>(value).reduce<TsunamiWzArea[]>((acc, item) => {
-    const area = asRecord(item);
-    if (
-      !hasAnyRecordValue(area, [
-        "province",
-        "district",
-        "level",
-        "date",
-        "time",
-      ])
-    ) {
-      return acc;
-    }
-
-    acc.push({
-      province: safeText(area.province),
-      district: safeText(area.district),
-      level: safeText(area.level),
-      date: safeText(area.date),
-      time: safeText(area.time),
-    });
-    return acc;
-  }, []);
-}
-
-function parseObsAreas(value: unknown): TsunamiObsArea[] {
-  return normalizeArray<unknown>(value).reduce<TsunamiObsArea[]>(
-    (acc, item) => {
-      const area = asRecord(item);
-      if (
-        !hasAnyRecordValue(area, [
-          "location",
-          "loclatitude",
-          "loclongitude",
-          "height",
-          "date",
-          "time",
-        ])
-      ) {
-        return acc;
-      }
-
-      acc.push({
-        location: safeText(area.location),
-        loclatitude: safeText(area.loclatitude),
-        loclongitude: safeText(area.loclongitude),
-        height: safeText(area.height),
-        date: safeText(area.date),
-        time: safeText(area.time),
-      });
-      return acc;
-    },
-    [],
-  );
 }
 
 function parseTsunamiInfo(

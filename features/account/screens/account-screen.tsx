@@ -7,23 +7,23 @@ import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Modal,
-  Pressable,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    Modal,
+    Pressable,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
+import Skeleton from "../../../components/ui/skeleton";
 import { saveFcmTokenToDatabase } from "../../../utils/fcm";
 import { PUSH_NOTIFICATION_PREF_KEY } from "../components/handle-logout";
 import ProfilePageLayout from "../components/profile-page-layout";
-import Skeleton from "../../../components/skeleton";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/account-styles";
 
 export default function Account() {
   const router = useRouter();
-  const { profile, loading } = useProfileContext(); 
+  const { profile, loading } = useProfileContext();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
   const [isToggleProcessing, setIsToggleProcessing] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
@@ -226,7 +226,6 @@ export default function Account() {
           title="Tentang Aplikasi"
           onPress={() => navigate("/profile/tentang-aplikasi")}
         />
-
       </ProfilePageLayout>
 
       <Modal visible={showNotifModal} transparent animationType="fade">
@@ -258,7 +257,6 @@ export default function Account() {
           </View>
         </Pressable>
       </Modal>
-
     </>
   );
 }

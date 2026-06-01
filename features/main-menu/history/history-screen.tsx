@@ -1,32 +1,16 @@
-import EarthquakeTabBar from "@/components/earthquake-tab-bar";
-import { getApp } from "@/config/firebase-init";
+import EarthquakeTabBar from "@/components/ui/earthquake-tab-bar";
+import Skeleton from "@/components/ui/skeleton";
 import { useUserSession } from "@/features/account/user-session-context";
-import {
-  CACHE_KEYS,
-  getPersistentCache,
-  setPersistentCache,
-} from "@/utils/cache";
-import { haversineDistanceKm, parseCoordinateText } from "@/utils/geo";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  endAt,
-  get,
-  getDatabase,
-  orderByChild,
-  query,
-  ref,
-  startAt,
-} from "@react-native-firebase/database";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
+  type ReactElement,
   useCallback,
   useEffect,
-  memo,
+  useMemo,
   useRef,
   useState,
-  useMemo,
-  type ReactElement,
 } from "react";
 import {
   Animated,
@@ -41,264 +25,62 @@ import {
   GempaTerdeteksiHistoryContent,
   TsunamiHistoryContent,
 } from "./components";
+import { useExternalSelection } from "./hooks/use-external-selection";
+import { useHistoryFetch } from "./hooks/use-history-fetch";
+import { useHistoryFilter } from "./hooks/use-history-filter";
 import styles from "./styles/history-screen";
-import { dedupeByKey } from "./utils/dedupe";
-import { readRealtimeNode } from "./utils/read-realtime-node";
+import { MONTH_NAMES_ID, serializeFilterMonths } from "./utils/filter";
 import {
-  applyTsunamiHistoryFilters,
-  normalizeTsunamiHistoryEvents,
-  type TsunamiHistoryEvent,
-  type TsunamiHistoryFilters,
-} from "./utils/tsunami-history";
-import {
-  buildDirasakanDateRange,
-  buildTerdeteksiTimeRange,
-  clampYearMonth,
-  getNowYearMonth,
-  matchesDirasakanMonth,
-  matchesTerdeteksiMonth,
-  MONTH_NAMES_ID,
-  normalizeFilterMonths,
-  parseFilterMonthsParam,
-  serializeFilterMonths,
-  type HistoryTabKey,
-} from "./utils/filter";
+  HISTORY_TABS,
+  type HistoryEarthquakeTab,
+  type ListItem,
+} from "./utils/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DATABASE_URL = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL!;
 const ITEM_HEIGHT = 74;
-const LIST_CONTENT_CONTAINER_STYLE = { paddingHorizontal: 12, paddingBottom: 40 };
-const HISTORY_TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI", "RIWAYAT TSUNAMI"] as const;
-type HistoryEarthquakeTab = (typeof HISTORY_TABS)[number];
-
-const TAB_CACHE: Record<HistoryEarthquakeTab, string> = {
-  "GEMPA DIRASAKAN": CACHE_KEYS.DIRASAKAN_HISTORY ?? "dirasakan_history",
-  "GEMPA TERDETEKSI": CACHE_KEYS.TERDETEKSI_HISTORY,
-  "RIWAYAT TSUNAMI": CACHE_KEYS.TSUNAMI_HISTORY,
-};
-const TSUNAMI_HISTORY_CACHE_VERSION = "v3";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type ListItem = {
-  id: string;
-  latitude: number;
-  longitude: number;
-  magnitude: string;
-  lokasi: string;
-  waktu: string;
-  jarak: string;
-  distanceKm: string;
-  tanggal: string;
-  jam: string;
-  kedalaman: string;
-  felt: string;
-  shakemap?: string | null;
-  eventType?: "quake" | "tsunami";
-  status?: string;
-  headline?: string;
-  latestWarningId?: string;
+const LIST_CONTENT_CONTAINER_STYLE = {
+  paddingHorizontal: 12,
+  paddingBottom: 40,
 };
 
-type HaversineFn = (a: number, b: number, c: number, d: number) => number;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Normalize helpers ────────────────────────────────────────────────────────
-
-function normalizeDirasakan(
-  rawData: unknown,
-  userLat: number,
-  userLon: number,
-  haversine: HaversineFn,
-): ListItem[] {
-  const candidates: any[] = Array.isArray(rawData)
-    ? rawData
-    : rawData && typeof rawData === "object"
-      ? Object.values(rawData as object)
-      : [];
-
-  return candidates
-    .sort((a, b) =>
-      String(b?.eventid ?? b?.timesent ?? "").localeCompare(
-        String(a?.eventid ?? a?.timesent ?? ""),
-      ),
-    )
-    .reduce<ListItem[]>((acc, candidate, index) => {
-      const coordStr = String(candidate?.point?.coordinates ?? "");
-      const [lonStr, latStr] = coordStr.split(",");
-      const latitude = parseCoordinateText(candidate?.latitude ?? candidate?.lat ?? latStr);
-      const longitude = parseCoordinateText(candidate?.longitude ?? candidate?.lon ?? lonStr);
-      if (latitude === null || longitude === null) return acc;
-      const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
-
-      acc.push({
-        id: String(candidate?.eventid ?? candidate?.eventId ?? `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`),
-        latitude,
-        longitude,
-        magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-        lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
-        waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
-        jarak: `${distanceKm} km dari lokasi Anda`,
-        distanceKm,
-        tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
-        jam: String(candidate?.time ?? candidate?.jam ?? ""),
-        kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
-        felt: String(candidate?.felt ?? ""),
-        shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
-      });
-      return acc;
-    }, []);
+function asSingle(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
 }
 
-function normalizeTerdeteksi(
-  rawData: unknown,
-  userLat: number,
-  userLon: number,
-  haversine: HaversineFn,
-): ListItem[] {
-  const nodeArray: any[] = Array.isArray(rawData)
-    ? rawData
-    : rawData && typeof rawData === "object"
-      ? Object.values(rawData as object)
-      : [];
-
-  return [...nodeArray]
-    .sort((a, b) =>
-      String(b?.time ?? b?.properties?.time ?? "").localeCompare(
-        String(a?.time ?? a?.properties?.time ?? ""),
-      ),
-    )
-    .reduce<ListItem[]>((acc, item, index) => {
-      const coords = item?.geometry?.coordinates || item?.coordinates;
-      const longitude = parseCoordinateText(
-        item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0],
-      );
-      const latitude = parseCoordinateText(
-        item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1],
-      );
-      if (latitude === null || longitude === null) return acc;
-
-      const props = item?.properties ?? item;
-      const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
-      const jamFromTime = (jamRaw ?? "").split(".")[0];
-      const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
-
-      acc.push({
-        id: String(props?.eventid ?? props?.eventId ?? `${props?.time ?? ""}-${latitude}-${longitude}-${index}`),
-        latitude,
-        longitude,
-        magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
-        lokasi: String(props?.lokasi ?? props?.place ?? props?.area ?? ""),
-        waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
-        jarak: `${distanceKm} km dari lokasi Anda`,
-        distanceKm,
-        tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
-        jam: String(props?.jam ?? jamFromTime ?? ""),
-        kedalaman: String(props?.kedalaman ?? props?.depth ?? ""),
-        felt: String(props?.felt ?? props?.fase ?? ""),
-      });
-      return acc;
-    }, []);
+function roundCoord(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }
 
-function normalizeTsunamiList(events: TsunamiHistoryEvent[]): ListItem[] {
-  return events.map((event) => ({
-    id: event.eventKey,
-    latitude: event.latitude,
-    longitude: event.longitude,
-    magnitude: event.magnitude,
-    lokasi: event.area,
-    waktu: `${event.time} • ${event.date}`,
-    jarak: "",
-    distanceKm: "",
-    tanggal: event.date,
-    jam: event.time,
-    kedalaman: event.depth,
-    felt: "",
-    eventType: "tsunami",
-    status: event.latestSubject,
-    headline: event.latestHeadline,
-    latestWarningId: event.latestWarningId,
-  }));
-}
-
-function parseTsunamiListIdTime(value: unknown): number {
-  const match = String(value ?? "").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
-  if (!match) return Number.NEGATIVE_INFINITY;
-
-  const timestamp = new Date(
-    Number.parseInt(match[1], 10),
-    Number.parseInt(match[2], 10) - 1,
-    Number.parseInt(match[3], 10),
-    Number.parseInt(match[4], 10),
-    Number.parseInt(match[5], 10),
-    Number.parseInt(match[6], 10),
-  ).getTime();
-
-  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
-}
-
-function sortTsunamiListItems(items: ListItem[]): ListItem[] {
-  return [...items].sort((a, b) => {
-    const aTime = parseTsunamiListIdTime(a.id);
-    const bTime = parseTsunamiListIdTime(b.id);
-
-    if (aTime !== bTime) return bTime - aTime;
-    return String(b.id).localeCompare(String(a.id));
-  });
-}
-
-function isSameListItem(a: ListItem, b: ListItem): boolean {
-  return (
-    a.id === b.id &&
-    a.latitude === b.latitude &&
-    a.longitude === b.longitude &&
-    a.magnitude === b.magnitude &&
-    a.lokasi === b.lokasi &&
-    a.waktu === b.waktu &&
-    a.jarak === b.jarak &&
-    a.distanceKm === b.distanceKm &&
-    a.tanggal === b.tanggal &&
-    a.jam === b.jam &&
-    a.kedalaman === b.kedalaman &&
-    a.felt === b.felt &&
-    (a.shakemap ?? null) === (b.shakemap ?? null) &&
-    a.eventType === b.eventType &&
-    a.status === b.status &&
-    a.headline === b.headline &&
-    a.latestWarningId === b.latestWarningId
-  );
-}
-
-function areSameListItems(a: ListItem[], b: ListItem[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-
-  for (let index = 0; index < a.length; index += 1) {
-    if (!isSameListItem(a[index], b[index])) return false;
-  }
-
-  return true;
-}
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── SkeletonCard ─────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   const shimmer = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
       ]),
     );
     anim.start();
     return () => anim.stop();
   }, [shimmer]);
-
-  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
-
+  const opacity = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.7],
+  });
   return (
     <Animated.View
       style={{
@@ -313,11 +95,24 @@ function SkeletonCard() {
         height: ITEM_HEIGHT - 8,
       }}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#CBD5E1", marginRight: 10 }} />
+      <Skeleton
+        width={40}
+        height={40}
+        borderRadius={20}
+        style={{ marginRight: 10 }}
+      />
       <View style={{ flex: 1, gap: 6 }}>
-        <View style={{ height: 12, width: "70%", backgroundColor: "#CBD5E1", borderRadius: 4 }} />
-        <View style={{ height: 10, width: "50%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
-        <View style={{ height: 9, width: "85%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
+        <Skeleton width="70%" height={12} />
+        <Skeleton
+          width="50%"
+          height={10}
+          style={{ backgroundColor: "#E2E8F0" }}
+        />
+        <Skeleton
+          width="85%"
+          height={9}
+          style={{ backgroundColor: "#E2E8F0" }}
+        />
       </View>
     </Animated.View>
   );
@@ -326,27 +121,24 @@ function SkeletonCard() {
 function SkeletonList() {
   return (
     <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
-      {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+      {Array.from({ length: 5 }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
     </View>
   );
 }
 
-// ─── List card ────────────────────────────────────────────────────────────────
-
-type EarthquakeListItemProps = {
-  item: ListItem;
-  onPress: (item: ListItem) => void;
-};
-
-const EarthquakeListItem = memo(({
+const EarthquakeListItem = ({
   item,
   onPress,
-}: EarthquakeListItemProps) => {
+}: {
+  item: ListItem;
+  onPress: (item: ListItem) => void;
+}) => {
   const magValue = parseFloat(item.magnitude);
   const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
   const isTsunami = item.eventType === "tsunami";
-
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -373,11 +165,21 @@ const EarthquakeListItem = memo(({
           marginRight: 10,
         }}
       >
-        <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>{item.magnitude}</Text>
+        <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>
+          {item.magnitude}
+        </Text>
         <Text style={{ color: "#FFF", fontSize: 8 }}>Mag</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: "#0F172A", fontWeight: "bold", fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+        <Text
+          style={{
+            color: "#0F172A",
+            fontWeight: "bold",
+            fontSize: 13,
+            marginBottom: 2,
+          }}
+          numberOfLines={1}
+        >
           {item.lokasi || "-"}
         </Text>
         <Text style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>
@@ -391,26 +193,11 @@ const EarthquakeListItem = memo(({
       </View>
     </TouchableOpacity>
   );
-}, (prev, next) => {
-  return prev.onPress === next.onPress && isSameListItem(prev.item, next.item);
-});
-
-type HistoryListPanelProps = {
-  emptyComponent: ReactElement;
-  getItemLayout: (_: unknown, index: number) => {
-    length: number;
-    offset: number;
-    index: number;
-  };
-  items: ListItem[];
-  keyExtractor: (item: ListItem) => string;
-  listLoading: boolean;
-  renderItem: ({ item }: { item: ListItem }) => ReactElement;
-  slideAnim: Animated.Value;
-  title: string;
 };
 
-const HistoryListPanel = memo(function HistoryListPanel({
+// ─── HistoryListPanel ─────────────────────────────────────────────────────────
+
+function HistoryListPanel({
   emptyComponent,
   getItemLayout,
   items,
@@ -419,7 +206,19 @@ const HistoryListPanel = memo(function HistoryListPanel({
   renderItem,
   slideAnim,
   title,
-}: HistoryListPanelProps) {
+}: {
+  emptyComponent: ReactElement;
+  getItemLayout: (
+    _: unknown,
+    index: number,
+  ) => { length: number; offset: number; index: number };
+  items: ListItem[];
+  keyExtractor: (item: ListItem) => string;
+  listLoading: boolean;
+  renderItem: ({ item }: { item: ListItem }) => ReactElement;
+  slideAnim: Animated.Value;
+  title: string;
+}) {
   return (
     <Animated.View
       style={{
@@ -436,20 +235,28 @@ const HistoryListPanel = memo(function HistoryListPanel({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         zIndex: 10,
-        transform: [{
-          translateY: slideAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 500],
-          }),
-        }],
+        transform: [
+          {
+            translateY: slideAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 500],
+            }),
+          },
+        ],
       }}
     >
       <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-        <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontWeight: "bold",
+            fontSize: 14,
+            textAlign: "center",
+          }}
+        >
           {title}
         </Text>
       </View>
-
       {listLoading && items.length === 0 ? (
         <SkeletonList />
       ) : (
@@ -458,7 +265,7 @@ const HistoryListPanel = memo(function HistoryListPanel({
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           getItemLayout={getItemLayout}
-          removeClippedSubviews={true}
+          removeClippedSubviews
           maxToRenderPerBatch={8}
           initialNumToRender={6}
           windowSize={3}
@@ -470,17 +277,6 @@ const HistoryListPanel = memo(function HistoryListPanel({
       )}
     </Animated.View>
   );
-});
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
-
-function asSingle(value?: string | string[]): string {
-  if (Array.isArray(value)) return value[0] ?? "";
-  return value ?? "";
-}
-
-function roundCoord(n: number): number {
-  return Math.round(n * 1000) / 1000;
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -490,29 +286,16 @@ export default function History() {
   const pathname = usePathname();
   const isFocused = useIsFocused();
   const session = useUserSession();
-
   const searchParams = useLocalSearchParams<{
     tab?: string;
     filterYear?: string;
     filterMonth?: string;
     filterMonths?: string;
-    selectedEventId?: string;
-    selectedLatitude?: string;
-    selectedLongitude?: string;
-    selectedMagnitude?: string;
-    selectedLocation?: string;
-    selectedWaktu?: string;
-    selectedJarak?: string;
-    selectedDistanceKm?: string;
-    selectedTanggal?: string;
-    selectedJam?: string;
-    selectedKedalaman?: string;
-    selectedFelt?: string;
-    selectedShakemap?: string;
-    selectedStatus?: string;
-    selectedHeadline?: string;
-    selectedLatestWarningId?: string;
+    restoreListPanel?: string;
+    restoreListPanelToken?: string;
   }>();
+
+  // ── Tab ──────────────────────────────────────────────────────────────────
 
   const tabParam = asSingle(searchParams.tab);
   const initialTab: HistoryEarthquakeTab =
@@ -521,211 +304,162 @@ export default function History() {
       : tabParam === "terdeteksi"
         ? "GEMPA TERDETEKSI"
         : "GEMPA DIRASAKAN";
-  const now = useMemo(() => new Date(), [])
-  const selectedEventIdParam = asSingle(searchParams.selectedEventId);
-
-  // ── State ──────────────────────────────────────────────────────────────────
 
   const [activeTab, setActiveTab] = useState<HistoryEarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
-  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
-  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
-  const [hasMountedTsunami, setHasMountedTsunami] = useState(initialTab === "RIWAYAT TSUNAMI");
-  // Panel animation: 0 = slid in (visible), 1 = slid out (hidden)
-  const listPanelSlide = useRef(
-    new Animated.Value(selectedEventIdParam ? 1 : 0),
-  ).current;
-
-  const showListPanel = useCallback(() => {
-    Animated.timing(listPanelSlide, {
-      toValue: 0,
-      duration: 400,
-      easing: Easing.out(Easing.bezier(0.16, 1, 0.3, 1)), // smoother deceleration
-      useNativeDriver: false, // drives a % height — can't use native driver for layout props
-    }).start();
-  }, [listPanelSlide]);
-
-  const hideListPanel = useCallback(() => {
-    Animated.timing(listPanelSlide, {
-      toValue: 1,
-      duration: 300,
-      easing: Easing.inOut(Easing.ease), // smooth accel/decel
-      useNativeDriver: false,
-    }).start();
-  }, [listPanelSlide]);
-  const [items, setItems] = useState<ListItem[]>([]);
-  const setItemsIfChanged = useCallback((nextItems: ListItem[]) => {
-    setItems((currentItems) =>
-      areSameListItems(currentItems, nextItems) ? currentItems : nextItems,
-    );
-  }, []);
-  const [listLoading, setListLoading] = useState(true);
-  const [isOpeningFilter, setIsOpeningFilter] = useState(false);
-  const [userLocation, setUserLocation] = useState({
-    lat: roundCoord(-6.9175),
-    lon: roundCoord(107.6191),
-  });
-  const rawYear = Number.parseInt(asSingle(searchParams.filterYear), 10);
-  const rawMonth = Number.parseInt(asSingle(searchParams.filterMonth), 10);
-  const rawMonthsParam = asSingle(searchParams.filterMonths);
-  const rawMonths = useMemo(
-    () => parseFilterMonthsParam(rawMonthsParam),
-    [rawMonthsParam],
+  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(
+    initialTab === "GEMPA DIRASAKAN",
   );
-  const effectiveFilter = useMemo(() => {
-    const fallback = getNowYearMonth(now);
-    const base = {
-      year: Number.isFinite(rawYear) ? rawYear : fallback.year,
-      month: Number.isFinite(rawMonth) ? rawMonth : fallback.month,
-    };
-    const tabKey: HistoryTabKey =
-      activeTab === "RIWAYAT TSUNAMI"
-        ? "tsunami"
-        : activeTab === "GEMPA TERDETEKSI"
-          ? "terdeteksi"
-          : "dirasakan";
-    return clampYearMonth(base, tabKey, now);
-  }, [activeTab, now, rawMonth, rawYear]);
-  const tabKey: HistoryTabKey =
-    activeTab === "RIWAYAT TSUNAMI"
-      ? "tsunami"
-      : activeTab === "GEMPA TERDETEKSI"
-        ? "terdeteksi"
-        : "dirasakan";
-  const effectiveMonths = useMemo(() => {
-    const baseMonths = rawMonths.length > 0
-      ? rawMonths
-      : [effectiveFilter.month];
-    return normalizeFilterMonths(baseMonths, effectiveFilter.year, tabKey, now);
-  }, [effectiveFilter.month, effectiveFilter.year, now, rawMonths, tabKey]);
-  const tsunamiFilters = useMemo<TsunamiHistoryFilters>(
-    () => ({
-      year: effectiveFilter.year,
-    }),
-    [effectiveFilter.year],
+  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(
+    initialTab === "GEMPA TERDETEKSI",
   );
-
-  // ── Tab param sync ─────────────────────────────────────────────────────────
+  const [hasMountedTsunami, setHasMountedTsunami] = useState(
+    initialTab === "RIWAYAT TSUNAMI",
+  );
 
   useEffect(() => {
     const incoming = asSingle(searchParams.tab);
     if (incoming === "tsunami") setActiveTab("RIWAYAT TSUNAMI");
-    if (incoming === "terdeteksi") setActiveTab("GEMPA TERDETEKSI");
+    else if (incoming === "terdeteksi") setActiveTab("GEMPA TERDETEKSI");
     else if (incoming === "dirasakan") setActiveTab("GEMPA DIRASAKAN");
   }, [searchParams.tab]);
 
   useEffect(() => {
-    if (activeTab === "GEMPA DIRASAKAN") {
-      setHasMountedDirasakan(true);
-      return;
-    }
-    if (activeTab === "GEMPA TERDETEKSI") {
-      setHasMountedTerdeteksi(true);
-      return;
-    }
-    setHasMountedTsunami(true);
+    if (activeTab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
+    else if (activeTab === "GEMPA TERDETEKSI") setHasMountedTerdeteksi(true);
+    else setHasMountedTsunami(true);
   }, [activeTab]);
 
-  // ── External selection ────────────────────────────────────────────────────
+  // ── Filter (dari hook) ────────────────────────────────────────────────────
 
-  const selectedLatitudeParam = asSingle(searchParams.selectedLatitude);
-  const selectedLongitudeParam = asSingle(searchParams.selectedLongitude);
-  const selectedMagnitudeParam = asSingle(searchParams.selectedMagnitude);
-  const selectedLocationParam = asSingle(searchParams.selectedLocation);
-  const selectedWaktuParam = asSingle(searchParams.selectedWaktu);
-  const selectedJarakParam = asSingle(searchParams.selectedJarak);
-  const selectedDistanceKmParam = asSingle(searchParams.selectedDistanceKm);
-  const selectedTanggalParam = asSingle(searchParams.selectedTanggal);
-  const selectedJamParam = asSingle(searchParams.selectedJam);
-  const selectedKedalamanParam = asSingle(searchParams.selectedKedalaman);
-  const selectedFeltParam = asSingle(searchParams.selectedFelt);
-  const selectedShakemapParam = asSingle(searchParams.selectedShakemap);
-  const selectedStatusParam = asSingle(searchParams.selectedStatus);
-  const selectedHeadlineParam = asSingle(searchParams.selectedHeadline);
-  const selectedLatestWarningIdParam = asSingle(searchParams.selectedLatestWarningId);
+  const now = useMemo(() => new Date(), []);
+  const { effectiveFilter, effectiveMonths, tsunamiFilters } = useHistoryFilter(
+    {
+      activeTab,
+      rawYear: Number.parseInt(asSingle(searchParams.filterYear), 10),
+      rawMonth: Number.parseInt(asSingle(searchParams.filterMonth), 10),
+      rawMonthsParam: asSingle(searchParams.filterMonths),
+      now,
+    },
+  );
 
-  const externalSelection = useMemo(() => {
-    const eventId = selectedEventIdParam;
-    const latitude = parseFloat(selectedLatitudeParam);
-    const longitude = parseFloat(selectedLongitudeParam);
-    if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+  // ── External selection (dari hook) ───────────────────────────────────────
 
-    const tanggal = selectedTanggalParam;
-    const jam = selectedJamParam;
-    const waktu = selectedWaktuParam;
-    const [fallbackJam, fallbackTanggal] = waktu
-      .split("\u2022")
-      .map((p) => p.trim());
-    const distanceKm =
-      selectedDistanceKmParam ||
-      selectedJarakParam.replace(/[^0-9.,]/g, "") ||
-      "0";
+  const { externalSelection, clearSelectionParams } = useExternalSelection();
 
-    return {
-      eventId,
-      latitude,
-      longitude,
-      magnitude: selectedMagnitudeParam || "-",
-      lokasi: selectedLocationParam || "-",
-      tanggal: tanggal || fallbackTanggal || "",
-      jam: jam || fallbackJam || "",
-      distanceKm,
-      kedalaman: selectedKedalamanParam || "-",
-      felt: selectedFeltParam,
-      shakemap: selectedShakemapParam || null,
-      status: selectedStatusParam || "-",
-      headline: selectedHeadlineParam || "-",
-      latestWarningId: selectedLatestWarningIdParam || "",
+  // ── User location ─────────────────────────────────────────────────────────
+
+  const [userLocation, setUserLocation] = useState({
+    lat: roundCoord(-6.9175),
+    lon: roundCoord(107.6191),
+  });
+
+  useEffect(() => {
+    if (!session.location) return;
+    const next = {
+      lat: roundCoord(session.location.latitude),
+      lon: roundCoord(session.location.longitude),
     };
+    setUserLocation((cur) =>
+      cur.lat === next.lat && cur.lon === next.lon ? cur : next,
+    );
+  }, [session.location]);
+
+  // ── Fetch (dari hook) ─────────────────────────────────────────────────────
+
+  const { items, listLoading } = useHistoryFetch({
+    activeTab,
+    effectiveYear: effectiveFilter.year,
+    effectiveMonths,
+    tsunamiFilters,
+    userLat: userLocation.lat,
+    userLon: userLocation.lon,
+  });
+
+  // ── Panel animation ───────────────────────────────────────────────────────
+
+  const { selectedEventId } = useLocalSearchParams<{
+    selectedEventId?: string;
+  }>();
+  const listPanelSlide = useRef(
+    new Animated.Value(selectedEventId ? 1 : 0),
+  ).current;
+  const listPanelVisibleRef = useRef(!selectedEventId);
+  const cardOpenRef = useRef(Boolean(selectedEventId));
+  const lastRestoreListPanelTokenRef = useRef<string | null>(null);
+
+  const showListPanel = useCallback(() => {
+    listPanelVisibleRef.current = true;
+    cardOpenRef.current = false;
+    Animated.timing(listPanelSlide, {
+      toValue: 0,
+      duration: 400,
+      easing: Easing.out(Easing.bezier(0.16, 1, 0.3, 1)),
+      useNativeDriver: false,
+    }).start();
+  }, [listPanelSlide]);
+
+  const hideListPanel = useCallback(() => {
+    listPanelVisibleRef.current = false;
+    Animated.timing(listPanelSlide, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  }, [listPanelSlide]);
+
+  const handleCardOpen = useCallback(() => {
+    cardOpenRef.current = true;
+    hideListPanel();
+  }, [hideListPanel]);
+
+  const handleCardClose = useCallback(() => {
+    showListPanel();
+  }, [showListPanel]);
+
+  useEffect(() => {
+    const shouldRestoreListPanel =
+      asSingle(searchParams.restoreListPanel) === "1";
+    if (!isFocused || !shouldRestoreListPanel) return;
+
+    const restoreToken =
+      asSingle(searchParams.restoreListPanelToken) || "restore-list-panel";
+    if (lastRestoreListPanelTokenRef.current === restoreToken) return;
+
+    lastRestoreListPanelTokenRef.current = restoreToken;
+    showListPanel();
+    router.setParams({
+      restoreListPanel: undefined,
+      restoreListPanelToken: undefined,
+    });
   }, [
-    selectedDistanceKmParam,
-    selectedEventIdParam,
-    selectedFeltParam,
-    selectedHeadlineParam,
-    selectedJarakParam,
-    selectedJamParam,
-    selectedKedalamanParam,
-    selectedLatestWarningIdParam,
-    selectedLatitudeParam,
-    selectedLocationParam,
-    selectedLongitudeParam,
-    selectedMagnitudeParam,
-    selectedShakemapParam,
-    selectedStatusParam,
-    selectedTanggalParam,
-    selectedWaktuParam,
+    isFocused,
+    router,
+    searchParams.restoreListPanel,
+    searchParams.restoreListPanelToken,
+    showListPanel,
   ]);
 
-  const clearSelectionParams = useCallback(() => {
-    router.setParams({
-      tab: undefined, selectedEventId: undefined, selectedLatitude: undefined,
-      selectedLongitude: undefined, selectedMagnitude: undefined, selectedLocation: undefined,
-      selectedWaktu: undefined, selectedJarak: undefined, selectedDistanceKm: undefined,
-      selectedTanggal: undefined, selectedJam: undefined, selectedKedalaman: undefined,
-      selectedFelt: undefined, selectedShakemap: undefined,
-      selectedStatus: undefined, selectedHeadline: undefined,
-      selectedLatestWarningId: undefined,
-    });
-  }, [router]);
+  // ── Tab handlers ──────────────────────────────────────────────────────────
 
-  // ── Tab handlers ───────────────────────────────────────────────────────────
+  const [isOpeningFilter, setIsOpeningFilter] = useState(false);
 
-  const handleAppTabPress = useCallback((tab: HistoryEarthquakeTab) => {
-    // FIX: Clear stale externalSelection params when switching tabs.
-    // Without this, the params persist in the URL and when the content component
-    // for the newly-active tab mounts/activates it reads the old params and calls
-    // openCard() again even though the user already dismissed the card.
-    clearSelectionParams();
-    setActiveTab(tab);
-    showListPanel();
-    if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
-    else if (tab === "GEMPA TERDETEKSI") setHasMountedTerdeteksi(true);
-    else setHasMountedTsunami(true);
-  }, [clearSelectionParams, showListPanel]);
+  useEffect(() => {
+    if (isFocused) setIsOpeningFilter(false);
+  }, [isFocused]);
 
-  const handleExternalSelectionHandled = useCallback(() => {
-    clearSelectionParams();
-  }, [clearSelectionParams]);
+  const handleAppTabPress = useCallback(
+    (tab: HistoryEarthquakeTab) => {
+      clearSelectionParams();
+      setActiveTab(tab);
+      showListPanel();
+      if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
+      else if (tab === "GEMPA TERDETEKSI") setHasMountedTerdeteksi(true);
+      else setHasMountedTsunami(true);
+    },
+    [clearSelectionParams, showListPanel],
+  );
 
   const handleFilterPress = useCallback(() => {
     if (isOpeningFilter) return;
@@ -740,12 +474,13 @@ export default function History() {
       filterYear: String(effectiveFilter.year),
       returnTo: pathname,
     };
-
     if (activeTab !== "RIWAYAT TSUNAMI") {
       nextParams.filterMonth = String(effectiveMonths[0]);
       nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
     }
-
+    if (listPanelVisibleRef.current || cardOpenRef.current) {
+      nextParams.restoreListPanel = "1";
+    }
     router.push({
       pathname: "/main-menu/filter-gempa-screen",
       params: nextParams,
@@ -759,166 +494,7 @@ export default function History() {
     router,
   ]);
 
-  useEffect(() => {
-    if (isFocused) {
-      setIsOpeningFilter(false);
-    }
-  }, [isFocused]);
-
-  // ── User location ─────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!session.location) {
-      return;
-    }
-
-    const nextLocation = {
-      lat: roundCoord(session.location.latitude),
-      lon: roundCoord(session.location.longitude),
-    };
-
-    setUserLocation((currentLocation) => {
-      if (
-        currentLocation.lat === nextLocation.lat &&
-        currentLocation.lon === nextLocation.lon
-      ) {
-        return currentLocation;
-      }
-
-      return nextLocation;
-    });
-  }, [session.location]);
-
-  // ── Cache-first fetch ─────────────────────────────────────────────────────
-
-  useEffect(() => {
-    let isMounted = true;
-    const isTsunami = activeTab === "RIWAYAT TSUNAMI";
-    const cacheKey = isTsunami
-      ? `${TAB_CACHE[activeTab]}_${TSUNAMI_HISTORY_CACHE_VERSION}_${effectiveFilter.year}`
-      : `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
-    const isDir = activeTab === "GEMPA DIRASAKAN";
-    const orderField = isDir ? "date" : "time";
-
-    async function fetchData() {
-      // Phase 1: serve cache immediately
-      try {
-        const cached = await getPersistentCache<ListItem[]>(cacheKey);
-        if (cached && isMounted) {
-          if (cached.length > 0) {
-            setItemsIfChanged(isTsunami ? sortTsunamiListItems(cached) : cached);
-            setListLoading(false);
-          }
-        }
-      } catch { }
-
-      // Phase 2: one-shot Firebase fetch
-      try {
-        const app = getApp();
-        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
-
-        if (isTsunami) {
-          const rawTsunamiEvents = await readRealtimeNode(db, DATABASE_URL, "tsunamiEvents");
-          if (!isMounted) return;
-
-          if (!rawTsunamiEvents) {
-            setItemsIfChanged([]);
-            setListLoading(false);
-            return;
-          }
-
-          const normalizedEvents = normalizeTsunamiHistoryEvents(rawTsunamiEvents);
-          const filteredEvents = applyTsunamiHistoryFilters(
-            normalizedEvents,
-            tsunamiFilters,
-          );
-          const normalized = sortTsunamiListItems(normalizeTsunamiList(filteredEvents));
-
-          setPersistentCache(cacheKey, normalized);
-
-          if (isMounted) {
-            setItemsIfChanged(normalized);
-            setListLoading(false);
-          }
-          return;
-        }
-
-        const snapshots = await Promise.all(
-          effectiveMonths.map(async (month) => {
-            const range = isDir
-              ? buildDirasakanDateRange(effectiveFilter.year, month)
-              : buildTerdeteksiTimeRange(effectiveFilter.year, month);
-            const dataQuery = query(
-              ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
-              orderByChild(orderField),
-              startAt(range.start),
-              endAt(range.end),
-            );
-            return get(dataQuery);
-          }),
-        );
-        if (!isMounted) return;
-        const hasAnyData = snapshots.some((snapshot) => snapshot.exists());
-        if (!hasAnyData) {
-          setItemsIfChanged([]);
-          setListLoading(false);
-          return;
-        }
-
-        const combinedRaw: unknown[] = [];
-        snapshots.forEach((snapshot) => {
-          if (!snapshot.exists()) return;
-          const value = snapshot.val();
-          const arr = Array.isArray(value)
-            ? value
-            : value && typeof value === "object"
-              ? Object.values(value)
-              : [];
-          combinedRaw.push(...arr);
-        });
-
-        const mergedNormalized = isDir
-          ? normalizeDirasakan(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm)
-          : normalizeTerdeteksi(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm);
-
-        const filtered = mergedNormalized.filter((item) =>
-          effectiveMonths.some((month) =>
-            isDir
-              ? matchesDirasakanMonth(item.tanggal, effectiveFilter.year, month)
-              : matchesTerdeteksiMonth(item.tanggal, effectiveFilter.year, month),
-          ),
-        );
-
-        const normalized = dedupeByKey(filtered, (item) => item.id);
-
-        setPersistentCache(cacheKey, normalized);
-
-        if (isMounted) {
-          setItemsIfChanged(normalized);
-          setListLoading(false);
-        }
-      } catch {
-        if (isMounted) setListLoading(false);
-      }
-    }
-
-    // Keep stale items visible while loading — no blank flash
-    setListLoading(true);
-    void fetchData();
-    return () => { isMounted = false; };
-  }, [
-    activeTab,
-    effectiveFilter.year,
-    effectiveMonths,
-    setItemsIfChanged,
-    tsunamiFilters,
-    userLocation.lat,
-    userLocation.lon,
-  ]);
-
-  // ── List item press → fly to marker ──────────────────────────────────────
-  // Sets params which the content component reads as externalSelection.
-  // The content component then calls flyToAndOpen (fly → 300ms delay → card slides up).
+  // ── List item press ───────────────────────────────────────────────────────
 
   const openHistoryForItem = useCallback(
     (item: ListItem) => {
@@ -949,45 +525,46 @@ export default function History() {
           selectedHeadline: item.headline ?? "",
           selectedLatestWarningId: item.latestWarningId ?? "",
         };
-
         if (activeTab !== "RIWAYAT TSUNAMI") {
           nextParams.filterMonth = String(effectiveMonths[0]);
           nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
         }
-
         router.setParams(nextParams);
       }, 0);
-      // Slide list panel away so map is full screen during fly-in
+      cardOpenRef.current = true;
       hideListPanel();
     },
-    [
-      activeTab,
-      effectiveFilter.year,
-      effectiveMonths,
-      hideListPanel,
-      router,
-    ],
+    [activeTab, effectiveFilter.year, effectiveMonths, hideListPanel, router],
   );
 
   // ── FlatList helpers ──────────────────────────────────────────────────────
 
   const getItemLayout = useCallback(
-    (_: any, index: number) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index }),
+    (_: any, index: number) => ({
+      length: ITEM_HEIGHT,
+      offset: ITEM_HEIGHT * index,
+      index,
+    }),
     [],
   );
-
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => (
       <EarthquakeListItem item={item} onPress={openHistoryForItem} />
     ),
     [openHistoryForItem],
   );
-
   const keyExtractor = useCallback((item: ListItem) => item.id, []);
 
   const listEmpty = useMemo(
     () => (
-      <Text style={{ color: "#E6F4FF", textAlign: "center", marginTop: 10, fontSize: 12 }}>
+      <Text
+        style={{
+          color: "#E6F4FF",
+          textAlign: "center",
+          marginTop: 10,
+          fontSize: 12,
+        }}
+      >
         {activeTab === "RIWAYAT TSUNAMI"
           ? "Data tsunami belum tersedia."
           : "Data gempa belum tersedia."}
@@ -1006,16 +583,10 @@ export default function History() {
 
   const periodLabel = useMemo(() => {
     if (activeTab !== "RIWAYAT TSUNAMI") {
-      return `${effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} ${effectiveFilter.year}`;
+      return `${effectiveMonths.map((m) => MONTH_NAMES_ID[m - 1]).join(", ")} ${effectiveFilter.year}`;
     }
-
-    const parts = [String(effectiveFilter.year)];
-    return parts.join(" • ");
-  }, [
-    activeTab,
-    effectiveFilter.year,
-    effectiveMonths,
-  ]);
+    return String(effectiveFilter.year);
+  }, [activeTab, effectiveFilter.year, effectiveMonths]);
 
   const tabBar = useMemo(
     () => (
@@ -1028,26 +599,42 @@ export default function History() {
         />
         <View style={styles.designSection}>
           <View style={styles.periodChip}>
-            <Text style={styles.periodChipText}>
-              {periodLabel}
-            </Text>
+            <Text style={styles.periodChipText}>{periodLabel}</Text>
           </View>
           <View style={styles.actionRow}>
             <View style={{ flex: 1 }} />
             <TouchableOpacity
-              style={[styles.sidePill, styles.sidePillRight, styles.sidePillRightContent]}
+              style={[
+                styles.sidePill,
+                styles.sidePillRight,
+                styles.sidePillRightContent,
+              ]}
               activeOpacity={0.85}
               onPress={handleFilterPress}
               disabled={isOpeningFilter}
             >
               <Ionicons name="options" size={17} color="#FFFFFF" />
-              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>FILTER</Text>
+              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
+                FILTER
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
     ),
-    [activeTab, handleAppTabPress, handleFilterPress, isOpeningFilter, loading, periodLabel],
+    [
+      activeTab,
+      handleAppTabPress,
+      handleFilterPress,
+      isOpeningFilter,
+      loading,
+      periodLabel,
+    ],
+  );
+
+  const handleExternalSelectionHandled = useCallback(
+    () => clearSelectionParams(),
+    [clearSelectionParams],
   );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
@@ -1058,7 +645,6 @@ export default function History() {
 
   return (
     <View style={styles.container}>
-      {/* Map occupies 60% when list visible, full screen when hidden */}
       <Animated.View
         style={{
           position: "absolute",
@@ -1067,13 +653,16 @@ export default function History() {
           right: 0,
           bottom: listPanelSlide.interpolate({
             inputRange: [0, 1],
-            outputRange: ["40%", "0%"]
+            outputRange: ["40%", "0%"],
           }),
         }}
       >
         {hasMountedDirasakan && (
           <View
-            style={[styles.tabPane, activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane]}
+            style={[
+              styles.tabPane,
+              activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane,
+            ]}
             pointerEvents={activeTab === "GEMPA DIRASAKAN" ? "auto" : "none"}
           >
             <GempaDirasakanHistoryContent
@@ -1081,19 +670,20 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              // When card is dismissed → slide the list panel back in
-              onCardClose={showListPanel}
-              onCardOpen={hideListPanel}
+              onCardClose={handleCardClose}
+              onCardOpen={handleCardOpen}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={dirasakanActive}
             />
           </View>
         )}
-
         {hasMountedTerdeteksi && (
           <View
-            style={[styles.tabPane, activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane]}
+            style={[
+              styles.tabPane,
+              activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane,
+            ]}
             pointerEvents={activeTab === "GEMPA TERDETEKSI" ? "auto" : "none"}
           >
             <GempaTerdeteksiHistoryContent
@@ -1101,18 +691,20 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              onCardClose={showListPanel}
-              onCardOpen={hideListPanel}
+              onCardClose={handleCardClose}
+              onCardOpen={handleCardOpen}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={terdeteksiActive}
             />
           </View>
         )}
-
         {hasMountedTsunami && (
           <View
-            style={[styles.tabPane, activeTab !== "RIWAYAT TSUNAMI" && styles.hiddenPane]}
+            style={[
+              styles.tabPane,
+              activeTab !== "RIWAYAT TSUNAMI" && styles.hiddenPane,
+            ]}
             pointerEvents={activeTab === "RIWAYAT TSUNAMI" ? "auto" : "none"}
           >
             <TsunamiHistoryContent
@@ -1120,8 +712,8 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              onCardClose={showListPanel}
-              onCardOpen={hideListPanel}
+              onCardClose={handleCardClose}
+              onCardOpen={handleCardOpen}
               filters={tsunamiFilters}
               isActive={tsunamiActive}
             />
@@ -1129,7 +721,6 @@ export default function History() {
         )}
       </Animated.View>
 
-      {/* Bottom list panel — slides up from bottom over the map */}
       <HistoryListPanel
         emptyComponent={listEmpty}
         getItemLayout={getItemLayout}

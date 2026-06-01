@@ -1,4 +1,4 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
@@ -115,7 +115,11 @@ export const TerdeteksiCard = ({
           label="Tanggal :"
           value={data?.tanggal ?? "-"}
         />
-        <DetailItem icon="time-outline" label="Jam :" value={data?.jam ?? "-"} />
+        <DetailItem
+          icon="time-outline"
+          label="Jam :"
+          value={data?.jam ?? "-"}
+        />
         {!!data?.fase && (
           <DetailItem
             icon="alert-circle-outline"

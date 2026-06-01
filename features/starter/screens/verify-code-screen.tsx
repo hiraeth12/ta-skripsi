@@ -1,16 +1,14 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
-import { sendResetOtp, verifyOtpCode, PasswordResetApiError } from "../services/auth-service";
+import {
+    PasswordResetApiError,
+    sendResetOtp,
+    verifyOtpCode,
+} from "../services/auth-service";
 import { styles } from "../styles/verify-code-styles";
 
 const OTP_LENGTH = 6;
@@ -20,13 +18,17 @@ function getOtpErrorMessage(error: unknown): string {
     return "Kode OTP salah atau kedaluwarsa.";
   }
   const messages: Record<string, string> = {
-    otp_already_used: "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode.",
-    otp_attempts_exceeded: "Terlalu banyak percobaan. Silakan kirim ulang kode.",
+    otp_already_used:
+      "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode.",
+    otp_attempts_exceeded:
+      "Terlalu banyak percobaan. Silakan kirim ulang kode.",
     otp_expired: "Kode OTP sudah kedaluwarsa. Silakan kirim ulang kode.",
   };
-  return (error.code ? messages[error.code] : undefined) ?? "Kode OTP salah atau kedaluwarsa.";
+  return (
+    (error.code ? messages[error.code] : undefined) ??
+    "Kode OTP salah atau kedaluwarsa."
+  );
 }
-
 
 export default function VerifyCode() {
   const router = useRouter();
@@ -57,7 +59,8 @@ export default function VerifyCode() {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
-      if (e.data.action.type !== "GO_BACK" && e.data.action.type !== "POP") return;
+      if (e.data.action.type !== "GO_BACK" && e.data.action.type !== "POP")
+        return;
 
       e.preventDefault();
 
@@ -65,7 +68,7 @@ export default function VerifyCode() {
         "Keluar Verifikasi?",
         "Kode OTP yang telah dikirim akan menjadi tidak valid jika Anda kembali. Yakin ingin keluar?",
         "error",
-        () => navigation.dispatch(e.data.action), 
+        () => navigation.dispatch(e.data.action),
       );
     });
 
@@ -103,12 +106,20 @@ export default function VerifyCode() {
   const handleVerify = async () => {
     const combinedCode = code.join("");
     if (combinedCode.length < OTP_LENGTH) {
-      showCustomAlert("Input Tidak Valid", "Silakan masukkan kode 6 digit.", "error");
+      showCustomAlert(
+        "Input Tidak Valid",
+        "Silakan masukkan kode 6 digit.",
+        "error",
+      );
       return;
     }
 
     if (!email) {
-      showCustomAlert("Error", "Email tidak ditemukan. Silakan ulangi dari awal.", "error");
+      showCustomAlert(
+        "Error",
+        "Email tidak ditemukan. Silakan ulangi dari awal.",
+        "error",
+      );
       return;
     }
 
@@ -134,9 +145,17 @@ export default function VerifyCode() {
       await sendResetOtp(email);
       setCode(Array(OTP_LENGTH).fill(""));
       setTimer(30);
-      showCustomAlert("Kode Dikirim", "Kode verifikasi baru telah dikirim ke email Anda.", "success");
+      showCustomAlert(
+        "Kode Dikirim",
+        "Kode verifikasi baru telah dikirim ke email Anda.",
+        "success",
+      );
     } catch {
-      showCustomAlert("Gagal", "Gagal mengirim ulang OTP. Silakan coba lagi.", "error");
+      showCustomAlert(
+        "Gagal",
+        "Gagal mengirim ulang OTP. Silakan coba lagi.",
+        "error",
+      );
     } finally {
       setIsResending(false);
     }
@@ -225,7 +244,13 @@ export default function VerifyCode() {
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
-        onClose={() => setModalConfig({ ...modalConfig, visible: false, onConfirm: undefined })}
+        onClose={() =>
+          setModalConfig({
+            ...modalConfig,
+            visible: false,
+            onConfirm: undefined,
+          })
+        }
         onConfirm={modalConfig.onConfirm}
       />
     </KeyboardAwareScrollView>

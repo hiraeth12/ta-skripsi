@@ -1,15 +1,9 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { resetPasswordWithToken } from "../services/auth-service";
 import { styles } from "../styles/new-password-styles";
@@ -17,7 +11,10 @@ import { styles } from "../styles/new-password-styles";
 export default function NewPassword() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { email, resetToken } = useLocalSearchParams<{ email: string; resetToken: string }>();
+  const { email, resetToken } = useLocalSearchParams<{
+    email: string;
+    resetToken: string;
+  }>();
 
   const [secure, setSecure] = useState(true);
   const [secureConfirm, setSecureConfirm] = useState(true);
@@ -44,7 +41,8 @@ export default function NewPassword() {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
-      if (e.data.action.type !== "GO_BACK" && e.data.action.type !== "POP") return;
+      if (e.data.action.type !== "GO_BACK" && e.data.action.type !== "POP")
+        return;
 
       e.preventDefault();
 
@@ -62,7 +60,11 @@ export default function NewPassword() {
   const handleResetPassword = async () => {
     const trimmedPassword = password.trim();
     if (!trimmedPassword) {
-      showCustomAlert("Kata Sandi Kosong", "Silakan masukkan kata sandi baru.", "error");
+      showCustomAlert(
+        "Kata Sandi Kosong",
+        "Silakan masukkan kata sandi baru.",
+        "error",
+      );
       return;
     }
 
@@ -99,7 +101,11 @@ export default function NewPassword() {
       setIsLoading(false);
       router.push("/starter/success-new-password");
     } catch {
-      showCustomAlert("Gagal Menyimpan", "Gagal menyimpan kata sandi baru.", "error");
+      showCustomAlert(
+        "Gagal Menyimpan",
+        "Gagal menyimpan kata sandi baru.",
+        "error",
+      );
       setIsLoading(false);
     }
   };
@@ -176,7 +182,11 @@ export default function NewPassword() {
         message={modalConfig.message}
         type={modalConfig.type}
         onClose={() =>
-          setModalConfig({ ...modalConfig, visible: false, onConfirm: undefined })
+          setModalConfig({
+            ...modalConfig,
+            visible: false,
+            onConfirm: undefined,
+          })
         }
         onConfirm={modalConfig.onConfirm}
       />

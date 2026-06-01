@@ -1,16 +1,16 @@
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
-import EarthquakeMap from "@/components/earthquake-map";
-import type { MapViewType } from "@/constants/map";
-import { shareQuake } from "@/utils/share";
-import { Feather } from "@expo/vector-icons";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
-import { useCallback, useRef, useState } from "react";
+import type { MapViewType } from "@/constants/map";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
+import { formatLatText, formatLonText } from "@/utils/geo";
+import { shareQuake } from "@/utils/share";
+import { Feather } from "@expo/vector-icons";
+import { useCallback, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
-import { formatLatText, formatLonText } from "@/utils/geo";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 const MIN_POLL_MS = 30_000;

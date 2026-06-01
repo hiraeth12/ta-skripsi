@@ -1,31 +1,27 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
 import { useCardAnimation } from "@/hooks/use-card-animation";
+import { formatLatText, formatLonText, parseCoordinateText } from "@/utils/geo";
 import {
-  formatLatText,
-  formatLonText,
-  parseCoordinateText,
-} from "@/utils/geo";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import {
-  endAt,
-  get,
-  getDatabase,
-  limitToLast,
-  orderByChild,
-  query,
-  ref,
-  startAt,
+    endAt,
+    get,
+    getDatabase,
+    limitToLast,
+    orderByChild,
+    query,
+    ref,
+    startAt,
 } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Text, View } from "react-native";
+import { Animated, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
-  buildTerdeteksiTimeRange,
-  getNowYearMonth,
-  matchesTerdeteksiMonth,
-  normalizeFilterMonths,
+    buildTerdeteksiTimeRange,
+    getNowYearMonth,
+    matchesTerdeteksiMonth,
+    normalizeFilterMonths,
 } from "../utils/filter";
 import styles from "./styles/gempa-terdeteksi-content";
 
@@ -103,15 +99,19 @@ function buildQuakeItem(item: any, index: number): QuakeItem | null {
   const jam = (jamRaw ?? "").split(".")[0];
 
   const eventId = String(
-    props?.eventId ?? props?.id ?? props?.eventid ??
-    `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
+    props?.eventId ??
+      props?.id ??
+      props?.eventid ??
+      `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
   );
 
   return {
     eventId,
     latitude,
     longitude,
-    magnitude: parseFloat(String(props?.mag ?? props?.magnitude ?? "0")).toFixed(1),
+    magnitude: parseFloat(
+      String(props?.mag ?? props?.magnitude ?? "0"),
+    ).toFixed(1),
     wilayah: String(props?.place ?? props?.area ?? props?.lokasi ?? ""),
     tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
     jam: String(props?.jam ?? jam ?? ""),
@@ -121,26 +121,6 @@ function buildQuakeItem(item: any, index: number): QuakeItem | null {
     lonText: formatLonText(longitude),
   };
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const StatItem = ({ icon, value, label }: { icon: string; value: string; label: string }) => (
-  <View style={styles.statTopItem}>
-    <MaterialCommunityIcons name={icon as any} size={20} color="#0369A1" />
-    <Text style={styles.statTopValue}>{value}</Text>
-    <Text style={styles.statTopLabel}>{label}</Text>
-  </View>
-);
-
-const DetailItem = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
-  <View style={styles.infoRow}>
-    <Ionicons name={icon as any} size={18} color="#1E6F9F" style={styles.infoIcon} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -159,13 +139,25 @@ export function GempaTerdeteksiHistoryContent({
 }: Props) {
   const now = useMemo(() => new Date(), []);
   const fallback = getNowYearMonth(now);
-  const effectiveYear = Number.isFinite(filterYear) ? filterYear! : fallback.year;
+  const effectiveYear = Number.isFinite(filterYear)
+    ? filterYear!
+    : fallback.year;
   const effectiveMonths = useMemo(
-    () => normalizeFilterMonths(filterMonths ?? [fallback.month], effectiveYear, "terdeteksi", now),
+    () =>
+      normalizeFilterMonths(
+        filterMonths ?? [fallback.month],
+        effectiveYear,
+        "terdeteksi",
+        now,
+      ),
     [effectiveYear, fallback.month, filterMonths, now],
   );
   const ranges = useMemo(
-    () => effectiveMonths.map((month) => ({ month, ...buildTerdeteksiTimeRange(effectiveYear, month) })),
+    () =>
+      effectiveMonths.map((month) => ({
+        month,
+        ...buildTerdeteksiTimeRange(effectiveYear, month),
+      })),
     [effectiveMonths, effectiveYear],
   );
   // ── State ──────────────────────────────────────────────────────────────────
@@ -242,12 +234,15 @@ export function GempaTerdeteksiHistoryContent({
 
   // ── Card animation ─────────────────────────────────────────────────────────
 
-  const openCard = useCallback((notifyParent = true) => {
-    if (notifyParent) {
-      onCardOpen?.();
-    }
-    openCardAnimation();
-  }, [onCardOpen, openCardAnimation]);
+  const openCard = useCallback(
+    (notifyParent = true) => {
+      if (notifyParent) {
+        onCardOpen?.();
+      }
+      openCardAnimation();
+    },
+    [onCardOpen, openCardAnimation],
+  );
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
@@ -316,7 +311,6 @@ export function GempaTerdeteksiHistoryContent({
     [onPressMarker],
   );
 
-
   useEffect(() => {
     if (!isActive) {
       hideCardImmediately();
@@ -330,24 +324,26 @@ export function GempaTerdeteksiHistoryContent({
     if (!isActive) return;
     lastExternalIdRef.current = externalSelection.eventId;
 
-    const targetIndex = quakes.findIndex((q) => q.eventId === externalSelection.eventId);
+    const targetIndex = quakes.findIndex(
+      (q) => q.eventId === externalSelection.eventId,
+    );
 
     const quake: QuakeItem =
       targetIndex >= 0
         ? quakes[targetIndex]
         : {
-          eventId: externalSelection.eventId,
-          latitude: externalSelection.latitude,
-          longitude: externalSelection.longitude,
-          magnitude: externalSelection.magnitude,
-          wilayah: externalSelection.lokasi,
-          tanggal: externalSelection.tanggal,
-          jam: externalSelection.jam,
-          kedalaman: externalSelection.kedalaman,
-          felt: externalSelection.felt,
-          latText: formatLatText(externalSelection.latitude),
-          lonText: formatLonText(externalSelection.longitude),
-        };
+            eventId: externalSelection.eventId,
+            latitude: externalSelection.latitude,
+            longitude: externalSelection.longitude,
+            magnitude: externalSelection.magnitude,
+            wilayah: externalSelection.lokasi,
+            tanggal: externalSelection.tanggal,
+            jam: externalSelection.jam,
+            kedalaman: externalSelection.kedalaman,
+            felt: externalSelection.felt,
+            latText: formatLatText(externalSelection.latitude),
+            lonText: formatLonText(externalSelection.longitude),
+          };
 
     selectedEventIdRef.current = quake.eventId;
 
@@ -361,13 +357,21 @@ export function GempaTerdeteksiHistoryContent({
 
     flyToAndOpen(quake);
     onListSelectionHandled?.();
-  }, [externalSelection, isActive, quakes, flyToAndOpen, onListSelectionHandled]);
+  }, [
+    externalSelection,
+    isActive,
+    quakes,
+    flyToAndOpen,
+    onListSelectionHandled,
+  ]);
 
   // ── selectedListEventId (direct list row tap) ─────────────────────────────
 
   useEffect(() => {
     if (!selectedListEventId || quakes.length === 0) return;
-    const targetIndex = quakes.findIndex((q) => q.eventId === selectedListEventId);
+    const targetIndex = quakes.findIndex(
+      (q) => q.eventId === selectedListEventId,
+    );
     if (targetIndex < 0) {
       onListSelectionHandled?.();
       return;
@@ -395,7 +399,6 @@ export function GempaTerdeteksiHistoryContent({
     const app = getApp();
     const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
     const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-
 
     const runFetch = async () => {
       const snapshots = await Promise.all(
@@ -441,7 +444,9 @@ export function GempaTerdeteksiHistoryContent({
         .filter((candidate) =>
           effectiveMonths.some((month) =>
             matchesTerdeteksiMonth(
-              candidate?.time ?? candidate?.properties?.time ?? candidate?.tanggal,
+              candidate?.time ??
+                candidate?.properties?.time ??
+                candidate?.tanggal,
               effectiveYear,
               month,
             ),
@@ -510,11 +515,11 @@ export function GempaTerdeteksiHistoryContent({
         temporaryMarkerCoordinate={
           overrideQuake && selectedIndex === null
             ? {
-              latitude: overrideQuake.latitude,
-              longitude: overrideQuake.longitude,
-              magnitude: overrideQuake.magnitude,
-              depth: overrideQuake.kedalaman,
-            }
+                latitude: overrideQuake.latitude,
+                longitude: overrideQuake.longitude,
+                magnitude: overrideQuake.magnitude,
+                depth: overrideQuake.kedalaman,
+              }
             : null
         }
         onMapPress={handleMapPress}
@@ -526,7 +531,10 @@ export function GempaTerdeteksiHistoryContent({
 
       {showCard && activeQuake && (
         <Animated.View
-          style={[styles.locationCard, { transform: [{ translateY }], opacity }]}
+          style={[
+            styles.locationCard,
+            { transform: [{ translateY }], opacity },
+          ]}
         >
           {/* Drag handle */}
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
@@ -535,28 +543,55 @@ export function GempaTerdeteksiHistoryContent({
 
           {/* Stats row */}
           <View style={styles.statsTopRow}>
-            <StatItem icon="triangle-wave" value={activeQuake.magnitude} label="Magnitudo" />
+            <StatItem
+              icon="triangle-wave"
+              value={activeQuake.magnitude}
+              label="Magnitudo"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="rss" value={activeQuake.kedalaman} label="Kedalaman" />
+            <StatItem
+              icon="rss"
+              value={activeQuake.kedalaman}
+              label="Kedalaman"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={activeQuake.latText} label="LS" />
+            <StatItem
+              icon="compass-outline"
+              value={activeQuake.latText}
+              label="LS"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-            <StatItem icon="compass-outline" value={activeQuake.lonText} label="BT" />
+            <StatItem
+              icon="compass-outline"
+              value={activeQuake.lonText}
+              label="BT"
+              styles={styles}
+            />
           </View>
 
           <View style={styles.separator} />
 
-          <DetailItem icon="location" label="Lokasi Gempa :" value={activeQuake.wilayah} />
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={activeQuake.wilayah}
+            styles={styles}
+          />
           <DetailItem
             icon="time-outline"
             label="Waktu :"
             value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
+            styles={styles}
           />
           {!!activeQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
               label="Fase :"
               value={activeQuake.felt}
+              styles={styles}
             />
           )}
         </Animated.View>

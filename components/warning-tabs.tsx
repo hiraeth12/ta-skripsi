@@ -16,7 +16,7 @@ const EMPTY_WARNING_TAB: WarningTabItem = {
   subject: "-",
 };
 
-function getWarningTabLabel(subject: string, index: number): string {
+export function getWarningTabLabel(subject: string, index: number): string {
   const match = subject.match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
   return match ? `PD-${match[1]}` : `Update ${index + 1}`;
 }

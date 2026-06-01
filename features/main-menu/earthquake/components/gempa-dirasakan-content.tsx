@@ -1,21 +1,21 @@
-import { ModalShakeMap } from "@/components/modal-shakemap";
+import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import {
-  getRealisticShakeRadiiMeters,
-  parseDepthKm,
+    getRealisticShakeRadiiMeters,
+    parseDepthKm,
 } from "@/utils/earthquake-impact";
-import { haversineDistanceKm,formatLatText,formatLonText } from "@/utils/geo";
+import { formatLatText, formatLonText, haversineDistanceKm } from "@/utils/geo";
 import { shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
@@ -28,7 +28,6 @@ const REFERENCE_LOCATION = {
   latitude: -6.9175,
   longitude: 107.6191,
 };
-
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 

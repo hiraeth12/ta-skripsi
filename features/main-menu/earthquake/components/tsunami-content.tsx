@@ -1,6 +1,7 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
+import { WarningTabs } from "@/components/warning-tabs";
 import type { MapViewType } from "@/constants/map";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
@@ -9,7 +10,15 @@ import { shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Animated, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  Dimensions,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ModalTsunamiInfo } from "@/components/modal-tsunami-info";
 import {
   buildTsunamiGroupsSignature,
   buildTsunamiMapSlides,
@@ -18,11 +27,10 @@ import {
   safeText,
   type TsunamiEventGroup,
 } from "../utils/tsunami-content-utils";
-import { WarningTabs } from "./warning-tabs";
-import { ModalTsunamiInfo } from "./modal-tsunami-info";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
 const API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
+const CARD_BODY_MAX_HEIGHT = Dimensions.get("window").height * 0.4;
 const MIN_POLL_MS = 30_000;
 const MAX_POLL_MS = 120_000;
 
@@ -264,30 +272,38 @@ export default function TsunamiContent({
             onSelect={setSelectedWarningIndex}
           />
 
-          <DetailItem
-            icon="location"
-            label="Lokasi Gempa :"
-            value={safeText(selectedGroup.wilayah)}
-            styles={styles}
-          />
-          <DetailItem
-            icon="alert-circle-outline"
-            label="Status :"
-            value={safeText(selectedWarning.subject)}
-            styles={styles}
-          />
-          <DetailItem
-            icon="time-outline"
-            label="Waktu :"
-            value={`${safeText(selectedGroup.tanggal)}, ${safeText(selectedGroup.jam)}`}
-            styles={styles}
-          />
-          <DetailItem
-            icon="megaphone-outline"
-            label="Informasi Tsunami :"
-            value={safeText(selectedWarning.headline)}
-            styles={styles}
-          />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: CARD_BODY_MAX_HEIGHT }}
+          >
+            <DetailItem
+              icon="location"
+              label="Lokasi Gempa :"
+              value={safeText(selectedGroup.wilayah)}
+              styles={styles}
+            />
+            <DetailItem
+              icon="alert-circle-outline"
+              label="Status :"
+              value={safeText(selectedWarning.subject)}
+              styles={styles}
+            />
+            <DetailItem
+              icon="time-outline"
+              label="Waktu :"
+              value={`${safeText(selectedGroup.tanggal)}, ${safeText(selectedGroup.jam)}`}
+              styles={styles}
+            />
+            <DetailItem
+              icon="megaphone-outline"
+              label="Informasi Tsunami :"
+              value={safeText(selectedWarning.headline)}
+              valueNumberOfLines={3}
+              styles={styles}
+            />
+          </ScrollView>
 
           <TouchableOpacity
             style={styles.simulasiBtn}
@@ -304,6 +320,7 @@ export default function TsunamiContent({
         mapSlides={tsunamiMapSlides}
         wzAreas={selectedWarning.wzAreas}
         obsAreas={selectedWarning.obsAreas}
+        headline={selectedWarning.headline}
         onClose={() => setTsunamiInfoVisible(false)}
       />
 

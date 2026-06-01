@@ -1,4 +1,4 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";

@@ -45,6 +45,7 @@ export default function FilterGempaScreen() {
     filterMonth?: string;
     filterMonths?: string;
     returnTo?: string;
+    restoreListPanel?: string;
   }>();
   const now = useMemo(() => new Date(), []);
   const tab: HistoryTabKey =
@@ -109,6 +110,11 @@ export default function FilterGempaScreen() {
     if (!isTsunami) {
       nextParams.filterMonth = String(months[0]);
       nextParams.filterMonths = serializeFilterMonths(months);
+    }
+
+    if (asSingle(params.restoreListPanel) === "1") {
+      nextParams.restoreListPanel = "1";
+      nextParams.restoreListPanelToken = String(Date.now());
     }
 
     router.replace({
