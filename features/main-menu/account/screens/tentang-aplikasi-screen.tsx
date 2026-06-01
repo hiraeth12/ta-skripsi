@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { goBackToAccount } from "../navigation";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/tentang-aplikasi.styles";
@@ -42,7 +43,7 @@ export default function TentangAplikasi() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.btnBack} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.btnBack} onPress={() => goBackToAccount(router)}>
         <Text style={styles.btnTextBack}>Kembali</Text>
       </TouchableOpacity>
     </ProfilePageLayout>

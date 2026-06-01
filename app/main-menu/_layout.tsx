@@ -1,6 +1,9 @@
 import BottomNav from "@/components/ui/navigation";
-import { ProfileProvider } from "@/features/account/profile-context";
-import { UserSessionProvider, useUserSession } from "@/features/account/user-session-context";
+import { ProfileProvider } from "@/features/main-menu/account/profile-context";
+import {
+  UserSessionProvider,
+  useUserSession,
+} from "@/features/main-menu/account/user-session-context";
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -28,6 +31,11 @@ const TAB_MAP: Record<string, string> = {
   earthquake: "GEMPA",
   history: "RIWAYAT",
   account: "AKUN",
+  pengaturan: "AKUN",
+  "ubah-kata-sandi": "AKUN",
+  "ubah-lokasi": "AKUN",
+  "ubah-bahasa": "AKUN",
+  "tentang-aplikasi": "AKUN",
 };
 
 const MAIN_TAB_ROUTES = new Set(Object.values(ROUTE_MAP));
@@ -190,6 +198,7 @@ function MainLayoutInner() {
 
       <View style={styles.screenArea}>
         <Tabs
+          backBehavior="fullHistory"
           screenOptions={({ route }) => ({
             headerShown: false,
             animation: "none",
@@ -225,6 +234,11 @@ function MainLayoutInner() {
             name="account"
             options={{ href: "/main-menu/account" }}
           />
+          <Tabs.Screen name="pengaturan" options={{ href: null }} />
+          <Tabs.Screen name="ubah-kata-sandi" options={{ href: null }} />
+          <Tabs.Screen name="ubah-lokasi" options={{ href: null }} />
+          <Tabs.Screen name="ubah-bahasa" options={{ href: null }} />
+          <Tabs.Screen name="tentang-aplikasi" options={{ href: null }} />
           <Tabs.Screen name="notifikasi" options={{ href: null }} />
           <Tabs.Screen
             name="filter-gempa-screen"

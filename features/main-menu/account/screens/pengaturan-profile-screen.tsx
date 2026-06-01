@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { handleLogout } from "../components/handle-logout";
+import { goBackToAccount } from "../navigation";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/pengaturan-profil.styles";
@@ -185,7 +186,7 @@ export default function PengaturanProfil() {
             </View>
 
             <View style={styles.buttonWrapper}>
-              <TouchableOpacity style={styles.btnBatal} onPress={() => router.back()}>
+              <TouchableOpacity style={styles.btnBatal} onPress={() => goBackToAccount(router)}>
                 <Text style={styles.btnTextBatal}>Batal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.btnSimpan} onPress={handleSimpan} disabled={isSaving}>

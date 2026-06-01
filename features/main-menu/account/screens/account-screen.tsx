@@ -14,8 +14,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import Skeleton from "../../../components/ui/skeleton";
-import { saveFcmTokenToDatabase } from "../../../utils/fcm";
+import Skeleton from "@/components/ui/skeleton";
+import { saveFcmTokenToDatabase } from "@/utils/fcm";
 import { PUSH_NOTIFICATION_PREF_KEY } from "../components/handle-logout";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
@@ -182,22 +182,22 @@ export default function Account() {
         <MenuLink
           icon="account-circle-outline"
           title="Pengaturan Profil"
-          onPress={() => navigate("/profile/pengaturan")}
+          onPress={() => navigate("/main-menu/pengaturan")}
         />
         <MenuLink
           icon="lock-outline"
           title="Ubah Kata Sandi"
-          onPress={() => navigate("/profile/ubah-kata-sandi")}
+          onPress={() => navigate("/main-menu/ubah-kata-sandi")}
         />
         <MenuLink
           icon="map-marker-outline"
           title="Ubah Lokasi"
-          onPress={() => navigate("/profile/ubah-lokasi")}
+          onPress={() => navigate("/main-menu/ubah-lokasi")}
         />
         <MenuLink
           icon="earth"
           title="Ubah Bahasa"
-          onPress={() => navigate("/profile/ubah-bahasa")}
+          onPress={() => navigate("/main-menu/ubah-bahasa")}
         />
 
         <View style={styles.menuItem}>
@@ -224,7 +224,7 @@ export default function Account() {
         <MenuLink
           icon="cellphone-information"
           title="Tentang Aplikasi"
-          onPress={() => navigate("/profile/tentang-aplikasi")}
+          onPress={() => navigate("/main-menu/tentang-aplikasi")}
         />
       </ProfilePageLayout>
 

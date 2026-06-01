@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import {
   loadStartupSession,
   type StartupRoute,
-} from "@/features/account/session";
+} from "@/features/main-menu/account/session";
 
 function hideSplashAfterNavigation() {
   requestAnimationFrame(() => {

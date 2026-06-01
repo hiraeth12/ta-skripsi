@@ -1,6 +1,6 @@
 import EarthquakeTabBar from "@/components/ui/earthquake-tab-bar";
 import Skeleton from "@/components/ui/skeleton";
-import { useUserSession } from "@/features/account/user-session-context";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";

@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Modal, Pressable, Switch, Text, TouchableOpacity, View } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
+import { goBackToAccount } from "../navigation";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-bahasa-styles";
 
@@ -51,7 +52,7 @@ export default function UbahBahasa() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.backItem} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backItem} onPress={() => goBackToAccount(router)}>
           <Text style={styles.backText}>Kembali</Text>
         </TouchableOpacity>
       </ProfilePageLayout>

@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
+import { goBackToAccount } from "../navigation";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-kata-sandi-styles";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
@@ -183,7 +184,7 @@ export default function UbahKataSandi() {
             <View style={styles.buttonWrapper}>
               <TouchableOpacity
                 style={styles.btnBatal}
-                onPress={() => router.back()}
+                onPress={() => goBackToAccount(router)}
               >
                 <Text style={styles.btnTextBatal}>Batal</Text>
               </TouchableOpacity>

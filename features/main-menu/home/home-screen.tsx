@@ -2,7 +2,7 @@ import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import Skeleton from "@/components/ui/skeleton";
 import { DEFAULT_LOCATION } from "@/constants/map";
-import { useUserSession } from "@/features/account/user-session-context";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import {
     CACHE_KEYS,
     getCachedData,
