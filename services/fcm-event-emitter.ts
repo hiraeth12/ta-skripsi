@@ -1,6 +1,13 @@
 export type NotificationEventPayload = {
+  kind?: "gempa_dirasakan" | "tsunami_alert";
   title: string;
   body: string;
+  data?: Record<string, unknown>;
+  subject?: string;
+  headline?: string;
+  description?: string;
+  level?: string;
+  message?: string;
 };
 
 type Listener = (payload: NotificationEventPayload) => void;

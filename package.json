@@ -22,7 +22,9 @@
     "sync:verify": "node scripts/verify-sync.js",
     "sync:check-order": "node scripts/check-order.js",
     "monitor:notifications": "node scripts/monitor-gempa-notifications.js",
+    "monitor:tsunami-notifications": "node scripts/monitor-tsunami-notifications.js",
     "test:notification": "node scripts/test-notification.js",
+    "test:tsunami-notification": "node scripts/test-tsunami-notification.js",
     "sort:gempa-dirasakan": "node scripts/sort-gempa-dirasakan.js"
   },
   "dependencies": {

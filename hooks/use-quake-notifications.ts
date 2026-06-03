@@ -13,6 +13,7 @@ import {
   EMPTY_WARNING,
   fetchTsunamiGroups,
 } from "@/features/main-menu/earthquake/utils/tsunami-content-utils";
+import { notificationEmitter } from "@/services/fcm-event-emitter";
 
 export type QuakeNotifType = "Dirasakan" | "Terdeteksi" | "Tsunami";
 export type QuakeNotification = {
@@ -67,6 +68,7 @@ let storageInitPromise: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
 let currentDayKey = getLocalDayKey();
+let latestEmittedTsunamiNotificationId = "";
 
 const latestSeen: PersistedLatestSeen = {
   dirasakan: "",
@@ -231,6 +233,43 @@ async function getCurrentUserLocation() {
 }
 
 
+function emitTsunamiNotification(notification: QuakeNotification) {
+  if (notification.type !== "Tsunami") return;
+  if (notification.id === latestEmittedTsunamiNotificationId) return;
+
+  latestEmittedTsunamiNotificationId = notification.id;
+
+  const title = notification.title || "Peringatan Tsunami";
+  const message =
+    notification.message || notification.headline || notification.location || "";
+  const eventId = notification.id.replace(/^tsunami:/, "");
+
+  notificationEmitter.emit({
+    kind: "tsunami_alert",
+    title,
+    body: message || title,
+    level: title,
+    message,
+    subject: notification.title,
+    headline: notification.headline,
+    description: notification.message,
+    data: {
+      type: "tsunami_alert",
+      event_id: eventId,
+      title,
+      body: message || title,
+      level: title,
+      message,
+      subject: notification.title,
+      headline: notification.headline,
+      description: notification.message,
+      magnitude: notification.magnitude,
+      location: notification.location,
+      timestamp: `${notification.date} ${notification.time}`.trim(),
+    },
+  });
+}
+
 function pushNotification(notification: QuakeNotification) {
   if (state.notifications.some((item) => item.id === notification.id)) return;
 
@@ -239,6 +278,7 @@ function pushNotification(notification: QuakeNotification) {
     .slice(0, MAX_NOTIFICATIONS);
 
   setState({ notifications, unreadCount: recomputeUnreadCount(notifications) });
+  emitTsunamiNotification(notification);
 
   void persistNotifications(notifications);
 }
