@@ -1,7 +1,12 @@
 import { GempaBumiNotificationModal } from "@/features/main-menu/notifications/components/GempaBumiNotificationModal";
-import { InAppNotificationData } from "@/features/main-menu/notifications/components/in-app-notification-modal";
+import { TsunamiAlertNotificationModal } from "@/features/main-menu/notifications/components/tsunami-alert-notification-modal";
 import { setLogoutTransitionRunner } from "@/features/main-menu/account/components/logout-transition";
 import { notificationEmitter } from "@/services/fcm-event-emitter";
+import {
+  normalizeNotificationPayload,
+  type NormalizedGempaNotification,
+  type NormalizedTsunamiNotification,
+} from "@/services/notification-payload";
 import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";
@@ -11,6 +16,22 @@ import { Animated, InteractionManager, StyleSheet } from "react-native";
 function FcmBootstrap() {
   useFcm();
   return null;
+}
+
+function getText(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+
+  if (value === null || value === undefined) return undefined;
+
+  const trimmed = String(value).trim();
+  return trimmed || undefined;
+}
+
+function formatDepth(value: string): string {
+  return /km/i.test(value) ? value : `${value} km`;
 }
 
 function waitForNextFrame() {
@@ -70,7 +91,10 @@ function LogoutTransitionOverlay() {
 }
 
 export default function RootLayout() {
-  const [notification, setNotification] = useState<InAppNotificationData | null>(null);
+  const [gempaNotification, setGempaNotification] =
+    useState<NormalizedGempaNotification | null>(null);
+  const [tsunamiNotification, setTsunamiNotification] =
+    useState<NormalizedTsunamiNotification | null>(null);
   const [fcmReady, setFcmReady] = useState(false);
   const segments = useSegments();
 
@@ -84,10 +108,40 @@ export default function RootLayout() {
   // Deteksi apakah saat ini sedang berada di folder/layar starter (auth)
   const isStarter = segments[0] === "starter";
 
-  // Extract magnitude and depth if available from body or set defaults
-  const getMagInfo = (body?: string) => {
+  const showNotification = useCallback(
+    (payload: Parameters<typeof normalizeNotificationPayload>[0]) => {
+      const normalized = normalizeNotificationPayload(payload);
+
+      if (normalized.kind === "tsunami_alert") {
+        setGempaNotification(null);
+        setTsunamiNotification(normalized);
+        return;
+      }
+
+      setTsunamiNotification(null);
+      setGempaNotification(normalized);
+    },
+    [],
+  );
+
+  // Extract magnitude and depth if available from data or body.
+  const getMagInfo = (notification?: NormalizedGempaNotification | null) => {
+    const data = notification?.data;
+    const dataMagnitude = getText(data?.magnitude ?? data?.mag);
+    const dataDepth = getText(data?.depth ?? data?.kedalaman);
+    const body = notification?.body;
+
+    if (dataMagnitude || dataDepth) {
+      return {
+        mag: dataMagnitude ?? "-",
+        depth: dataDepth ? formatDepth(dataDepth) : "-",
+      };
+    }
+
     if (!body) return { mag: "-", depth: "-" };
-    const magMatch = body.match(/M(?:agnitudo|ag)?\s*:\s*([0-9.]+)/i) || body.match(/M(?:agnitudo)?\s*([0-9.]+)/i);
+    const magMatch =
+      body.match(/M(?:agnitudo|ag)?\s*:\s*([0-9.]+)/i) ||
+      body.match(/M(?:agnitudo)?\s*([0-9.]+)/i);
     const depthMatch = body.match(/(?:Kedalaman|kedlmn)\s*:\s*([0-9.]+)/i);
     return {
       mag: magMatch ? magMatch[1] : "-",
@@ -95,12 +149,12 @@ export default function RootLayout() {
     };
   };
 
-  const { mag, depth } = getMagInfo(notification?.body);
+  const { mag, depth } = getMagInfo(gempaNotification);
 
   useEffect(() => {
     // 1. Subscribe to events (Foreground)
     const unsubscribe = notificationEmitter.subscribe((payload) => {
-      setNotification(payload);
+      showNotification(payload);
     });
 
     // 2. Check if App was launched via Notification or Full Screen Intent (Background/Killed state)
@@ -108,9 +162,12 @@ export default function RootLayout() {
       try {
         const initialNotification = await notifee.getInitialNotification();
         if (initialNotification?.notification) {
-          setNotification({
-            title: initialNotification.notification.title || "Peringatan Gempa Bumiii!",
+          showNotification({
+            title:
+              initialNotification.notification.title ||
+              "Peringatan Gempa Bumiii!",
             body: initialNotification.notification.body || "",
+            data: initialNotification.notification.data,
           });
         }
       } catch (e) {
@@ -120,18 +177,25 @@ export default function RootLayout() {
     checkInitialNotification();
 
     return () => unsubscribe();
-  }, []);
+  }, [showNotification]);
 
   return (
     <>
       {fcmReady && <FcmBootstrap />}
       <Stack screenOptions={{ headerShown: false, animation: "none" }} />
       <GempaBumiNotificationModal 
-        visible={!!notification && !isStarter} 
+        visible={!!gempaNotification && !isStarter} 
         magnitudo={mag}
         kedalaman={depth}
         closeInSecond={6}
-        onClose={() => setNotification(null)} 
+        onClose={() => setGempaNotification(null)} 
+      />
+      <TsunamiAlertNotificationModal
+        visible={!!tsunamiNotification && !isStarter}
+        level={tsunamiNotification?.level}
+        message={tsunamiNotification?.message}
+        closeInSecond={6}
+        onClose={() => setTsunamiNotification(null)}
       />
       <LogoutTransitionOverlay />
     </>

@@ -2,11 +2,11 @@ import { notificationEmitter } from "@/services/fcm-event-emitter";
 import { ensureNotificationPermission } from "@/utils/permission";
 import { getApp } from "@react-native-firebase/app";
 import {
-    AuthorizationStatus,
-    getMessaging,
-    getToken,
-    onMessage,
-    requestPermission,
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage,
+  requestPermission,
 } from "@react-native-firebase/messaging";
 import { useEffect, useRef } from "react";
 
@@ -66,18 +66,22 @@ export const useFcm = () => {
 
             // Karena kita menggunakan Data-Only Payload untuk background Wake-Up,
             // properti ada di remoteMessage.data
+            const data = remoteMessage.data
+              ? { ...remoteMessage.data }
+              : undefined;
             const title =
-              toMessageText(remoteMessage.data?.title) ||
+              toMessageText(data?.title) ||
               remoteMessage.notification?.title ||
               "Notifikasi Gempa";
             const body =
-              toMessageText(remoteMessage.data?.body) ||
+              toMessageText(data?.body) ||
               remoteMessage.notification?.body ||
               "Ada gempa baru terdeteksi";
             
             notificationEmitter.emit({
               title,
               body,
+              data,
             });
           });
         }
