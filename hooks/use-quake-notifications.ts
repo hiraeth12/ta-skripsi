@@ -9,11 +9,12 @@ import {
   parseCoordinate,
   parseDepthKm,
 } from "@/utils/earthquake-impact";
+import {
+  EMPTY_WARNING,
+  fetchTsunamiGroups,
+} from "@/features/main-menu/earthquake/utils/tsunami-content-utils";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type QuakeNotifType = "Dirasakan" | "Terdeteksi";
-
+export type QuakeNotifType = "Dirasakan" | "Terdeteksi" | "Tsunami";
 export type QuakeNotification = {
   id: string;
   type: QuakeNotifType;
@@ -24,24 +25,34 @@ export type QuakeNotification = {
   level: "Rendah" | "Sedang" | "Kuat";
   timestamp: number;
   isRead: boolean;
+  title?: string;
+  headline?: string;
+  message?: string;
 };
 
 type NotificationState = {
   notifications: QuakeNotification[];
   unreadCount: number;
-  error: string | null; // FIX #3: expose fetch errors to UI
+  error: string | null;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+type PersistedLatestSeen = {
+  dirasakan: string;
+  terdeteksi: string;
+  tsunami: string;
+};
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
+const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL;
 const FIREBASE_DATABASE_URL =
   process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 const POLL_INTERVAL_MS = 15_000;
-const MAX_NOTIFICATIONS = 100; // FIX #6: named constant instead of magic number
+const MAX_NOTIFICATIONS = 100;
 
-// ─── Module-level shared state ────────────────────────────────────────────────
+const STORAGE_KEY_NOTIFICATIONS = "quake_notifications_v1";
+const STORAGE_KEY_LATEST_SEEN = "quake_latest_seen_v1";
+const STORAGE_KEY_DIRASAKAN_PREFIX = "quake_notification_delivered:dirasakan:";
 
 let state: NotificationState = {
   notifications: [],
@@ -49,23 +60,29 @@ let state: NotificationState = {
   error: null,
 };
 
-// FIX #2: use pollTimer as the single source of truth for "is polling active"
-//         instead of a separate isStarted boolean that can desync on hot reload
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dailyResetTimer: ReturnType<typeof setTimeout> | null = null;
+let storageInitialized = false;
+let storageInitPromise: Promise<void> | null = null;
+
 const listeners = new Set<() => void>();
 let currentDayKey = getLocalDayKey();
 
-const latestSeen = {
+const latestSeen: PersistedLatestSeen = {
   dirasakan: "",
   terdeteksi: "",
+  tsunami: "",
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function notifyListeners() {
   listeners.forEach((fn) => fn());
 }
+
+function setState(next: Partial<NotificationState>) {
+  state = { ...state, ...next };
+  notifyListeners();
+}
+
 
 function getLocalDayKey() {
   const now = new Date();
@@ -73,11 +90,6 @@ function getLocalDayKey() {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function setState(next: Partial<NotificationState>) {
-  state = { ...state, ...next };
-  notifyListeners();
 }
 
 function recomputeUnreadCount(notifications: QuakeNotification[]) {
@@ -113,6 +125,11 @@ function parseTimestamp(date: string, time: string) {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
+function getTsunamiTimestamp(timesentMs: number, date: string, time: string) {
+  if (Number.isFinite(timesentMs)) return timesentMs;
+  return parseTimestamp(date, time);
+}
+
 function parsePointCoordinates(pointCoordinates: unknown) {
   const [lonRaw, latRaw] = String(pointCoordinates ?? "").split(",");
   const longitude = parseCoordinate(lonRaw);
@@ -122,17 +139,77 @@ function parsePointCoordinates(pointCoordinates: unknown) {
   return { latitude, longitude };
 }
 
-function getLocalDeliveryKey(userId: string, eventId: string) {
-  return `quake_notification_delivered:dirasakan:${userId}:${eventId}`;
+async function loadPersistedData(): Promise<void> {
+  try {
+    const [rawNotifications, rawLatestSeen] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY_NOTIFICATIONS),
+      AsyncStorage.getItem(STORAGE_KEY_LATEST_SEEN),
+    ]);
+
+    if (rawNotifications) {
+      const saved: QuakeNotification[] = JSON.parse(rawNotifications);
+      const today = getLocalDayKey();
+
+      const todayNotifications = saved.filter((item) => {
+        return item.date ? item.date.includes(today.split("-")[2]) : true;
+      });
+
+      if (todayNotifications.length > 0) {
+        state = {
+          ...state,
+          notifications: todayNotifications,
+          unreadCount: recomputeUnreadCount(todayNotifications),
+        };
+      }
+    }
+
+    if (rawLatestSeen) {
+      const saved: PersistedLatestSeen = JSON.parse(rawLatestSeen);
+      latestSeen.dirasakan = saved.dirasakan ?? "";
+      latestSeen.terdeteksi = saved.terdeteksi ?? "";
+      latestSeen.tsunami = saved.tsunami ?? "";
+    }
+  } catch {
+  }
+}
+
+async function persistNotifications(notifications: QuakeNotification[]) {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEY_NOTIFICATIONS,
+      JSON.stringify(notifications),
+    );
+  } catch {
+  }
+}
+
+async function persistLatestSeen() {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEY_LATEST_SEEN,
+      JSON.stringify(latestSeen),
+    );
+  } catch {
+  }
+}
+
+
+function getDirasakanDeliveryKey(userId: string, eventId: string) {
+  return `${STORAGE_KEY_DIRASAKAN_PREFIX}${userId}:${eventId}`;
 }
 
 async function hasLocalDelivery(userId: string, eventId: string) {
-  const value = await AsyncStorage.getItem(getLocalDeliveryKey(userId, eventId));
+  const value = await AsyncStorage.getItem(
+    getDirasakanDeliveryKey(userId, eventId),
+  );
   return value === "true";
 }
 
 async function markLocalDelivery(userId: string, eventId: string) {
-  await AsyncStorage.setItem(getLocalDeliveryKey(userId, eventId), "true");
+  await AsyncStorage.setItem(
+    getDirasakanDeliveryKey(userId, eventId),
+    "true",
+  );
 }
 
 async function getCurrentUserLocation() {
@@ -153,6 +230,7 @@ async function getCurrentUserLocation() {
   return { userId: user.uid, latitude, longitude };
 }
 
+
 function pushNotification(notification: QuakeNotification) {
   if (state.notifications.some((item) => item.id === notification.id)) return;
 
@@ -161,12 +239,13 @@ function pushNotification(notification: QuakeNotification) {
     .slice(0, MAX_NOTIFICATIONS);
 
   setState({ notifications, unreadCount: recomputeUnreadCount(notifications) });
-}
 
-// ─── Daily reset ──────────────────────────────────────────────────────────────
+  void persistNotifications(notifications);
+}
 
 function clearAllNotifications() {
   setState({ notifications: [], unreadCount: 0, error: null });
+  void AsyncStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
 }
 
 function scheduleDailyReset() {
@@ -178,6 +257,12 @@ function scheduleDailyReset() {
   dailyResetTimer = setTimeout(() => {
     currentDayKey = getLocalDayKey();
     clearAllNotifications();
+
+    latestSeen.dirasakan = "";
+    latestSeen.terdeteksi = "";
+    latestSeen.tsunami = "";
+    void persistLatestSeen();
+
     scheduleDailyReset();
   }, delay);
 }
@@ -187,9 +272,12 @@ function resetIfDayChanged() {
   if (dayKey === currentDayKey) return;
   currentDayKey = dayKey;
   clearAllNotifications();
-}
 
-// ─── Fetchers ─────────────────────────────────────────────────────────────────
+  latestSeen.dirasakan = "";
+  latestSeen.terdeteksi = "";
+  latestSeen.tsunami = "";
+  void persistLatestSeen();
+}
 
 async function fetchDirasakanNotification() {
   if (!DIRASAKAN_API_URL) return;
@@ -236,6 +324,7 @@ async function fetchDirasakanNotification() {
 
   if (!coordinates || magnitude <= 0) {
     latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
     return;
   }
 
@@ -244,6 +333,7 @@ async function fetchDirasakanNotification() {
 
   if (await hasLocalDelivery(userLocation.userId, eventId)) {
     latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
     return;
   }
 
@@ -258,6 +348,7 @@ async function fetchDirasakanNotification() {
 
   if (!impact.inside) {
     latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
     return;
   }
 
@@ -275,8 +366,10 @@ async function fetchDirasakanNotification() {
     timestamp: parseTimestamp(date, time),
     isRead: false,
   });
+
   await markLocalDelivery(userLocation.userId, eventId);
   latestSeen.dirasakan = eventId;
+  void persistLatestSeen();
 }
 
 async function fetchTerdeteksiNotification() {
@@ -304,7 +397,15 @@ async function fetchTerdeteksiNotification() {
   );
 
   if (!eventId || eventId === latestSeen.terdeteksi) return;
+
+  const alreadyExists = state.notifications.some(
+    (item) => item.id === `terdeteksi:${eventId}`,
+  );
+
   latestSeen.terdeteksi = eventId;
+  void persistLatestSeen();
+
+  if (alreadyExists) return;
 
   const magnitude = Number.parseFloat(String(props.mag ?? "0")) || 0;
   const [date = "", timeRaw = ""] = String(props.time ?? "").split(" ");
@@ -323,39 +424,95 @@ async function fetchTerdeteksiNotification() {
   });
 }
 
-// ─── Poll ─────────────────────────────────────────────────────────────────────
+async function fetchTsunamiNotification() {
+  if (!TSUNAMI_API_URL) return;
+
+  const abortController = new AbortController();
+  const groups = await fetchTsunamiGroups(
+    TSUNAMI_API_URL.trim(),
+    abortController.signal,
+  );
+  const latestGroup = groups[0];
+  if (!latestGroup) return;
+
+  const latestWarning =
+    latestGroup.warnings[latestGroup.latestWarningIndex] ?? EMPTY_WARNING;
+  const warningId = latestWarning.id === EMPTY_WARNING.id ? "" : latestWarning.id;
+  const eventId = String(
+    warningId || latestGroup.id || `${latestGroup.tanggal}-${latestGroup.jam}`,
+  );
+
+  if (!eventId || eventId === latestSeen.tsunami) return;
+
+  // Cek apakah notifikasi ini sudah ada (dari persistent storage)
+  const alreadyExists = state.notifications.some(
+    (item) => item.id === `tsunami:${eventId}`,
+  );
+
+  latestSeen.tsunami = eventId;
+  void persistLatestSeen();
+
+  if (alreadyExists) return;
+
+  const date = String(latestGroup.tanggal ?? "");
+  const time = String(latestGroup.jam ?? "");
+  const headline = String(latestWarning.headline ?? "").trim();
+  const description = String(latestWarning.description ?? "").trim();
+  const subject = String(latestWarning.subject ?? "").trim();
+  const location = String(latestGroup.wilayah ?? "").trim();
+  const magnitude = String(latestGroup.magnitude ?? "").trim();
+  const magnitudeValue = Number.parseFloat(magnitude) || 0;
+
+  pushNotification({
+    id: `tsunami:${eventId}`,
+    type: "Tsunami",
+    magnitude,
+    location: location || "Lokasi tidak tersedia",
+    date,
+    time,
+    level: getLevel(magnitudeValue),
+    timestamp: getTsunamiTimestamp(latestWarning.timesentMs, date, time),
+    isRead: false,
+    title: subject || "Peringatan Tsunami",
+    headline,
+    message: description || headline || location,
+  });
+}
 
 async function pollLatestQuakes() {
   resetIfDayChanged();
 
-  // FIX #3: collect settled results and surface any failures to the UI
   const results = await Promise.allSettled([
     fetchDirasakanNotification(),
     fetchTerdeteksiNotification(),
+    fetchTsunamiNotification(),
   ]);
 
   const anyFailed = results.some((r) => r.status === "rejected");
 
-  // Only show error when ALL fetches failed and there are no notifications yet.
-  // If we already have data, a transient network hiccup shouldn't wipe the UI.
   if (anyFailed && state.notifications.length === 0) {
     setState({ error: "Gagal memuat notifikasi. Periksa koneksi Anda." });
   } else if (!anyFailed && state.error) {
-    setState({ error: null }); // clear stale error once fetch recovers
+    setState({ error: null });
   }
 }
 
-// ─── Polling lifecycle ────────────────────────────────────────────────────────
+async function initAndStartPolling() {
+  if (!storageInitialized) {
+    storageInitPromise = loadPersistedData();
+    await storageInitPromise;
+    storageInitialized = true;
+    notifyListeners(); 
+  }
 
-function startPolling() {
-  // FIX #2: guard on pollTimer, not a separate isStarted flag.
-  // pollTimer is null both on first run AND after stopPolling, so this
-  // correctly handles hot reload without risking double-interval.
-  if (pollTimer) return;
-
-  scheduleDailyReset();
   void pollLatestQuakes();
   pollTimer = setInterval(() => void pollLatestQuakes(), POLL_INTERVAL_MS);
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  scheduleDailyReset();
+  void initAndStartPolling();
 }
 
 function stopPollingIfUnused() {
@@ -368,6 +525,9 @@ function stopPollingIfUnused() {
     clearTimeout(dailyResetTimer);
     dailyResetTimer = null;
   }
+
+  storageInitialized = false;
+  storageInitPromise = null;
 }
 
 function subscribe(listener: () => void) {
@@ -379,15 +539,16 @@ function subscribe(listener: () => void) {
   };
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
 export function markAllNotificationsAsRead() {
-  // FIX #4: bail early if nothing to mark — avoids a pointless setState +
-  //         notifyListeners() call every time the notifications screen opens
   if (state.unreadCount === 0) return;
 
-  const notifications = state.notifications.map((item) => ({ ...item, isRead: true }));
+  const notifications = state.notifications.map((item) => ({
+    ...item,
+    isRead: true,
+  }));
+
   setState({ notifications, unreadCount: 0 });
+  void persistNotifications(notifications);
 }
 
 export function useQuakeNotifications() {
@@ -401,7 +562,7 @@ export function useQuakeNotifications() {
   return {
     notifications: snapshot.notifications,
     unreadCount: snapshot.unreadCount,
-    error: snapshot.error, // FIX #3: exposed so the screen can render it
+    error: snapshot.error,
     markAllAsRead: markAllNotificationsAsRead,
   };
 }

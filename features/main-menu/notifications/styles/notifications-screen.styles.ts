@@ -15,9 +15,20 @@ export const styles = StyleSheet.create({
   },
   notifContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
   },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  iconRed: { backgroundColor: "#FEE2E2" },
+  iconGreen: { backgroundColor: "#DCFCE7" },
+  iconAmber: { backgroundColor: "#FEF3C7" },
+  iconNeutral: { backgroundColor: "#E2E8F0" },
   textWrapper: { flex: 1, marginRight: 10 },
   notifTitle: {
     fontSize: 16,
@@ -25,7 +36,7 @@ export const styles = StyleSheet.create({
     color: "#000",
     marginBottom: 4,
   },
-  notifSubTitle: { fontSize: 13, color: "#333", marginBottom: 2 },
+  notifSubTitle: { fontSize: 13, color: "#333", marginBottom: 2, lineHeight: 18 },
   notifTime: { fontSize: 12, color: "#888" },
   badge: {
     paddingHorizontal: 12,
@@ -36,6 +47,8 @@ export const styles = StyleSheet.create({
   },
   badgeRed: { backgroundColor: "#EF4444" },
   badgeGreen: { backgroundColor: "#22C55E" },
+  badgeAmber: { backgroundColor: "#F59E0B" },
+  badgeNeutral: { backgroundColor: "#64748B" },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
   emptyText: {
     color: "#fff",

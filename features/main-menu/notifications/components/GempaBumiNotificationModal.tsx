@@ -24,7 +24,7 @@ export function GempaBumiNotificationModal({
   closeInSecond?: number;
   onClose: () => void;
 }) {
-  const player = useAudioPlayer(require("../../assets/sounds/eq_eva.wav"));
+  const player = useAudioPlayer(require("@/assets/sounds/eq_eva.wav"));
 
   // Animations
   const scaleValue = useRef(new Animated.Value(0.5)).current;
@@ -141,7 +141,7 @@ export function GempaBumiNotificationModal({
             {/* Main big hex warning background (.long-hex) */}
             <View style={styles.shapesContainer}>
               <Image
-                source={require("../../assets/images/svg/big_warning.svg")}
+                source={require("@/assets/images/svg/big_warning.svg")}
                 style={styles.bigWarning}
                 contentFit="contain"
               />
@@ -151,7 +151,7 @@ export function GempaBumiNotificationModal({
                   style={[styles.radarContainer, { opacity: blinkValue }]}
                 >
                   <Image
-                    source={require("../../assets/images/warning_gempa_yellow.png")}
+                    source={require("@/assets/images/warning_gempa_yellow.png")}
                     style={styles.warningGempaYellow}
                     contentFit="contain"
                   />
@@ -160,7 +160,7 @@ export function GempaBumiNotificationModal({
                   style={[styles.radarContainer, { opacity: blinkValue }]}
                 >
                   <Image
-                    source={require("../../assets/images/warning_gempa_yellow.png")}
+                    source={require("@/assets/images/warning_gempa_yellow.png")}
                     style={styles.warningGempaYellow}
                     contentFit="contain"
                   />
@@ -172,14 +172,14 @@ export function GempaBumiNotificationModal({
             <View style={styles.emergencyHexGroup}>
               <View style={styles.emergencyHex}>
                 <Image
-                  source={require("../../assets/images/svg/warning_shape_yellow.svg")}
+                  source={require("@/assets/images/svg/warning_shape_yellow.svg")}
                   style={styles.warningShapeYellow}
                   contentFit="contain"
                 />
               </View>
               <View style={styles.emergencyHex}>
                 <Image
-                  source={require("../../assets/images/svg/warning_shape_yellow.svg")}
+                  source={require("@/assets/images/svg/warning_shape_yellow.svg")}
                   style={styles.warningShapeYellow}
                   contentFit="contain"
                 />
@@ -196,7 +196,7 @@ export function GempaBumiNotificationModal({
                 ]}
               >
                 <Image
-                  source={require("../../assets/images/svg/hex_shape.svg")}
+                  source={require("@/assets/images/svg/hex_shape.svg")}
                   style={styles.hexShape}
                   contentFit="contain"
                 />
@@ -210,7 +210,7 @@ export function GempaBumiNotificationModal({
 
               <View style={styles.hexWrapperCenter}>
                 <Image
-                  source={require("../../assets/images/svg/hex_shape.svg")}
+                  source={require("@/assets/images/svg/hex_shape.svg")}
                   style={styles.hexShape}
                   contentFit="contain"
                 />
@@ -224,7 +224,7 @@ export function GempaBumiNotificationModal({
                 ]}
               >
                 <Image
-                  source={require("../../assets/images/svg/hex_shape.svg")}
+                  source={require("@/assets/images/svg/hex_shape.svg")}
                   style={styles.hexShape}
                   contentFit="contain"
                 />
@@ -247,7 +247,7 @@ export function GempaBumiNotificationModal({
                 ]}
               >
                 <Image
-                  source={require("../../assets/images/svg/earthquake_detected.svg")}
+                  source={require("@/assets/images/svg/earthquake_detected.svg")}
                   style={styles.earthquakeDetected}
                   contentFit="contain"
                 />
@@ -260,7 +260,7 @@ export function GempaBumiNotificationModal({
                 ]}
               >
                 <Image
-                  source={require("../../assets/images/svg/earthquake_detected.svg")}
+                  source={require("@/assets/images/svg/earthquake_detected.svg")}
                   style={styles.earthquakeDetected}
                   contentFit="contain"
                 />

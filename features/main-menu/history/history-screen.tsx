@@ -41,7 +41,7 @@ import {
 const ITEM_HEIGHT = 74;
 const LIST_CONTENT_CONTAINER_STYLE = {
   paddingHorizontal: 12,
-  paddingBottom: 40,
+  paddingBottom: 8,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -148,7 +148,6 @@ const EarthquakeListItem = ({
         borderRadius: 8,
         paddingHorizontal: 10,
         paddingVertical: 10,
-        marginBottom: 8,
         flexDirection: "row",
         alignItems: "center",
         height: ITEM_HEIGHT - 8,
@@ -273,6 +272,7 @@ function HistoryListPanel({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={LIST_CONTENT_CONTAINER_STYLE}
           ListEmptyComponent={emptyComponent}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         />
       )}
     </Animated.View>
@@ -583,7 +583,16 @@ export default function History() {
 
   const periodLabel = useMemo(() => {
     if (activeTab !== "RIWAYAT TSUNAMI") {
-      return `${effectiveMonths.map((m) => MONTH_NAMES_ID[m - 1]).join(", ")} ${effectiveFilter.year}`;
+      const first = MONTH_NAMES_ID[(effectiveMonths[0] ?? 1) - 1];
+      const last =
+        MONTH_NAMES_ID[(effectiveMonths[effectiveMonths.length - 1] ?? 1) - 1];
+
+      const monthLabel =
+        first === last
+          ? first
+          : `${first} - ${last}`; 
+
+      return `${monthLabel} ${effectiveFilter.year}`;
     }
     return String(effectiveFilter.year);
   }, [activeTab, effectiveFilter.year, effectiveMonths]);
