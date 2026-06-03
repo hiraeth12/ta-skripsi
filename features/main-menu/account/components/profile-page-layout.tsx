@@ -1,6 +1,5 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ReactNode } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 type ProfilePageLayoutProps = {
   title?: string;
@@ -48,6 +47,7 @@ export default function ProfilePageLayout({
           {children}
         </View>
       </View>
+      <View style={styles.menuBottomFill} />
     </View>
   );
 }
@@ -96,15 +96,19 @@ const styles = StyleSheet.create({
   },
   userDetails: { fontSize: 14, color: "#555", marginBottom: 2 },
   menuContainer: {
-    flex: 1,
     backgroundColor: "#0C4A6E",
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
   },
+  menuBottomFill: {
+    flex: 1,
+    backgroundColor: "#0C4A6E",
+  },
   menuContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    flex: 1,
+    paddingBottom: 20,
+    gap: 12
   },
   titleRow: { marginBottom: 15 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },

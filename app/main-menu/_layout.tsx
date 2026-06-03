@@ -17,8 +17,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const ROUTE_MAP: Record<string, string> = {
   HOME: "home",
   GEMPA: "earthquake",
@@ -46,24 +44,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Tunggu sampai session selesai dicek sebelum redirect
     if (!loading && !user) {
       router.replace("/starter/login");
     }
   }, [user, loading, router]);
 
-  // Jangan render konten selama session masih dicek atau user tidak ada
   if (loading || !user) return null;
 
   return <>{children}</>;
 }
 
-// ─── Error Boundary ───────────────────────────────────────────────────────────
-
-/**
- * FIX (Security): Tangkap crash dari Provider agar tidak expose stack trace
- * atau data sensitif ke layar. Tampilkan fallback UI yang aman.
- */
 interface ErrorBoundaryState {
   hasError: boolean;
 }
@@ -82,7 +72,6 @@ class ProviderErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error) {
-    // Log ke monitoring (misal Sentry) tanpa ekspos ke UI
     console.error("[ProviderErrorBoundary] Provider crash:", error);
   }
 
@@ -115,13 +104,6 @@ const errorStyles = StyleSheet.create({
   },
 });
 
-// ─── Notification Button ──────────────────────────────────────────────────────
-
-/**
- * FIX (Bug): Satu komponen tunggal untuk tombol notifikasi — tidak lagi
- * duplikat antara "ready" dan "not ready". Saat belum ready, unreadDot
- * cukup disembunyikan; disabled guard cukup ada di satu tempat saja.
- */
 function NotificationButton({
   onPress,
   disabled,
@@ -136,8 +118,6 @@ function NotificationButton({
       style={styles.notification}
       onPress={onPress}
       activeOpacity={0.7}
-      // FIX (Bug): disabled guard hanya di sini — tidak perlu guard ganda
-      // di handleOpenNotifications juga
       disabled={disabled}
     >
       <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -146,16 +126,12 @@ function NotificationButton({
   );
 }
 
-// ─── Inner Layout (di dalam providers) ───────────────────────────────────────
 
 function MainLayoutInner() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // FIX (Bug): gabung dua state yang selalu berubah bersamaan jadi satu
   const [isReady, setIsReady] = useState(false);
-
-  // FIX (Bug): gunakan ref agar tidak update state setelah unmount
   const isMounted = useRef(true);
   useEffect(() => {
     return () => {
@@ -170,13 +146,10 @@ function MainLayoutInner() {
     return () => task.cancel();
   }, []);
 
-  // FIX (Device): gunakan safe area insets agar tidak hardcode paddingTop
   const insets = useSafeAreaInsets();
-
   const isOnNotifikasi = pathname === NOTIFIKASI_PATH;
 
   const handleOpenNotifications = () => {
-    // FIX (Bug): guard cukup satu tempat — di prop `disabled` NotificationButton
     router.push(NOTIFIKASI_PATH);
   };
 
@@ -189,7 +162,6 @@ function MainLayoutInner() {
           resizeMode="contain"
         />
 
-        {/* FIX (Bug): komponen tunggal, tidak ada conditional render dua versi */}
         <NotificationButton
           onPress={handleOpenNotifications}
           disabled={isOnNotifikasi}
@@ -250,8 +222,6 @@ function MainLayoutInner() {
   );
 }
 
-// ─── Root Export ──────────────────────────────────────────────────────────────
-
 export default function MainLayout() {
   return (
     <ProviderErrorBoundary>
@@ -265,8 +235,6 @@ export default function MainLayout() {
     </ProviderErrorBoundary>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
