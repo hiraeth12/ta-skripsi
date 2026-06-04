@@ -25,6 +25,7 @@
     "monitor:tsunami-notifications": "node scripts/monitor-tsunami-notifications.js",
     "test:notification": "node scripts/test-notification.js",
     "test:tsunami-notification": "node scripts/test-tsunami-notification.js",
+    "test:tsunami-notification:send": "node scripts/test-tsunami-notification.js --send",
     "sort:gempa-dirasakan": "node scripts/sort-gempa-dirasakan.js"
   },
   "dependencies": {

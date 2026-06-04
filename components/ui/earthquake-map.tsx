@@ -3,14 +3,24 @@ import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import kabkotaGeoJson from "@/assets/geojson/all_kabkota_ind_reduce.geojson";
 import patahanGeoJson from "@/assets/geojson/patahan.geojson";
 
-import type { MapViewType } from "../../constants/map";
-import { DEFAULT_MAP_REGION } from "../../constants/map";
+import type { MapViewType } from "@/constants/map";
+import { DEFAULT_MAP_REGION } from "@/constants/map";
+import {
+  buildGeoJsonIndex,
+  resolveMatchedFeatures,
+  type GeoJsonFeature,
+  type WzArea,
+} from "@/utils/wzarea-highlights";
 
 const SENSOR_SEISMIC_URL = process.env.EXPO_PUBLIC_SENSOR_SEISMIC_URL || "";
 const SENSOR_SEISMIC_GLOBAL =
   process.env.EXPO_PUBLIC_SENSOR_SEISMIC_GLOBAL_URL || "";
+
+const KABKOTA_FEATURES = kabkotaGeoJson.features as unknown as GeoJsonFeature[];
+const KABKOTA_GEO_INDEX = buildGeoJsonIndex(KABKOTA_FEATURES);
 
 type MapRegion = {
   latitude: number;
@@ -73,6 +83,7 @@ type Props = {
   showFaultLines?: boolean;
   showMapChrome?: boolean;
   showUserMarker?: boolean;
+  wzAreas?: WzArea[];
 };
 
 type DotMarkerProps = {
@@ -351,6 +362,7 @@ const EarthquakeMap = memo(
     showFaultLines = true,
     showMapChrome = true,
     showUserMarker = true,
+    wzAreas = [],
   }: Props) {
     const session = useUserSession();
     const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
@@ -503,6 +515,32 @@ const EarthquakeMap = memo(
       }));
     }, [highlightPolygons]);
 
+    const wzAreaFeatureCollection = useMemo((): GeoJSON.FeatureCollection => {
+      if (wzAreas.length === 0) {
+        return { type: "FeatureCollection", features: [] };
+      }
+
+      const matched = resolveMatchedFeatures(
+        wzAreas,
+        KABKOTA_FEATURES,
+        KABKOTA_GEO_INDEX,
+      );
+
+      return {
+        type: "FeatureCollection",
+        features: matched.map(({ feature, style }) => ({
+          ...feature,
+          properties: {
+            ...feature.properties,
+            fillColor: style.fillColor,
+            fillOpacity: style.fillOpacity,
+            strokeColor: style.strokeColor,
+            strokeWidth: style.strokeWidth,
+          },
+        })) as GeoJSON.Feature[],
+      };
+    }, [wzAreas]);
+
     const waveOverlayGeometries = useMemo(() => {
       return (waveOverlays ?? []).map((w) => ({
         id: w.id,
@@ -590,6 +628,28 @@ const EarthquakeMap = memo(
                     9,
                     2.2,
                   ],
+                }}
+              />
+            </Mapbox.ShapeSource>
+          )}
+
+          {wzAreaFeatureCollection.features.length > 0 && (
+            <Mapbox.ShapeSource
+              id="wzarea-overlay"
+              shape={wzAreaFeatureCollection}
+            >
+              <Mapbox.FillLayer
+                id="wzarea-fill"
+                style={{
+                  fillColor: ["get", "fillColor"],
+                  fillOpacity: ["get", "fillOpacity"],
+                }}
+              />
+              <Mapbox.LineLayer
+                id="wzarea-line"
+                style={{
+                  lineColor: ["get", "strokeColor"],
+                  lineWidth: ["get", "strokeWidth"],
                 }}
               />
             </Mapbox.ShapeSource>
@@ -811,6 +871,7 @@ const EarthquakeMap = memo(
     // Peta perlu render ulang kalau ukuran card berubah agar bisa adjust posisi tombolnya
     if (prev.cardHeight !== next.cardHeight) return false;
     if (prev.markerCoordinate !== next.markerCoordinate) return false;
+    if (prev.wzAreas !== next.wzAreas) return false;
     if (
       !areHighlightPolygonsEqual(prev.highlightPolygons, next.highlightPolygons)
     )

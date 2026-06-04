@@ -7,6 +7,7 @@ import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import { shareQuake } from "@/utils/share";
+import type { WzArea, WzLevel } from "@/utils/wzarea-highlights";
 import { Feather } from "@expo/vector-icons";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -33,6 +34,38 @@ const API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
 const CARD_BODY_MAX_HEIGHT = Dimensions.get("window").height * 0.4;
 const MIN_POLL_MS = 30_000;
 const MAX_POLL_MS = 120_000;
+const WZ_LEVELS = new Set<WzLevel>(["AWAS", "SIAGA", "WASPADA", "NORMAL"]);
+
+type SourceWzArea = {
+  province: string;
+  district: string;
+  level: string;
+  date: string;
+  time: string;
+};
+
+function normalizeWzLevel(level: string): WzLevel {
+  const value = String(level ?? "")
+    .trim()
+    .toUpperCase() as WzLevel;
+
+  return WZ_LEVELS.has(value) ? value : "NORMAL";
+}
+
+function toMapWzAreas(wzAreas: SourceWzArea[]): WzArea[] {
+  return wzAreas.map((area) => ({
+    province: area.province,
+    district: area.district,
+    level: normalizeWzLevel(area.level),
+    date: area.date,
+    time: area.time,
+  }));
+}
+
+function getWarningSubject(subject: string): string {
+  const text = String(subject ?? "").trim();
+  return text && text !== "-" ? text : "Peringatan Tsunami";
+}
 
 type Props = {
   tabBar: ReactNode;
@@ -75,6 +108,11 @@ export default function TsunamiContent({
   const tsunamiMapSlides = useMemo(
     () => buildTsunamiMapSlides(selectedWarning),
     [selectedWarning],
+  );
+  const selectedWarningSubject = getWarningSubject(selectedWarning.subject);
+  const selectedMapWzAreas = useMemo(
+    () => toMapWzAreas(selectedWarning.wzAreas),
+    [selectedWarning.wzAreas],
   );
   const visibleEventGroups = useMemo(
     () => eventGroups.slice(0, 1),
@@ -125,13 +163,13 @@ export default function TsunamiContent({
         jam: selectedGroup.jam,
         latitude: selectedGroup.latitude,
         longitude: selectedGroup.longitude,
-        subject: selectedWarning.subject,
+        subject: selectedWarningSubject,
         headline: selectedWarning.headline,
         description: selectedWarning.description,
       },
       "tsunami",
     );
-  }, [selectedGroup, selectedWarning]);
+  }, [selectedGroup, selectedWarning, selectedWarningSubject]);
 
   const fetchTsunamiEvents = useCallback(
     async (
@@ -204,6 +242,7 @@ export default function TsunamiContent({
         mapRef={mapRef}
         isCardOpen={showCard}
         markerCoordinates={markerCoordinates}
+        wzAreas={selectedMapWzAreas}
         onMapPress={() => dismissCard()}
         onMarkerPressIndex={openGroupCard}
       />
@@ -287,7 +326,7 @@ export default function TsunamiContent({
             <DetailItem
               icon="alert-circle-outline"
               label="Status :"
-              value={safeText(selectedWarning.subject)}
+              value={selectedWarningSubject}
               styles={styles}
             />
             <DetailItem
