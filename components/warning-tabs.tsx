@@ -32,7 +32,7 @@ export function WarningTabs({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.warningTabs}
+      contentContainerStyle={[styles.warningTabs, styles.warningTabsCenter]}
     >
       {safeWarnings.map((warning, index) => {
         const isSelected = selectedIndex === index;
@@ -86,4 +86,9 @@ const styles = StyleSheet.create({
   warningTabTextActive: {
     color: "#0369A1",
   },
+
+  warningTabsCenter: {
+  flexGrow: 1,
+  justifyContent: "center",
+},
 });

@@ -9,6 +9,7 @@ import { useCardAnimation } from "@/hooks/use-card-animation";
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/utils/cache";
 import { formatLatText, formatLonText } from "@/utils/geo";
 import { buildTsunamiMapSlides, safeText } from "@/utils/tsunami-shared-utils";
+import type { WzArea, WzLevel } from "@/utils/wzarea-highlights";
 import { getDatabase } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -37,6 +38,38 @@ const DB_PATH = "tsunamiEvents";
 const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 const CARD_BODY_MAX_HEIGHT = Dimensions.get("window").height * 0.4;
 const CACHE_TTL_MS = 5 * 60_000;
+const WZ_LEVELS = new Set<WzLevel>(["AWAS", "SIAGA", "WASPADA", "NORMAL"]);
+
+type SourceWzArea = {
+  province: string;
+  district: string;
+  level: string;
+  date: string;
+  time: string;
+};
+
+function normalizeWzLevel(level: string): WzLevel {
+  const value = String(level ?? "")
+    .trim()
+    .toUpperCase() as WzLevel;
+
+  return WZ_LEVELS.has(value) ? value : "NORMAL";
+}
+
+function toMapWzAreas(wzAreas: SourceWzArea[]): WzArea[] {
+  return wzAreas.map((area) => ({
+    province: area.province,
+    district: area.district,
+    level: normalizeWzLevel(area.level),
+    date: area.date,
+    time: area.time,
+  }));
+}
+
+function getWarningSubject(subject: string | undefined): string {
+  const text = String(subject ?? "").trim();
+  return text && text !== "-" ? text : "Peringatan Tsunami";
+}
 
 const EMPTY_WARNING: TsunamiHistoryWarning = {
   id: "empty",
@@ -180,6 +213,15 @@ export function TsunamiHistoryContent({
   const tsunamiMapSlides = useMemo(
     () => buildTsunamiMapSlides(activeWarning),
     [activeWarning],
+  );
+  const activeWarningSubject = getWarningSubject(
+    activeEvent?.warnings.length
+      ? activeWarning.subject
+      : activeEvent?.latestSubject,
+  );
+  const activeMapWzAreas = useMemo(
+    () => toMapWzAreas(activeWarning.wzAreas),
+    [activeWarning.wzAreas],
   );
 
   const markerCoordinates = useMemo(
@@ -457,6 +499,7 @@ export function TsunamiHistoryContent({
         onMapPress={() => dismissCard()}
         onMarkerPressIndex={onPressMarker}
         isCardOpen={showCard}
+        wzAreas={activeMapWzAreas}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
@@ -531,11 +574,7 @@ export function TsunamiHistoryContent({
             <DetailItem
               icon="alert-circle-outline"
               label="Status :"
-              value={
-                activeEvent.warnings.length > 0
-                  ? activeWarning.subject
-                  : activeEvent.latestSubject
-              }
+              value={activeWarningSubject}
               styles={styles}
             />
             <DetailItem

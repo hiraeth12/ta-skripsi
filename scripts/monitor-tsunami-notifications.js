@@ -15,7 +15,8 @@ export async function monitorTsunamiAndNotify() {
 
     async function checkAndNotify() {
       try {
-        const newWarningId = await checkAndNotifyNewTsunami(lastKnownWarningId);
+        const notification = await checkAndNotifyNewTsunami(lastKnownWarningId);
+        const newWarningId = notification?.warningId ?? null;
 
         if (newWarningId) {
           lastKnownWarningId = newWarningId;
