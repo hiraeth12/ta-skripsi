@@ -1,10 +1,13 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useTranslation } from "react-i18next";
 import {
-    Modal,
-    Pressable,
-    ScrollView, Share, Text,
-    TouchableOpacity,
-    View
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { styles } from "../styles/homeStyles";
 
@@ -43,23 +46,39 @@ export const ShareModal = ({
   data: DirasakanQuake | TerdeteksiQuake | null;
   type?: "dirasakan" | "terdeteksi";
 }) => {
+  const { t } = useTranslation();
+
   const generateShareText = () => {
     if (!data) return "";
 
-    const baseText = `📍 *Informasi Gempa ${type === "dirasakan" ? "Dirasakan" : "Terdeteksi"}*\n\n` +
-      `🌍 Lokasi: ${data.wilayah}\n` +
-      `📊 Magnitudo: ${data.magnitude}\n` +
-      `📏 Kedalaman: ${data.kedalaman}\n` +
-      `📍 Koordinat: LS ${data.latText}, BT ${data.lonText}\n` +
-      `🕐 Waktu: ${data.tanggal}, ${data.jam}\n` +
-      `📐 Jarak: ${data.distanceKm} km dari lokasi saya`;
+    const earthquakeType =
+      type === "dirasakan"
+        ? t("share.feltEarthquake")
+        : t("share.detectedEarthquake");
+
+    const baseText =
+      `📍 *${t("share.earthquakeInfo", { type: earthquakeType })}*\n\n` +
+      `🌍 ${t("share.location")}: ${data.wilayah}\n` +
+      `📊 ${t("earthquake.magnitude")}: ${data.magnitude}\n` +
+      `📏 ${t("earthquake.depth")}: ${data.kedalaman}\n` +
+      `📍 ${t("share.coordinate")}: ${t("earthquake.latitude")} ${data.latText}, ${t("earthquake.longitude")} ${data.lonText}\n` +
+      `🕐 ${t("earthquake.eventTime")}: ${data.tanggal}, ${data.jam}\n` +
+      `📐 ${t("earthquake.distance")}: ${t("share.distanceFromMyLocation", {
+        distance: data.distanceKm,
+      })}`;
 
     if (type === "dirasakan" && (data as DirasakanQuake).felt) {
-      return baseText + `\n🏘️ Wilayah Dirasakan: ${(data as DirasakanQuake).felt}`;
+      return (
+        baseText +
+        `\n🏘️ ${t("earthquake.feltArea")}: ${(data as DirasakanQuake).felt}`
+      );
     }
 
     if (type === "terdeteksi" && (data as TerdeteksiQuake).fase) {
-      return baseText + `\n🔊 Fase: ${(data as TerdeteksiQuake).fase}`;
+      return (
+        baseText +
+        `\n🔊 ${t("earthquake.phase")}: ${(data as TerdeteksiQuake).fase}`
+      );
     }
 
     return baseText;
@@ -69,10 +88,10 @@ export const ShareModal = ({
     try {
       await Share.share({
         message: generateShareText(),
-        title: "Bagikan Informasi Gempa",
+        title: t("share.title"),
       });
-    } catch {
-    }
+    } catch {}
+
     onClose();
   };
 
@@ -80,7 +99,7 @@ export const ShareModal = ({
     {
       id: "share",
       icon: "share-variant",
-      label: "Bagikan via Aplikasi",
+      label: t("share.viaApp"),
       color: "#0891B2",
       onPress: handleShare,
     },
@@ -96,8 +115,9 @@ export const ShareModal = ({
       <Pressable style={styles.modalOverlayBottom} onPress={onClose}>
         <View style={styles.modalCardBottom}>
           <View style={styles.handleBar} />
+
           <View style={styles.modalHeaderBottom}>
-            <Text style={styles.modalTitleBottom}>Bagikan Informasi Gempa</Text>
+            <Text style={styles.modalTitleBottom}>{t("share.title")}</Text>
           </View>
 
           <ScrollView
@@ -105,9 +125,7 @@ export const ShareModal = ({
             showsVerticalScrollIndicator={false}
           >
             <View style={{ paddingHorizontal: 20, paddingVertical: 15 }}>
-              <Text style={styles.modalSubtitle}>
-                Pilih cara untuk membagikan informasi gempa ini:
-              </Text>
+              <Text style={styles.modalSubtitle}>{t("share.subtitle")}</Text>
 
               <View style={{ marginTop: 20, gap: 12 }}>
                 {shareOptions.map((option) => (
@@ -132,6 +150,7 @@ export const ShareModal = ({
                       color={option.color}
                       style={{ marginRight: 12 }}
                     />
+
                     <Text
                       style={{
                         fontSize: 16,
@@ -142,6 +161,7 @@ export const ShareModal = ({
                     >
                       {option.label}
                     </Text>
+
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={24}
@@ -161,8 +181,13 @@ export const ShareModal = ({
                   borderLeftColor: "#1E6F9F",
                 }}
               >
-                <Text style={{ fontSize: 12, color: "#0C4A6E", lineHeight: 18 }}>
-                  <Text style={{ fontWeight: "bold" }}>Preview:</Text> {"\n"}
+                <Text
+                  style={{ fontSize: 12, color: "#0C4A6E", lineHeight: 18 }}
+                >
+                  <Text style={{ fontWeight: "bold" }}>
+                    {t("share.preview")}:
+                  </Text>{" "}
+                  {"\n"}
                   {generateShareText()}
                 </Text>
               </View>
@@ -180,7 +205,7 @@ export const ShareModal = ({
               onPress={onClose}
             >
               <Text style={{ color: "#333", fontWeight: "600", fontSize: 16 }}>
-                Tutup
+                {t("common.close")}
               </Text>
             </TouchableOpacity>
           </View>

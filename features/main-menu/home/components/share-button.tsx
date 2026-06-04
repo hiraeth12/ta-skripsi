@@ -1,5 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, TouchableOpacity } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { ShareModal } from "./share-modal";
@@ -36,6 +37,7 @@ export const ShareButton = ({
   type?: "dirasakan" | "terdeteksi";
 }) => {
   const [shareModalVisible, setShareModalVisible] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <>
@@ -47,7 +49,7 @@ export const ShareButton = ({
         }}
       >
         <Feather name="share" size={12} color="white" />
-        <Text style={styles.mapButtonText}>BAGIKAN</Text>
+        <Text style={styles.mapButtonText}>{t("common.share")}</Text>
       </TouchableOpacity>
 
       <ShareModal

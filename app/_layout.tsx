@@ -5,6 +5,7 @@ import { useFcm } from "@/hooks/use-fcm";
 import notifee from "@notifee/react-native";
 import { Stack, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { InteractionManager } from "react-native";
 
 function FcmBootstrap() {
@@ -13,7 +14,9 @@ function FcmBootstrap() {
 }
 
 export default function RootLayout() {
-  const [notification, setNotification] = useState<InAppNotificationData | null>(null);
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+  const [notification, setNotification] =
+    useState<InAppNotificationData | null>(null);
   const [fcmReady, setFcmReady] = useState(false);
   const segments = useSegments();
 
@@ -23,14 +26,17 @@ export default function RootLayout() {
     });
     return () => task.cancel();
   }, []);
-  
+
   // Deteksi apakah saat ini sedang berada di folder/layar starter (auth)
   const isStarter = segments[0] === "starter";
 
   // Extract magnitude and depth if available from body or set defaults
+  // JANGAN TERJEMAHKAN REGEX INI KARENA INI LOGIKA MEMBACA PAYLOAD SERVER
   const getMagInfo = (body?: string) => {
     if (!body) return { mag: "-", depth: "-" };
-    const magMatch = body.match(/M(?:agnitudo|ag)?\s*:\s*([0-9.]+)/i) || body.match(/M(?:agnitudo)?\s*([0-9.]+)/i);
+    const magMatch =
+      body.match(/M(?:agnitudo|ag)?\s*:\s*([0-9.]+)/i) ||
+      body.match(/M(?:agnitudo)?\s*([0-9.]+)/i);
     const depthMatch = body.match(/(?:Kedalaman|kedlmn)\s*:\s*([0-9.]+)/i);
     return {
       mag: magMatch ? magMatch[1] : "-",
@@ -52,7 +58,10 @@ export default function RootLayout() {
         const initialNotification = await notifee.getInitialNotification();
         if (initialNotification?.notification) {
           setNotification({
-            title: initialNotification.notification.title || "Peringatan Gempa Bumiii!",
+            // <-- Menggunakan t() untuk teks fallback -->
+            title:
+              initialNotification.notification.title ||
+              t("rootLayout.fallbackNotifTitle"),
             body: initialNotification.notification.body || "",
           });
         }
@@ -63,18 +72,18 @@ export default function RootLayout() {
     checkInitialNotification();
 
     return () => unsubscribe();
-  }, []);
+  }, [t]); // <-- Tambahkan t ke dalam dependency array
 
   return (
     <>
       {fcmReady && <FcmBootstrap />}
       <Stack screenOptions={{ headerShown: false, animation: "none" }} />
-      <GempaBumiNotificationModal 
-        visible={!!notification && !isStarter} 
+      <GempaBumiNotificationModal
+        visible={!!notification && !isStarter}
         magnitudo={mag}
         kedalaman={depth}
         closeInSecond={6}
-        onClose={() => setNotification(null)} 
+        onClose={() => setNotification(null)}
       />
     </>
   );

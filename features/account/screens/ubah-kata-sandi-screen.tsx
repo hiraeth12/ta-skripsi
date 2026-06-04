@@ -1,5 +1,5 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import CustomAlert from "@/components/ui/custom-alert";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import {
   EmailAuthProvider,
@@ -9,6 +9,7 @@ import {
 } from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   ScrollView,
   Text,
@@ -16,20 +17,25 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-kata-sandi-styles";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
-
-const PASSWORD_FIELDS = [
-  { label: "Kata Sandi Saat Ini", key: "passwordLama" },
-  { label: "Kata Sandi Baru", key: "passwordBaru" },
-  { label: "Konfirmasi Kata Sandi", key: "konfirmasiPassword" },
-] as const;
 
 export default function UbahKataSandi() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const { profile } = useProfileContext(); // ← no local fetch
+
+  // <-- Pindahkan ke dalam komponen agar bisa menggunakan t() -->
+  const PASSWORD_FIELDS = [
+    { label: t("ubahKataSandiScreen.oldPasswordLabel"), key: "passwordLama" },
+    { label: t("ubahKataSandiScreen.newPasswordLabel"), key: "passwordBaru" },
+    {
+      label: t("ubahKataSandiScreen.confirmPasswordLabel"),
+      key: "konfirmasiPassword",
+    },
+  ] as const;
 
   const [errorVisible, setErrorVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,7 +62,7 @@ export default function UbahKataSandi() {
   const showCustomAlert = (message: string) => {
     setModalConfig({
       visible: true,
-      title: "Error",
+      title: t("ubahKataSandiScreen.alert.errorTitle"), // <-- Menggunakan t()
       message,
       type: "error",
     });
@@ -67,7 +73,7 @@ export default function UbahKataSandi() {
     setErrorVisible(false);
 
     if (!form.passwordLama || !form.passwordBaru || !form.konfirmasiPassword) {
-      showCustomAlert("Semua field kata sandi wajib diisi");
+      showCustomAlert(t("ubahKataSandiScreen.alert.missingFields"));
       return;
     }
     if (form.passwordBaru !== form.konfirmasiPassword) {
@@ -75,7 +81,7 @@ export default function UbahKataSandi() {
       return;
     }
     if (form.passwordBaru.length < 6) {
-      showCustomAlert("Kata sandi baru minimal 6 karakter");
+      showCustomAlert(t("ubahKataSandiScreen.alert.minLen"));
       return;
     }
 
@@ -85,7 +91,7 @@ export default function UbahKataSandi() {
       const auth = getAuth(app);
       const user = auth.currentUser;
       if (!user?.email) {
-        showCustomAlert("User tidak valid, silakan login ulang");
+        showCustomAlert(t("ubahKataSandiScreen.alert.invalidUser"));
         return;
       }
 
@@ -104,12 +110,12 @@ export default function UbahKataSandi() {
         code.includes("wrong-password") ||
         code.includes("invalid-credential")
       )
-        showCustomAlert("Kata sandi saat ini salah");
+        showCustomAlert(t("ubahKataSandiScreen.alert.wrongCurrentPass"));
       else if (code.includes("weak-password"))
-        showCustomAlert("Kata sandi baru terlalu lemah");
+        showCustomAlert(t("ubahKataSandiScreen.alert.weakPass"));
       else if (code.includes("too-many-requests"))
-        showCustomAlert("Terlalu banyak percobaan, coba lagi nanti");
-      else showCustomAlert("Gagal memperbarui kata sandi");
+        showCustomAlert(t("ubahKataSandiScreen.alert.tooManyRequests"));
+      else showCustomAlert(t("ubahKataSandiScreen.alert.updateFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -117,7 +123,7 @@ export default function UbahKataSandi() {
 
   return (
     <ProfilePageLayout
-      title="Ubah Kata Sandi"
+      title={t("ubahKataSandiScreen.title")} // <-- Menggunakan t()
       headerName={profile.name}
       headerEmail={profile.email}
       headerLocation={profile.location}
@@ -175,7 +181,8 @@ export default function UbahKataSandi() {
                   color="#E11D48"
                 />
                 <Text style={styles.errorText}>
-                  Kata sandi baru dan konfirmasi tidak cocok
+                  {t("ubahKataSandiScreen.errorMismatch")}{" "}
+                  {/* <-- Menggunakan t() */}
                 </Text>
               </View>
             )}
@@ -185,7 +192,9 @@ export default function UbahKataSandi() {
                 style={styles.btnBatal}
                 onPress={() => router.back()}
               >
-                <Text style={styles.btnTextBatal}>Batal</Text>
+                <Text style={styles.btnTextBatal}>
+                  {t("ubahKataSandiScreen.btnCancel")}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.btnSimpan}
@@ -193,7 +202,9 @@ export default function UbahKataSandi() {
                 disabled={isSaving}
               >
                 <Text style={styles.btnTextSimpan}>
-                  {isSaving ? "Menyimpan..." : "Simpan"}
+                  {isSaving
+                    ? t("ubahKataSandiScreen.btnSaving")
+                    : t("ubahKataSandiScreen.btnSave")}
                 </Text>
               </TouchableOpacity>
             </View>

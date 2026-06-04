@@ -1,5 +1,6 @@
 import AuthButton from "@/components/auth-button";
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Image,
   KeyboardAvoidingView,
@@ -10,6 +11,8 @@ import {
 import { styles } from "../styles/success-new-password-styles";
 
 export default function SuccessNewPassword() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -40,20 +43,18 @@ export default function SuccessNewPassword() {
             color: "#000",
           }}
         >
-          Kata Sandi Berhasil Diubah
+          {t("successNewPasswordScreen.title")}
         </Text>
 
         <Text style={styles.description}>
-          Kata sandi Anda telah berhasil diubah. Silakan gunakan kata sandi baru
-          Anda untuk masuk ke akun Anda.
+          {t("successNewPasswordScreen.description")}
         </Text>
 
         <AuthButton
-          title="Menuju Halaman Masuk"
+          title={t("successNewPasswordScreen.buttonLogin")}
           onPress={() => router.replace("/starter/login")} // Menggunakan replace agar tidak bisa kembali (back) ke halaman reset
         />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-

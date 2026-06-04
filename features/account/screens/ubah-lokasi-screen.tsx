@@ -1,5 +1,5 @@
-import GpsButton from "@/components/ui/gps-button";
 import CustomAlert from "@/components/ui/custom-alert";
+import GpsButton from "@/components/ui/gps-button";
 import LocationSearchModal from "@/components/ui/location-search-modal";
 import { useHaversine } from "@/hooks/use-haversine";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
@@ -9,17 +9,11 @@ import { getDatabase, ref, update } from "@react-native-firebase/database";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
+import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-lokasi-styles";
-
 
 const BBOX_DEG = 0.45;
 const GPS_TIMEOUT_MS = 6000;
@@ -66,6 +60,7 @@ function findNearestLocation(
 
 // ─── Komponen utama ──────────────────────────────────────────────────────────
 export default function UbahLokasi() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
   const { profile, setProfile } = useProfileContext();
@@ -78,7 +73,9 @@ export default function UbahLokasi() {
   const [allLocations, setAllLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsMessage, setGpsMessage] = useState("Memperbarui Lokasi ...");
+  const [gpsMessage, setGpsMessage] = useState(
+    t("ubahLokasiScreen.status.updating"),
+  ); // <-- Menggunakan t()
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
@@ -93,7 +90,6 @@ export default function UbahLokasi() {
   ) => {
     setModalConfig({ visible: true, title, message, type });
   };
-
 
   const locationsCache = useRef<any[]>([]);
 
@@ -115,15 +111,13 @@ export default function UbahLokasi() {
         if (!res.ok) throw new Error(`Failed: ${res.status}`);
 
         const data = await res.json();
-        const mapped = Object.entries(data || {}).map(
-          ([id, loc]: any) => ({
-            id,
-            name: loc.name || "",
-            desc: loc.alt_name || loc.name || "",
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-          }),
-        );
+        const mapped = Object.entries(data || {}).map(([id, loc]: any) => ({
+          id,
+          name: loc.name || "",
+          desc: loc.alt_name || loc.name || "",
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+        }));
 
         locationsCache.current = mapped; // simpan ke cache
         setAllLocations(mapped);
@@ -155,20 +149,20 @@ export default function UbahLokasi() {
   // ── Perbaikan 3: GPS cepat dengan Accuracy.Lowest + timeout race ────────
   const handleUseGPS = async () => {
     setGpsLoading(true);
-    setGpsMessage("Meminta izin akses lokasi...");
+    setGpsMessage(t("ubahLokasiScreen.status.requestingPermission")); // <-- Menggunakan t()
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         showCustomAlert(
-          "Permission Ditolak",
-          "Aktifkan izin lokasi di pengaturan.",
+          t("ubahLokasiScreen.alert.permissionDeniedTitle"), // <-- Menggunakan t()
+          t("ubahLokasiScreen.alert.permissionDeniedMsg"), // <-- Menggunakan t()
           "error",
         );
         return;
       }
 
-      setGpsMessage("Sedang memperbarui lokasi...");
+      setGpsMessage(t("ubahLokasiScreen.status.updatingLocation")); // <-- Menggunakan t()
 
       // Promise.race: ambil GPS atau lempar error jika melebihi GPS_TIMEOUT_MS
       const loc = await Promise.race<Location.LocationObject>([
@@ -178,10 +172,7 @@ export default function UbahLokasi() {
           accuracy: Location.Accuracy.Lowest,
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("GPS timeout")),
-            GPS_TIMEOUT_MS,
-          ),
+          setTimeout(() => reject(new Error("GPS timeout")), GPS_TIMEOUT_MS),
         ),
       ]);
 
@@ -195,19 +186,23 @@ export default function UbahLokasi() {
         haversineDistanceKm,
       );
 
-      const name = nearest?.name ?? "Lokasi GPS";
+      const name = nearest?.name ?? t("ubahLokasiScreen.fallbackGpsLocation"); // <-- Menggunakan t()
       const desc = nearest?.desc ?? "";
       setSelectedLocation(desc ? `${name}, ${desc}` : name);
       setSelectedLocationItem({ name, latitude, longitude });
     } catch (err: any) {
       if (err?.message === "GPS timeout") {
         showCustomAlert(
-          "GPS Lambat",
-          "Sinyal GPS tidak tersedia. Coba lagi di area terbuka.",
+          t("ubahLokasiScreen.alert.gpsTimeoutTitle"), // <-- Menggunakan t()
+          t("ubahLokasiScreen.alert.gpsTimeoutMsg"), // <-- Menggunakan t()
           "error",
         );
       } else {
-        showCustomAlert("Error", "Tidak dapat mengakses GPS.", "error");
+        showCustomAlert(
+          t("ubahLokasiScreen.alert.errorTitle"), // <-- Menggunakan t()
+          t("ubahLokasiScreen.alert.gpsErrorMsg"), // <-- Menggunakan t()
+          "error",
+        );
       }
     } finally {
       setGpsLoading(false);
@@ -217,7 +212,11 @@ export default function UbahLokasi() {
   // ── Simpan ke Firebase ──────────────────────────────────────────────────
   const handleSimpan = async () => {
     if (!selectedLocationItem) {
-      showCustomAlert("Error", "Silakan pilih lokasi terlebih dahulu", "error");
+      showCustomAlert(
+        t("ubahLokasiScreen.alert.errorTitle"), // <-- Menggunakan t()
+        t("ubahLokasiScreen.alert.saveErrorNoLocationMsg"), // <-- Menggunakan t()
+        "error",
+      );
       return;
     }
 
@@ -242,7 +241,11 @@ export default function UbahLokasi() {
         });
       }
     } catch {
-      showCustomAlert("Error", "Gagal menyimpan lokasi ke database", "error");
+      showCustomAlert(
+        t("ubahLokasiScreen.alert.errorTitle"), // <-- Menggunakan t()
+        t("ubahLokasiScreen.alert.saveErrorDbMsg"), // <-- Menggunakan t()
+        "error",
+      );
       return;
     }
 
@@ -260,7 +263,7 @@ export default function UbahLokasi() {
   return (
     <>
       <ProfilePageLayout
-        title="Ubah Lokasi"
+        title={t("ubahLokasiScreen.title")} // <-- Menggunakan t()
         headerName={profile.name}
         headerEmail={profile.email}
         headerLocation={profile.location}
@@ -268,11 +271,13 @@ export default function UbahLokasi() {
       >
         <View style={styles.inputCard}>
           <Text style={styles.description}>
-            Silahkan Pilih Lokasi Anda atau Menggunakan Mode GPS
+            {t("ubahLokasiScreen.description")} {/* <-- Menggunakan t() */}
           </Text>
-
           <View style={styles.inputArea}>
-            <Text style={styles.label}>Cari Lokasi</Text>
+            <Text style={styles.label}>
+              {t("ubahLokasiScreen.searchLabel")}
+            </Text>{" "}
+            {/* <-- Menggunakan t() */}
             <TouchableOpacity
               style={styles.customInput}
               onPress={() => setLocationModalVisible(true)}
@@ -285,17 +290,17 @@ export default function UbahLokasi() {
                 ]}
                 numberOfLines={1}
               >
-                {selectedLocation || "Cari Kelurahan atau Desa..."}
+                {selectedLocation || t("ubahLokasiScreen.searchPlaceholder")}{" "}
+                {/* <-- Menggunakan t() */}
               </Text>
               <EvilIcons name="chevron-down" size={24} color="#1E6F9F" />
             </TouchableOpacity>
           </View>
-
-          <Text style={styles.orText}>Atau</Text>
-
+          <Text style={styles.orText}>{t("ubahLokasiScreen.orDivider")}</Text>{" "}
+          {/* <-- Menggunakan t() */}
           <View style={styles.gpsWrapper}>
             <GpsButton
-              text="Pakai GPS"
+              text={t("ubahLokasiScreen.btnGps")} // <-- Menggunakan t()
               loadingText={gpsMessage}
               loading={gpsLoading}
               onPress={handleUseGPS}
@@ -305,16 +310,21 @@ export default function UbahLokasi() {
               textStyle={styles.btnTextGPS}
             />
           </View>
-
           <View style={styles.buttonWrapper}>
             <TouchableOpacity
               style={styles.btnBatal}
               onPress={() => router.back()}
             >
-              <Text style={styles.btnTextBatal}>Batal</Text>
+              <Text style={styles.btnTextBatal}>
+                {t("ubahLokasiScreen.btnCancel")}
+              </Text>{" "}
+              {/* <-- Menggunakan t() */}
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnSimpan} onPress={handleSimpan}>
-              <Text style={styles.btnTextSimpan}>Simpan</Text>
+              <Text style={styles.btnTextSimpan}>
+                {t("ubahLokasiScreen.btnSave")}
+              </Text>{" "}
+              {/* <-- Menggunakan t() */}
             </TouchableOpacity>
           </View>
         </View>
@@ -345,9 +355,13 @@ export default function UbahLokasi() {
               color="#1E6F9F"
               style={{ alignSelf: "center", marginBottom: 12 }}
             />
-            <Text style={styles.infoTitle}>Berhasil</Text>
+            <Text style={styles.infoTitle}>
+              {t("ubahLokasiScreen.modalSuccessTitle")}
+            </Text>{" "}
+            {/* <-- Menggunakan t() */}
             <Text style={styles.infoDesc}>
-              Lokasi Anda telah berhasil diperbarui di sistem SeismoTrack.
+              {t("ubahLokasiScreen.modalSuccessDesc")}{" "}
+              {/* <-- Menggunakan t() */}
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
@@ -356,7 +370,10 @@ export default function UbahLokasi() {
                 router.replace("/main-menu/account");
               }}
             >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
+              <Text style={styles.infoButtonText}>
+                {t("ubahLokasiScreen.modalSuccessBtn")}
+              </Text>{" "}
+              {/* <-- Menggunakan t() */}
             </TouchableOpacity>
           </View>
         </Pressable>

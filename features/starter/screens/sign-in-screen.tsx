@@ -1,10 +1,12 @@
 import AuthButton from "@/components/auth-button";
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { Image, View } from "react-native";
 import { styles } from "../styles/sign-in-styles";
 
 export default function SignIn() {
   const router = useRouter();
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
 
   return (
     <View style={styles.container}>
@@ -16,16 +18,15 @@ export default function SignIn() {
 
       <View style={styles.buttonContainer}>
         <AuthButton
-          title="Masuk"
+          title={t("signInScreen.buttonLogin")} // <-- Menggunakan t()
           onPress={() => router.push("/starter/login")}
         />
         <View style={{ height: 14 }} />
         <AuthButton
-          title="Daftar"
+          title={t("signInScreen.buttonRegister")} // <-- Menggunakan t()
           onPress={() => router.push("/starter/register")}
         />
       </View>
     </View>
   );
 }
-

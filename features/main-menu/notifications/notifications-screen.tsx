@@ -1,7 +1,11 @@
-import { useQuakeNotifications, type QuakeNotification } from "@/hooks/use-quake-notifications";
+import {
+  useQuakeNotifications,
+  type QuakeNotification,
+} from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./styles/notifications-screen.styles";
 
@@ -11,17 +15,25 @@ import { styles } from "./styles/notifications-screen.styles";
 type NotifCardProps = {
   item: QuakeNotification;
   onPress: () => void;
+  t: any; // <-- Tambahkan parameter t
 };
 
-const NotifCard = ({ item, onPress }: NotifCardProps) => {
+const NotifCard = ({ item, onPress, t }: NotifCardProps) => {
   const isDirasakan = item.type === "Dirasakan";
 
   return (
-    <TouchableOpacity style={styles.notifCard} activeOpacity={0.7} onPress={onPress}>
+    <TouchableOpacity
+      style={styles.notifCard}
+      activeOpacity={0.7}
+      onPress={onPress}
+    >
       <View style={styles.notifContent}>
         <View style={styles.textWrapper}>
           <Text style={styles.notifTitle}>
-            {isDirasakan ? "Gempa Dirasakan" : "Gempa Terdeteksi"}
+            {/* <-- Menggunakan t() untuk judul card --> */}
+            {isDirasakan
+              ? t("notificationsScreen.cardTitleDirasakan")
+              : t("notificationsScreen.cardTitleTerdeteksi")}
           </Text>
           <Text style={styles.notifSubTitle}>
             M {item.magnitude} – {item.location}
@@ -30,9 +42,17 @@ const NotifCard = ({ item, onPress }: NotifCardProps) => {
             {item.date} • {item.time}
           </Text>
         </View>
-        <View style={[styles.badge, isDirasakan ? styles.badgeRed : styles.badgeGreen]}>
+        <View
+          style={[
+            styles.badge,
+            isDirasakan ? styles.badgeRed : styles.badgeGreen,
+          ]}
+        >
           <Text style={styles.badgeText}>
-            {isDirasakan ? "Dirasakan" : "Tidak dirasakan"}
+            {/* <-- Menggunakan t() untuk teks badge --> */}
+            {isDirasakan
+              ? t("notificationsScreen.badgeDirasakan")
+              : t("notificationsScreen.badgeTidakDirasakan")}
           </Text>
         </View>
       </View>
@@ -43,8 +63,10 @@ const NotifCard = ({ item, onPress }: NotifCardProps) => {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function Notifikasi() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di komponen utama
   const router = useRouter();
-  const { notifications, unreadCount, error, markAllAsRead } = useQuakeNotifications();
+  const { notifications, unreadCount, error, markAllAsRead } =
+    useQuakeNotifications();
 
   // FIX #4: guard against calling markAllAsRead when nothing is unread,
   //         preventing a needless setState + re-render on every screen open
@@ -57,10 +79,16 @@ export default function Notifikasi() {
       <View style={styles.menuContainer}>
         <View style={styles.menuContent}>
           <View style={styles.titleRow}>
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ marginRight: 15 }}
+            >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.sectionTitle}>Notifikasi Terbaru</Text>
+            {/* <-- Menggunakan t() untuk header --> */}
+            <Text style={styles.sectionTitle}>
+              {t("notificationsScreen.headerTitle")}
+            </Text>
           </View>
 
           <FlatList
@@ -71,11 +99,15 @@ export default function Notifikasi() {
             renderItem={({ item }) => (
               <NotifCard
                 item={item}
+                t={t} // <-- Teruskan t() ke NotifCard
                 onPress={() =>
                   router.push({
                     pathname: "/main-menu/earthquake",
                     params: {
-                      tab: item.type === "Dirasakan" ? "GEMPA DIRASAKAN" : "GEMPA TERDETEKSI",
+                      tab:
+                        item.type === "Dirasakan"
+                          ? "GEMPA DIRASAKAN"
+                          : "GEMPA TERDETEKSI",
                     },
                   })
                 }
@@ -84,7 +116,8 @@ export default function Notifikasi() {
             // FIX #3: show the actual error message instead of the generic empty text
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>
-                {error ?? "Belum ada notifikasi."}
+                {/* <-- Menggunakan t() untuk fallback jika tidak ada notifikasi --> */}
+                {error ?? t("notificationsScreen.emptyFallback")}
               </Text>
             )}
           />

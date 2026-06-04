@@ -16,7 +16,11 @@ type ModalShakeMapProps = {
   onClose: () => void;
 };
 
-export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps) {
+export function ModalShakeMap({
+  visible,
+  imageUrl,
+  onClose,
+}: ModalShakeMapProps) {
   const { height, width } = useWindowDimensions();
 
   return (
@@ -32,7 +36,9 @@ export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps
           <View style={styles.modalHeaderBottom}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-              <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
+              <Text style={styles.modalSubtitle}>
+                Sumber data: BMKG ShakeMap
+              </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.modalCloseCircle}>
               <Ionicons name="close" size={20} color="#333" />

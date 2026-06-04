@@ -2,13 +2,8 @@ import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import {
-  Animated,
-  Modal,
-  StyleSheet,
-  Text,
-  View
-} from "react-native";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
+import { Animated, Modal, StyleSheet, Text, View } from "react-native";
 
 export type GempaBumiNotificationData = {
   title?: string;
@@ -31,6 +26,7 @@ export function GempaBumiNotificationModal({
   closeInSecond?: number;
   onClose: () => void;
 }) {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const player = useAudioPlayer(require("../../assets/sounds/eq_eva.wav"));
 
@@ -46,7 +42,7 @@ export function GempaBumiNotificationModal({
         await setAudioModeAsync({
           playsInSilentMode: true,
           shouldPlayInBackground: true,
-          interruptionMode: 'duckOthers'
+          interruptionMode: "duckOthers",
         });
 
         player.loop = true;
@@ -86,7 +82,7 @@ export function GempaBumiNotificationModal({
             duration: 800,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     }
 
@@ -153,22 +149,26 @@ export function GempaBumiNotificationModal({
                 style={styles.bigWarning}
                 contentFit="contain"
               />
-              
+
               <View style={styles.radarGroup}>
-                 <Animated.View style={[styles.radarContainer, { opacity: blinkValue }]}>
-                   <Image
-                     source={require("../../assets/images/warning_gempa_yellow.png")}
-                     style={styles.warningGempaYellow}
-                     contentFit="contain"
-                   />
-                 </Animated.View>
-                 <Animated.View style={[styles.radarContainer, { opacity: blinkValue }]}>
-                   <Image
-                     source={require("../../assets/images/warning_gempa_yellow.png")}
-                     style={styles.warningGempaYellow}
-                     contentFit="contain"
-                   />
-                 </Animated.View>
+                <Animated.View
+                  style={[styles.radarContainer, { opacity: blinkValue }]}
+                >
+                  <Image
+                    source={require("../../assets/images/warning_gempa_yellow.png")}
+                    style={styles.warningGempaYellow}
+                    contentFit="contain"
+                  />
+                </Animated.View>
+                <Animated.View
+                  style={[styles.radarContainer, { opacity: blinkValue }]}
+                >
+                  <Image
+                    source={require("../../assets/images/warning_gempa_yellow.png")}
+                    style={styles.warningGempaYellow}
+                    contentFit="contain"
+                  />
+                </Animated.View>
               </View>
             </View>
 
@@ -176,65 +176,99 @@ export function GempaBumiNotificationModal({
             <View style={styles.emergencyHexGroup}>
               <View style={styles.emergencyHex}>
                 <Image
-                   source={require("../../assets/images/warning_shape_yellow.svg")}
-                   style={styles.warningShapeYellow}
-                   contentFit="contain"
-                 />
+                  source={require("../../assets/images/warning_shape_yellow.svg")}
+                  style={styles.warningShapeYellow}
+                  contentFit="contain"
+                />
               </View>
               <View style={styles.emergencyHex}>
                 <Image
-                   source={require("../../assets/images/warning_shape_yellow.svg")}
-                   style={styles.warningShapeYellow}
-                   contentFit="contain"
-                 />
+                  source={require("../../assets/images/warning_shape_yellow.svg")}
+                  style={styles.warningShapeYellow}
+                  contentFit="contain"
+                />
               </View>
             </View>
 
             {/* THREE BASIC HEXAGON (INFO) */}
             <View style={styles.infoHexagons}>
-               <Animated.View style={[styles.hexWrapper, styles.hexLeft, { opacity: blinkValue }]}>
-                 <Image
-                   source={require("../../assets/images/hex_shape.svg")}
-                   style={styles.hexShape}
-                   contentFit="contain"
-                 />
-                 <View style={styles.hexContent}>
-                   <Text style={[styles.hexValue, styles.textGlow]}>{magnitudo}</Text>
-                   <Text style={styles.hexLabel}>MAGNITUDO</Text>
-                 </View>
-               </Animated.View>
+              <Animated.View
+                style={[
+                  styles.hexWrapper,
+                  styles.hexLeft,
+                  { opacity: blinkValue },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/images/hex_shape.svg")}
+                  style={styles.hexShape}
+                  contentFit="contain"
+                />
+                <View style={styles.hexContent}>
+                  <Text style={[styles.hexValue, styles.textGlow]}>
+                    {magnitudo}
+                  </Text>
+                  {/* <-- Menggunakan t() untuk label Magnitudo --> */}
+                  <Text style={styles.hexLabel}>
+                    {t("notificationModal.magnitude")}
+                  </Text>
+                </View>
+              </Animated.View>
 
-               <View style={styles.hexWrapperCenter}>
-                 <Image
-                   source={require("../../assets/images/hex_shape.svg")}
-                   style={styles.hexShape}
-                   contentFit="contain"
-                 />
-               </View>
+              <View style={styles.hexWrapperCenter}>
+                <Image
+                  source={require("../../assets/images/hex_shape.svg")}
+                  style={styles.hexShape}
+                  contentFit="contain"
+                />
+              </View>
 
-               <Animated.View style={[styles.hexWrapper, styles.hexRight, { opacity: blinkValue }]}>
-                 <Image
-                   source={require("../../assets/images/hex_shape.svg")}
-                   style={styles.hexShape}
-                   contentFit="contain"
-                 />
-                 <View style={styles.hexContent}>
-                   <Text style={[styles.hexValue, styles.textGlow]}>{kedalaman}</Text>
-                   <Text style={styles.hexLabel}>KEDALAMAN</Text>
-                 </View>
-               </Animated.View>
+              <Animated.View
+                style={[
+                  styles.hexWrapper,
+                  styles.hexRight,
+                  { opacity: blinkValue },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/images/hex_shape.svg")}
+                  style={styles.hexShape}
+                  contentFit="contain"
+                />
+                <View style={styles.hexContent}>
+                  <Text style={[styles.hexValue, styles.textGlow]}>
+                    {kedalaman}
+                  </Text>
+                  {/* <-- Menggunakan t() untuk label Kedalaman --> */}
+                  <Text style={styles.hexLabel}>
+                    {t("notificationModal.depth")}
+                  </Text>
+                </View>
+              </Animated.View>
             </View>
 
             {/* TWO EARTHQUAKE DETECTED ALERT YELLOW */}
             <View style={styles.alertGroup}>
-              <Animated.View style={[styles.alertImageWrapper, styles.alertLeft, { opacity: blinkValue }]}>
+              <Animated.View
+                style={[
+                  styles.alertImageWrapper,
+                  styles.alertLeft,
+                  { opacity: blinkValue },
+                ]}
+              >
                 <Image
                   source={require("../../assets/images/earthquake_detected.svg")}
                   style={styles.earthquakeDetected}
                   contentFit="contain"
                 />
               </Animated.View>
-              <Animated.View style={[styles.alertImageWrapper, styles.alertRight, { opacity: blinkValue }]}>
+              <Animated.View
+                style={[
+                  styles.alertImageWrapper,
+                  styles.alertRight,
+                  { opacity: blinkValue },
+                ]}
+              >
                 <Image
                   source={require("../../assets/images/earthquake_detected.svg")}
                   style={styles.earthquakeDetected}

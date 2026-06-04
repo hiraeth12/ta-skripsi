@@ -2,6 +2,7 @@ import { useUserSession } from "@/features/account/user-session-context";
 import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
 import type { MapViewType } from "../constants/map";
@@ -365,6 +366,7 @@ const EarthquakeMap = memo(
     showMapChrome = true,
     showUserMarker = true,
   }: Props) {
+    const { t } = useTranslation();
     const session = useUserSession();
     const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
     const cameraRef = React.useRef<Mapbox.Camera | null>(null);
@@ -649,13 +651,17 @@ const EarthquakeMap = memo(
                 <Mapbox.FillLayer
                   id={`ifill-${w.id}`}
                   style={{
-                    fillColor: `rgba(255, 255, 255, ${0.28 * w.innerWaveOpacity})`,
+                    fillColor: `rgba(255, 255, 255, ${
+                      0.28 * w.innerWaveOpacity
+                    })`,
                   }}
                 />
                 <Mapbox.LineLayer
                   id={`iline-${w.id}`}
                   style={{
-                    lineColor: `rgba(255, 255, 255, ${0.9 * w.innerWaveOpacity})`,
+                    lineColor: `rgba(255, 255, 255, ${
+                      0.9 * w.innerWaveOpacity
+                    })`,
                     lineWidth: 1.5,
                   }}
                 />
@@ -722,7 +728,9 @@ const EarthquakeMap = memo(
               {isMenuOpen && (
                 <View style={styles.menuPanel}>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+                    <Text style={styles.menuLabel}>
+                      {t("map.showFaultLines")}
+                    </Text>
                     <Switch
                       value={faultLinesVisible}
                       onValueChange={setFaultLinesVisible}
@@ -730,7 +738,9 @@ const EarthquakeMap = memo(
                     />
                   </View>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Tampilkan sensor seismik</Text>
+                    <Text style={styles.menuLabel}>
+                      {t("map.showSeismicSensors")}
+                    </Text>
                     <Switch
                       value={showSeismicSensors}
                       onValueChange={setShowSeismicSensors}

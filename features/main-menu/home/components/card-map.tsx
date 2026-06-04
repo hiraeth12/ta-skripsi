@@ -17,7 +17,8 @@ const parseCoordinate = (coord: string, type: "lat" | "lon"): number => {
   const match = coord.match(/[\d.]+/);
   if (!match) return 0;
   const value = parseFloat(match[0]);
-  if (type === "lat") return coord.includes("LS") ? -Math.abs(value) : Math.abs(value);
+  if (type === "lat")
+    return coord.includes("LS") ? -Math.abs(value) : Math.abs(value);
   return coord.includes("BB") ? -Math.abs(value) : Math.abs(value);
 };
 
@@ -31,82 +32,93 @@ const getMagnitudeColor = (mag?: string | number): string => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const CardMap = memo(({ latitude, longitude, magnitude }: CardMapProps) => {
-  const [mapReady, setMapReady] = useState(false);
-  const cameraRef = useRef<Mapbox.Camera | null>(null);
+export const CardMap = memo(
+  ({ latitude, longitude, magnitude }: CardMapProps) => {
+    const [mapReady, setMapReady] = useState(false);
+    const cameraRef = useRef<Mapbox.Camera | null>(null);
 
-  const parsedLat = typeof latitude === "string" ? parseCoordinate(latitude, "lat") : latitude;
-  const parsedLon = typeof longitude === "string" ? parseCoordinate(longitude, "lon") : longitude;
-  const validLat = isNaN(parsedLat) ? -6.9175 : parsedLat;
-  const validLon = isNaN(parsedLon) ? 107.6191 : parsedLon;
+    const parsedLat =
+      typeof latitude === "string"
+        ? parseCoordinate(latitude, "lat")
+        : latitude;
+    const parsedLon =
+      typeof longitude === "string"
+        ? parseCoordinate(longitude, "lon")
+        : longitude;
+    const validLat = isNaN(parsedLat) ? -6.9175 : parsedLat;
+    const validLon = isNaN(parsedLon) ? 107.6191 : parsedLon;
 
-  const magNum = typeof magnitude === "string" ? parseFloat(magnitude) : (magnitude ?? 0);
-  const dotSize = 20 + magNum * 2;
-  const color = getMagnitudeColor(magnitude);
+    const magNum =
+      typeof magnitude === "string" ? parseFloat(magnitude) : (magnitude ?? 0);
+    const dotSize = 20 + magNum * 2;
+    const color = getMagnitudeColor(magnitude);
 
-  const shape: GeoJSON.FeatureCollection = {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [validLon, validLat] },
-        properties: { magnitude: String(magnitude ?? "0") },
-      },
-    ],
-  };
+    const shape: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [validLon, validLat] },
+          properties: { magnitude: String(magnitude ?? "0") },
+        },
+      ],
+    };
 
-  return (
-    <View style={styles.container}>
-      <Mapbox.MapView
-        style={[styles.map, !mapReady && styles.hidden]}
-        surfaceView={false} // fixes Android black screen on loading
-        styleURL={Mapbox.StyleURL.Street}
-        zoomEnabled={false}
-        scrollEnabled={false}
-        pitchEnabled={false}
-        rotateEnabled={false}
-        compassEnabled={false}
-        logoEnabled={false}
-        scaleBarEnabled={false}
-        attributionEnabled={false}
-        onDidFinishLoadingMap={() => setMapReady(true)}
-      >
-        <Mapbox.Camera
-          ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: [validLon, validLat],
-            zoomLevel: 6,
-          }}
-        />
-
-        <Mapbox.ShapeSource id="epicenterSource" shape={shape}>
-          <Mapbox.CircleLayer
-            id="epicenterCircle"
-            style={{
-              circlePitchAlignment: "map",
-              circleRadius: dotSize,
-              circleColor: color,
-              circleOpacity: 0.8,
+    return (
+      <View style={styles.container}>
+        <Mapbox.MapView
+          style={[styles.map, !mapReady && styles.hidden]}
+          surfaceView={false} // fixes Android black screen on loading
+          styleURL={Mapbox.StyleURL.Street}
+          zoomEnabled={false}
+          scrollEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+          compassEnabled={false}
+          logoEnabled={false}
+          scaleBarEnabled={false}
+          attributionEnabled={false}
+          onDidFinishLoadingMap={() => setMapReady(true)}
+        >
+          <Mapbox.Camera
+            ref={cameraRef}
+            defaultSettings={{
+              centerCoordinate: [validLon, validLat],
+              zoomLevel: 6,
             }}
           />
-          <Mapbox.CircleLayer
-            id="epicenterCircleOutline"
-            style={{
-              circlePitchAlignment: "map",
-              circleRadius: dotSize + 3,
-              circleColor: "transparent",
-              circleStrokeWidth: 2,
-              circleStrokeColor: color,
-              circleOpacity: 0.5,
-            }}
-          />
-        </Mapbox.ShapeSource>
-      </Mapbox.MapView>
 
-      {!mapReady && <View style={[StyleSheet.absoluteFill, styles.placeholder]} />}
-    </View>
-  );
-});
+          <Mapbox.ShapeSource id="epicenterSource" shape={shape}>
+            <Mapbox.CircleLayer
+              id="epicenterCircle"
+              style={{
+                circlePitchAlignment: "map",
+                circleRadius: dotSize,
+                circleColor: color,
+                circleOpacity: 0.8,
+              }}
+            />
+            <Mapbox.CircleLayer
+              id="epicenterCircleOutline"
+              style={{
+                circlePitchAlignment: "map",
+                circleRadius: dotSize + 3,
+                circleColor: "transparent",
+                circleStrokeWidth: 2,
+                circleStrokeColor: color,
+                circleOpacity: 0.5,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        </Mapbox.MapView>
+
+        {!mapReady && (
+          <View style={[StyleSheet.absoluteFill, styles.placeholder]} />
+        )}
+      </View>
+    );
+  },
+);
 
 CardMap.displayName = "CardMap";
 

@@ -1,11 +1,11 @@
-import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import EarthquakeMap from "@/components/earthquake-map";
+import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import type { MapViewType } from "@/constants/map";
 import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  Alert,
   Animated,
   PanResponder,
   Text,
@@ -40,6 +40,7 @@ export default function GempaTerdeteksi({
   onLoadingChange,
   isActive = true,
 }: Props) {
+  const { t } = useTranslation();
   const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -49,14 +50,14 @@ export default function GempaTerdeteksi({
   const translateY = useRef(new Animated.Value(600)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const btnOpacity = useRef(new Animated.Value(0)).current;
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] = useState(false);
+  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
+    useState(false);
 
   const showNetworkError = useCallback(() => {
     if (networkErrorShownRef.current) return;
     networkErrorShownRef.current = true;
     setNetworkErrorModalVisible(true);
   }, []);
-
 
   const panResponder = useRef(
     PanResponder.create({
@@ -226,7 +227,7 @@ export default function GempaTerdeteksi({
         if (
           !networkErrorShownRef.current &&
           e instanceof TypeError &&
-          (e as Error).message.includes('Network')
+          (e as Error).message.includes("Network")
         ) {
           // Cukup panggil fungsi ini, karena di dalamnya sudah mengeset ref dan state
           showNetworkError();
@@ -248,11 +249,11 @@ export default function GempaTerdeteksi({
         markerCoordinate={
           latestQuake
             ? {
-              latitude: latestQuake.latitude,
-              longitude: latestQuake.longitude,
-              magnitude: latestQuake.magnitude,
-              depth: latestQuake.kedalaman,
-            }
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                magnitude: latestQuake.magnitude,
+                depth: latestQuake.kedalaman,
+              }
             : null
         }
         onMapPress={() => dismissCard()}
@@ -268,7 +269,7 @@ export default function GempaTerdeteksi({
               onPress={() => shareQuake(latestQuake, "terdeteksi")}
             >
               <Feather name="share" size={12} color="white" />
-              <Text style={styles.mapButtonText}>BAGIKAN</Text>
+              <Text style={styles.mapButtonText}>{t("common.share")}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -293,15 +294,21 @@ export default function GempaTerdeteksi({
                 color="#0369A1"
               />
               <Text style={styles.statTopValue}>{latestQuake.magnitude}</Text>
-              <Text style={styles.statTopLabel}>Magnitudo</Text>
+              <Text style={styles.statTopLabel}>
+                {t("earthquake.magnitude")}
+              </Text>
             </View>
+
             <View style={styles.statTopDivider} />
+
             <View style={styles.statTopItem}>
               <MaterialCommunityIcons name="rss" size={20} color="#0369A1" />
               <Text style={styles.statTopValue}>{latestQuake.kedalaman}</Text>
-              <Text style={styles.statTopLabel}>Kedalaman</Text>
+              <Text style={styles.statTopLabel}>{t("earthquake.depth")}</Text>
             </View>
+
             <View style={styles.statTopDivider} />
+
             <View style={styles.statTopItem}>
               <MaterialCommunityIcons
                 name="compass-outline"
@@ -309,9 +316,13 @@ export default function GempaTerdeteksi({
                 color="#0369A1"
               />
               <Text style={styles.statTopValue}>{latestQuake.latText}</Text>
-              <Text style={styles.statTopLabel}>LS</Text>
+              <Text style={styles.statTopLabel}>
+                {t("earthquake.latitude")}
+              </Text>
             </View>
+
             <View style={styles.statTopDivider} />
+
             <View style={styles.statTopItem}>
               <MaterialCommunityIcons
                 name="compass-outline"
@@ -319,7 +330,9 @@ export default function GempaTerdeteksi({
                 color="#0369A1"
               />
               <Text style={styles.statTopValue}>{latestQuake.lonText}</Text>
-              <Text style={styles.statTopLabel}>BT</Text>
+              <Text style={styles.statTopLabel}>
+                {t("earthquake.longitude")}
+              </Text>
             </View>
           </View>
 
@@ -333,10 +346,11 @@ export default function GempaTerdeteksi({
               style={styles.infoIcon}
             />
             <View>
-              <Text style={styles.infoLabel}>Lokasi Gempa :</Text>
+              <Text style={styles.infoLabel}>{t("earthquake.location")}</Text>
               <Text style={styles.infoValue}>{latestQuake.wilayah}</Text>
             </View>
           </View>
+
           <View style={styles.infoRow}>
             <Ionicons
               name="calendar-outline"
@@ -345,10 +359,11 @@ export default function GempaTerdeteksi({
               style={styles.infoIcon}
             />
             <View>
-              <Text style={styles.infoLabel}>Tanggal :</Text>
+              <Text style={styles.infoLabel}>{t("earthquake.date")}</Text>
               <Text style={styles.infoValue}>{latestQuake.tanggal}</Text>
             </View>
           </View>
+
           <View style={styles.infoRow}>
             <Ionicons
               name="time-outline"
@@ -357,10 +372,11 @@ export default function GempaTerdeteksi({
               style={styles.infoIcon}
             />
             <View>
-              <Text style={styles.infoLabel}>Jam :</Text>
+              <Text style={styles.infoLabel}>{t("earthquake.time")}</Text>
               <Text style={styles.infoValue}>{latestQuake.jam}</Text>
             </View>
           </View>
+
           {!!latestQuake.felt && (
             <View style={styles.infoRow}>
               <Ionicons
@@ -370,7 +386,7 @@ export default function GempaTerdeteksi({
                 style={styles.infoIcon}
               />
               <View style={styles.infoTextFlex}>
-                <Text style={styles.infoLabel}>Fase :</Text>
+                <Text style={styles.infoLabel}>{t("earthquake.phase")}</Text>
                 <Text style={styles.infoValue}>{latestQuake.felt}</Text>
               </View>
             </View>
@@ -388,4 +404,3 @@ export default function GempaTerdeteksi({
     </View>
   );
 }
-

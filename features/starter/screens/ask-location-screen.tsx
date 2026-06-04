@@ -9,14 +9,15 @@ import { getDatabase, ref, update } from "@react-native-firebase/database";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { styles } from "../styles/ask-location-styles";
 
@@ -59,6 +60,8 @@ function findNearestLocation(
 }
 
 export default function AskLocation() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+
   const [query, setQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("");
@@ -66,7 +69,7 @@ export default function AskLocation() {
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState(
-    "Sedang mencari lokasi GPS Anda...",
+    t("askLocationScreen.status.findingGps"), // <-- Menggunakan t()
   );
   const router = useRouter();
   const { haversineDistanceKm } = useHaversine();
@@ -119,20 +122,20 @@ export default function AskLocation() {
 
   const handleUseGPS = async () => {
     setGpsLoading(true);
-    setGpsMessage("Meminta izin akses lokasi...");
+    setGpsMessage(t("askLocationScreen.status.requestingPermission")); // <-- Menggunakan t()
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         showCustomAlert(
-          "Permission Ditolak!",
-          "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
+          t("askLocationScreen.alert.permissionDeniedTitle"), // <-- Menggunakan t()
+          t("askLocationScreen.alert.permissionDeniedMsg"), // <-- Menggunakan t()
           "error",
         );
         return;
       }
 
-      setGpsMessage("Sedang menentukan posisi Anda...");
+      setGpsMessage(t("askLocationScreen.status.determiningPosition")); // <-- Menggunakan t()
 
       // Balanced is significantly faster than High for this use case
       // (finding nearest village — centimeter precision is not needed)
@@ -148,7 +151,8 @@ export default function AskLocation() {
         allLocations,
         haversineDistanceKm,
       );
-      const locationName = nearestLocation?.name || "Lokasi GPS";
+      const locationName =
+        nearestLocation?.name || t("askLocationScreen.fallbackLocationName"); // <-- Menggunakan t()
 
       // Fire-and-forget — DB update no longer blocks navigation
       const app = getApp();
@@ -168,8 +172,8 @@ export default function AskLocation() {
       router.push("/main-menu/home");
     } catch {
       showCustomAlert(
-        "Error",
-        "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
+        t("askLocationScreen.alert.errorTitle"), // <-- Menggunakan t()
+        t("askLocationScreen.alert.errorMsg"), // <-- Menggunakan t()
         "error",
       );
     } finally {
@@ -227,7 +231,10 @@ export default function AskLocation() {
           resizeMode="contain"
         />
 
-        <Text style={styles.description}>Dimana lokasi Anda saat ini?</Text>
+        {/* <-- Menggunakan t() untuk teks UI --> */}
+        <Text style={styles.description}>
+          {t("askLocationScreen.headerTitle")}
+        </Text>
 
         <View style={styles.inputArea}>
           <TouchableOpacity
@@ -245,18 +252,18 @@ export default function AskLocation() {
               style={[styles.inputText, !selectedLocation && { color: "#999" }]}
               numberOfLines={1}
             >
-              {selectedLocation || "Cari Kelurahan atau Desa..."}
+              {selectedLocation || t("askLocationScreen.searchPlaceholder")}
             </Text>
             <EvilIcons name="search" size={24} color="#1E6F9F" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.orText}>Atau deteksi otomatis</Text>
+        <Text style={styles.orText}>{t("askLocationScreen.orDivider")}</Text>
 
         <View style={styles.buttonWrapper}>
           <GpsButton
-            text="Gunakan GPS"
-            loadingText={gpsMessage}
+            text={t("askLocationScreen.useGpsButton")}
+            loadingText={gpsMessage} // gpsMessage sudah pakai t() di atas
             loading={gpsLoading}
             onPress={handleUseGPS}
             disabled={gpsLoading}
@@ -269,7 +276,7 @@ export default function AskLocation() {
         <LocationSearchModal
           visible={modalVisible}
           query={query}
-          locations={filteredLocations}
+          locations={loading ? [] : filteredLocations}
           onClose={() => setModalVisible(false)}
           onChangeQuery={setQuery}
           onSelect={handleSelect}

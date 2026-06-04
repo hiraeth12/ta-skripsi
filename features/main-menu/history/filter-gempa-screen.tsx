@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import styles from "./styles/filter-gempa-screen";
@@ -19,6 +20,7 @@ import {
 const YEAR_START = 2023;
 
 export default function FilterGempaScreen() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const params = useLocalSearchParams<{
     tab?: string;
@@ -28,11 +30,14 @@ export default function FilterGempaScreen() {
     returnTo?: string;
   }>();
   const now = useMemo(() => new Date(), []);
-  const tab: HistoryTabKey = params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
+  const tab: HistoryTabKey =
+    params.tab === "terdeteksi" ? "terdeteksi" : "dirasakan";
   const nowDefault = getNowYearMonth(now);
   const incomingYear = Number.parseInt(String(params.filterYear ?? ""), 10);
   const incomingMonth = Number.parseInt(String(params.filterMonth ?? ""), 10);
-  const incomingMonths = parseFilterMonthsParam(String(params.filterMonths ?? ""));
+  const incomingMonths = parseFilterMonthsParam(
+    String(params.filterMonths ?? ""),
+  );
   const initialFilter = clampYearMonth(
     {
       year: Number.isFinite(incomingYear) ? incomingYear : nowDefault.year,
@@ -49,7 +54,11 @@ export default function FilterGempaScreen() {
     normalizeFilterMonths(
       incomingMonths.length > 0
         ? incomingMonths
-        : [Number.isFinite(incomingMonth) ? incomingMonth : initialFilter.month],
+        : [
+            Number.isFinite(incomingMonth)
+              ? incomingMonth
+              : initialFilter.month,
+          ],
       initialFilter.year,
       tab,
       now,
@@ -69,7 +78,12 @@ export default function FilterGempaScreen() {
       tab,
       now,
     );
-    const months = normalizeFilterMonths(selectedMonths, clamped.year, tab, now);
+    const months = normalizeFilterMonths(
+      selectedMonths,
+      clamped.year,
+      tab,
+      now,
+    );
     router.replace({
       pathname: "/main-menu/history",
       params: {
@@ -109,7 +123,8 @@ export default function FilterGempaScreen() {
       <View style={styles.container}>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Filter</Text>
+            {/* <-- Menggunakan t() untuk judul --> */}
+            <Text style={styles.cardTitle}>{t("filterScreen.title")}</Text>
             <TouchableOpacity
               style={styles.closeIcon}
               activeOpacity={0.7}
@@ -139,11 +154,14 @@ export default function FilterGempaScreen() {
                     expandedSection === "year" && { color: "#0C4A6E" },
                   ]}
                 >
-                  Pilih Tahun
+                  {/* <-- Menggunakan t() untuk teks Pilih Tahun --> */}
+                  {t("filterScreen.selectYear")}
                 </Text>
               </View>
               <Feather
-                name={expandedSection === "year" ? "chevron-up" : "chevron-down"}
+                name={
+                  expandedSection === "year" ? "chevron-up" : "chevron-down"
+                }
                 size={20}
                 color={expandedSection === "year" ? "#0C4A6E" : "#fff"}
               />
@@ -164,7 +182,10 @@ export default function FilterGempaScreen() {
                       disabled={disabled}
                       onPress={() => {
                         const next = clampYearMonth(
-                          { year, month: selectedMonths[0] ?? initialFilter.month },
+                          {
+                            year,
+                            month: selectedMonths[0] ?? initialFilter.month,
+                          },
                           tab,
                           now,
                         );
@@ -217,11 +238,14 @@ export default function FilterGempaScreen() {
                     expandedSection === "month" && { color: "#0C4A6E" },
                   ]}
                 >
-                  Pilih Bulan
+                  {/* <-- Menggunakan t() untuk teks Pilih Bulan --> */}
+                  {t("filterScreen.selectMonth")}
                 </Text>
               </View>
               <Feather
-                name={expandedSection === "month" ? "chevron-up" : "chevron-down"}
+                name={
+                  expandedSection === "month" ? "chevron-up" : "chevron-down"
+                }
                 size={20}
                 color={expandedSection === "month" ? "#0C4A6E" : "#fff"}
               />
@@ -229,17 +253,27 @@ export default function FilterGempaScreen() {
 
             {expandedSection === "month" && (
               <View style={styles.accordionContent}>
-                <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled={true}>
+                <ScrollView
+                  style={{ maxHeight: 220 }}
+                  nestedScrollEnabled={true}
+                >
                   {MONTH_NAMES_ID.map((label, idx) => {
                     const month = idx + 1;
-                    const disabled = isMonthDisabled(selectedYear, month, tab, now);
+                    const disabled = isMonthDisabled(
+                      selectedYear,
+                      month,
+                      tab,
+                      now,
+                    );
                     const isSelected = selectedMonths.includes(month);
                     return (
                       <TouchableOpacity
                         key={label}
                         style={[
                           styles.listItem,
-                          idx === MONTH_NAMES_ID.length - 1 && { borderBottomWidth: 0 },
+                          idx === MONTH_NAMES_ID.length - 1 && {
+                            borderBottomWidth: 0,
+                          },
                           disabled && { opacity: 0.45 },
                         ]}
                         disabled={disabled}
@@ -247,9 +281,19 @@ export default function FilterGempaScreen() {
                           setSelectedMonths((prev) => {
                             if (prev.includes(month)) {
                               const next = prev.filter((m) => m !== month);
-                              return normalizeFilterMonths(next, selectedYear, tab, now);
+                              return normalizeFilterMonths(
+                                next,
+                                selectedYear,
+                                tab,
+                                now,
+                              );
                             }
-                            return normalizeFilterMonths([...prev, month], selectedYear, tab, now);
+                            return normalizeFilterMonths(
+                              [...prev, month],
+                              selectedYear,
+                              tab,
+                              now,
+                            );
                           });
                         }}
                       >
@@ -283,7 +327,10 @@ export default function FilterGempaScreen() {
               activeOpacity={0.7}
               onPress={handleReset}
             >
-              <Text style={styles.btnResetText}>Reset</Text>
+              {/* <-- Menggunakan t() untuk tombol Reset --> */}
+              <Text style={styles.btnResetText}>
+                {t("filterScreen.btnReset")}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -291,7 +338,10 @@ export default function FilterGempaScreen() {
               activeOpacity={0.7}
               onPress={handleSimpan}
             >
-              <Text style={styles.btnSimpanText}>Simpan</Text>
+              {/* <-- Menggunakan t() untuk tombol Simpan --> */}
+              <Text style={styles.btnSimpanText}>
+                {t("filterScreen.btnSave")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

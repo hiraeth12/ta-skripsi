@@ -2,6 +2,7 @@ import AuthButton from "@/components/auth-button";
 import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Image,
   ScrollView,
@@ -10,14 +11,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native"; // 2. Hapus import 'Alert' dan 'Platform' (karena Platform tidak terpakai)
-import { sendResetOtp, verifyOtpCode } from "../services/auth-service";
-import { PasswordResetApiError } from "../services/auth-service";
-import { styles } from "../styles/verify-code-styles";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import {
+  PasswordResetApiError,
+  sendResetOtp,
+  verifyOtpCode,
+} from "../services/auth-service";
+import { styles } from "../styles/verify-code-styles";
 
 const OTP_LENGTH = 6;
 
 export default function VerifyCode() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const { email } = useLocalSearchParams<{ email: string }>();
   const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(""));
@@ -79,11 +84,11 @@ export default function VerifyCode() {
   const handleVerify = async () => {
     const combinedCode = code.join("");
     if (combinedCode.length < OTP_LENGTH) {
-      // 5. Ganti Alert bawaan
+      // 5. Ganti Alert bawaan dengan i18n
       showCustomAlert(
-        "Input Tidak Valid",
-        "Silakan masukkan kode 6 digit.",
-        "error"
+        t("verifyCodeScreen.alert.invalidInputTitle"),
+        t("verifyCodeScreen.alert.invalidInputMsg"),
+        "error",
       );
       return;
     }
@@ -96,21 +101,23 @@ export default function VerifyCode() {
         params: { email, resetToken },
       });
     } catch (error) {
-      // 5. Ganti Alert bawaan
+      // 5. Ganti Alert bawaan dengan logika i18n
       const message =
-        error instanceof PasswordResetApiError && error.code === "otp_already_used"
-          ? "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode."
+        error instanceof PasswordResetApiError &&
+        error.code === "otp_already_used"
+          ? t("verifyCodeScreen.alert.otpUsed")
           : error instanceof PasswordResetApiError &&
               error.code === "otp_attempts_exceeded"
-            ? "Terlalu banyak percobaan. Silakan kirim ulang kode."
-            : error instanceof PasswordResetApiError && error.code === "otp_expired"
-              ? "Kode OTP sudah kedaluwarsa. Silakan kirim ulang kode."
-              : "Kode OTP salah atau kedaluwarsa.";
+            ? t("verifyCodeScreen.alert.otpTooManyAttempts")
+            : error instanceof PasswordResetApiError &&
+                error.code === "otp_expired"
+              ? t("verifyCodeScreen.alert.otpExpired")
+              : t("verifyCodeScreen.alert.otpInvalid");
 
       showCustomAlert(
-        "Verifikasi Gagal",
+        t("verifyCodeScreen.alert.verifyFailedTitle"),
         message,
-        "error"
+        "error",
       );
     } finally {
       setIsLoading(false);
@@ -126,14 +133,14 @@ export default function VerifyCode() {
       setCode(Array(OTP_LENGTH).fill(""));
       setTimer(30);
       showCustomAlert(
-        "Kode Dikirim",
-        "Kode verifikasi baru telah dikirim ke email Anda.",
+        t("verifyCodeScreen.alert.resendSuccessTitle"),
+        t("verifyCodeScreen.alert.resendSuccessMsg"),
         "success",
       );
     } catch (error) {
       showCustomAlert(
-        "Gagal",
-        "Gagal mengirim ulang OTP. Silakan coba lagi.",
+        t("verifyCodeScreen.alert.resendFailedTitle"),
+        t("verifyCodeScreen.alert.resendFailedMsg"),
         "error",
       );
     } finally {
@@ -166,10 +173,13 @@ export default function VerifyCode() {
           resizeMode="contain"
         />
 
-        <Text style={styles.title}>Verifikasi Alamat Email</Text>
+        <Text style={styles.title}>{t("verifyCodeScreen.title")}</Text>
         <Text style={styles.subtitle}>
-          Kode verifikasi telah dikirim ke:{"\n"}
-          <Text style={styles.emailText}>{email || "email@gmail.com"}</Text>
+          {t("verifyCodeScreen.subtitlePrefix")}
+          {"\n"}
+          <Text style={styles.emailText}>
+            {email || t("verifyCodeScreen.fallbackEmail")}
+          </Text>
         </Text>
 
         <View style={styles.otpContainer}>
@@ -200,7 +210,11 @@ export default function VerifyCode() {
         </View>
 
         <AuthButton
-          title={isLoading ? "Memverifikasi..." : "Konfirmasi Kode"}
+          title={
+            isLoading
+              ? t("verifyCodeScreen.buttonVerifying")
+              : t("verifyCodeScreen.buttonVerify")
+          }
           onPress={handleVerify}
           disabled={isLoading}
         />
@@ -213,12 +227,14 @@ export default function VerifyCode() {
           <Text style={styles.resendText}>
             {timer > 0 ? (
               <>
-                Kirim ulang kode dalam{" "}
+                {t("verifyCodeScreen.resendCountdown")}
                 <Text style={{ fontWeight: "bold" }}>{formatTime(timer)}</Text>
               </>
             ) : (
               <Text style={{ color: "#1E6F9F", fontWeight: "bold" }}>
-                {isResending ? "Mengirim ulang..." : "Kirim Ulang Kode"}
+                {isResending
+                  ? t("verifyCodeScreen.resendSending")
+                  : t("verifyCodeScreen.resendButton")}
               </Text>
             )}
           </Text>

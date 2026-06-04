@@ -10,13 +10,8 @@ import {
 import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { styles } from "../styles/register-styles";
 
@@ -24,6 +19,7 @@ const FIREBASE_DATABASE_URL =
   process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 
 export default function Register() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const [secure, setSecure] = useState(true);
   const [secureConfirm, setSecureConfirm] = useState(true);
@@ -63,8 +59,8 @@ export default function Register() {
   const handleRegister = async () => {
     if (password !== confirmPassword) {
       showCustomAlert(
-        "Kata sandi tidak cocok",
-        "Pastikan kata sandi dan konfirmasi sama.",
+        t("registerScreen.alert.passwordMismatchTitle"),
+        t("registerScreen.alert.passwordMismatchMsg"),
         "error",
       );
       return;
@@ -82,8 +78,8 @@ export default function Register() {
       !trimmedLastName
     ) {
       showCustomAlert(
-        "Input belum lengkap",
-        "Nama, email, dan kata sandi wajib diisi.",
+        t("registerScreen.alert.missingInputTitle"),
+        t("registerScreen.alert.missingInputMsg"),
         "error",
       );
       return;
@@ -115,16 +111,16 @@ export default function Register() {
       ]);
 
       showCustomAlert(
-        "Registrasi Berhasil",
-        "Akun berhasil dibuat. Silakan login.",
+        t("registerScreen.alert.registerSuccessTitle"),
+        t("registerScreen.alert.registerSuccessMsg"),
         "success",
         () => router.push("/starter/login"),
       );
     } catch (e) {
       const error = e as { code?: string; message?: string };
       showCustomAlert(
-        "Registrasi Gagal",
-        `${error?.code || "error"}: ${error?.message || "Terjadi kesalahan saat membuat akun."}`,
+        t("registerScreen.alert.registerFailedTitle"),
+        `${error?.code || "error"}: ${error?.message || t("registerScreen.alert.registerFailedDefaultMsg")}`,
         "error",
       );
     }
@@ -139,103 +135,109 @@ export default function Register() {
       extraScrollHeight={24}
       keyboardShouldPersistTaps="handled"
     >
-        <Image
-          style={styles.image}
-          source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
-          resizeMode="contain"
-        />
+      <Image
+        style={styles.image}
+        source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
+        resizeMode="contain"
+      />
 
-        <Text style={styles.label}>Nama Depan</Text>
+      <Text style={styles.label}>{t("registerScreen.firstNameLabel")}</Text>
+      <TextInput
+        placeholder={t("registerScreen.firstNamePlaceholder")}
+        placeholderTextColor="#999"
+        style={styles.input}
+        value={firstName}
+        onChangeText={setFirstName}
+      />
+
+      <Text style={styles.label}>{t("registerScreen.lastNameLabel")}</Text>
+      <TextInput
+        placeholder={t("registerScreen.lastNamePlaceholder")}
+        placeholderTextColor="#999"
+        style={styles.input}
+        value={lastName}
+        onChangeText={setLastName}
+      />
+
+      <Text style={styles.label}>{t("registerScreen.emailLabel")}</Text>
+      <TextInput
+        placeholder={t("registerScreen.emailPlaceholder")}
+        placeholderTextColor="#999"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        style={styles.input}
+        value={email}
+        onChangeText={setEmail}
+      />
+
+      <Text style={styles.label}>{t("registerScreen.passwordLabel")}</Text>
+      <View style={styles.passwordContainer}>
         <TextInput
-          placeholder="Jane"
+          placeholder={t("registerScreen.passwordPlaceholder")}
           placeholderTextColor="#999"
-          style={styles.input}
-          value={firstName}
-          onChangeText={setFirstName}
+          secureTextEntry={secure}
+          style={styles.passwordInput}
+          onChangeText={setPassword}
+          value={password}
         />
-
-        <Text style={styles.label}>Nama Belakang</Text>
-        <TextInput
-          placeholder="Doe"
-          placeholderTextColor="#999"
-          style={styles.input}
-          value={lastName}
-          onChangeText={setLastName}
-        />
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          placeholder="email@gmail.com"
-          placeholderTextColor="#999"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <Text style={styles.label}>Kata Sandi</Text>
-        <View style={styles.passwordContainer}>
-          <TextInput
-            placeholder="********"
-            placeholderTextColor="#999"
-            secureTextEntry={secure}
-            style={styles.passwordInput}
-            onChangeText={setPassword}
-            value={password}
+        <TouchableOpacity onPress={() => setSecure(!secure)}>
+          <Ionicons
+            name={secure ? "eye-off-outline" : "eye-outline"}
+            size={20}
+            color="#888"
           />
-          <TouchableOpacity onPress={() => setSecure(!secure)}>
-            <Ionicons
-              name={secure ? "eye-off-outline" : "eye-outline"}
-              size={20}
-              color="#888"
-            />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.label}>Konfirmasi Kata Sandi</Text>
-        <View
-          style={[
-            styles.passwordContainer,
-            !passwordsMatch && { borderBottomColor: "red" },
-          ]}
-        >
-          <TextInput
-            placeholder="********"
-            secureTextEntry={secureConfirm}
-            style={styles.passwordInput}
-            onChangeText={setConfirmPassword}
-            value={confirmPassword}
-            placeholderTextColor="#999"
-          />
-          <TouchableOpacity onPress={() => setSecureConfirm(!secureConfirm)}>
-            <Ionicons
-              name={secureConfirm ? "eye-off-outline" : "eye-outline"}
-              size={20}
-              color="#888"
-            />
-          </TouchableOpacity>
-        </View>
-
-        {!passwordsMatch && (
-          <Text style={styles.errorText}>Kata sandi tidak cocok</Text>
-        )}
-
-        <View style={{ marginTop: 30 }}>
-          <AuthButton
-            title="Daftar"
-            onPress={handleRegister}
-          />
-        </View>
-
-        <Text style={styles.signInText}>Sudah Punya Akun?</Text>
-        <TouchableOpacity onPress={() => router.push("/starter/login")}>
-          <Text
-            style={{ color: "#1E6F9F", fontWeight: "bold", textAlign: "right" }}
-          >
-            Masuk
-          </Text>
         </TouchableOpacity>
+      </View>
+
+      <Text style={styles.label}>
+        {t("registerScreen.confirmPasswordLabel")}
+      </Text>
+      <View
+        style={[
+          styles.passwordContainer,
+          !passwordsMatch && { borderBottomColor: "red" },
+        ]}
+      >
+        <TextInput
+          placeholder={t("registerScreen.passwordPlaceholder")}
+          secureTextEntry={secureConfirm}
+          style={styles.passwordInput}
+          onChangeText={setConfirmPassword}
+          value={confirmPassword}
+          placeholderTextColor="#999"
+        />
+        <TouchableOpacity onPress={() => setSecureConfirm(!secureConfirm)}>
+          <Ionicons
+            name={secureConfirm ? "eye-off-outline" : "eye-outline"}
+            size={20}
+            color="#888"
+          />
+        </TouchableOpacity>
+      </View>
+
+      {!passwordsMatch && (
+        <Text style={styles.errorText}>
+          {t("registerScreen.passwordMismatchError")}
+        </Text>
+      )}
+
+      <View style={{ marginTop: 30 }}>
+        <AuthButton
+          title={t("registerScreen.buttonRegister")}
+          onPress={handleRegister}
+        />
+      </View>
+
+      <Text style={styles.signInText}>
+        {t("registerScreen.haveAccountText")}
+      </Text>
+      <TouchableOpacity onPress={() => router.push("/starter/login")}>
+        <Text
+          style={{ color: "#1E6F9F", fontWeight: "bold", textAlign: "right" }}
+        >
+          {t("registerScreen.loginText")}
+        </Text>
+      </TouchableOpacity>
 
       {/* Gunakan Komponen yang sudah direusable di sini */}
       <CustomAlert
@@ -243,7 +245,7 @@ export default function Register() {
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
-        buttonText="Mengerti" 
+        buttonText={t("registerScreen.alertButtonUnderstand")}
         onClose={() => setModalConfig({ ...modalConfig, visible: false })}
         onConfirm={modalConfig.onConfirm}
       />

@@ -6,6 +6,7 @@ import { get, getDatabase, ref, remove } from "@react-native-firebase/database";
 import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Modal,
   Pressable,
@@ -14,16 +15,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Skeleton from "../../../components/skeleton";
 import { saveFcmTokenToDatabase } from "../../../hooks/use-fcm-token-save";
 import { PUSH_NOTIFICATION_PREF_KEY } from "../components/handle-logout";
 import ProfilePageLayout from "../components/profile-page-layout";
-import Skeleton from "../../../components/skeleton";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/account-styles";
 
 export default function Account() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
-  const { profile, loading } = useProfileContext(); 
+  const { profile, loading } = useProfileContext();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
   const [isToggleProcessing, setIsToggleProcessing] = useState(false);
   const [showNotifModal, setShowNotifModal] = useState(false);
@@ -153,24 +155,25 @@ export default function Account() {
         headerLocation={profile.location}
         headerInitials={profile.initials}
       >
+        {/* <-- Menggunakan t() untuk judul menu --> */}
         <MenuLink
           icon="account-circle-outline"
-          title="Pengaturan Profil"
+          title={t("accountScreen.menuProfile")}
           onPress={() => navigate("/profile/pengaturan")}
         />
         <MenuLink
           icon="lock-outline"
-          title="Ubah Kata Sandi"
+          title={t("accountScreen.menuPassword")}
           onPress={() => navigate("/profile/ubah-kata-sandi")}
         />
         <MenuLink
           icon="map-marker-outline"
-          title="Ubah Lokasi"
+          title={t("accountScreen.menuLocation")}
           onPress={() => navigate("/profile/ubah-lokasi")}
         />
         <MenuLink
           icon="earth"
-          title="Ubah Bahasa"
+          title={t("accountScreen.menuLanguage")}
           onPress={() => navigate("/profile/ubah-bahasa")}
         />
 
@@ -183,7 +186,9 @@ export default function Account() {
                 color="#1E6F9F"
               />
             </View>
-            <Text style={styles.menuText}>Notifikasi Push</Text>
+            <Text style={styles.menuText}>
+              {t("accountScreen.menuPushNotif")}
+            </Text>
           </View>
           <Switch
             trackColor={{ false: "#D1D1D1", true: "#B2D8EC" }}
@@ -197,10 +202,9 @@ export default function Account() {
 
         <MenuLink
           icon="cellphone-information"
-          title="Tentang Aplikasi"
+          title={t("accountScreen.menuAbout")}
           onPress={() => navigate("/profile/tentang-aplikasi")}
         />
-
       </ProfilePageLayout>
 
       <Modal visible={showNotifModal} transparent animationType="fade">
@@ -215,24 +219,28 @@ export default function Account() {
               color="#1E6F9F"
               style={styles.modalIcon}
             />
+            {/* <-- Menggunakan t() untuk modal --> */}
             <Text style={styles.infoTitle}>
-              Notifikasi {notifStatus ? "Aktif" : "Nonaktif"}
+              {notifStatus
+                ? t("accountScreen.modalNotifActive")
+                : t("accountScreen.modalNotifInactive")}
             </Text>
             <Text style={styles.infoDesc}>
               {notifStatus
-                ? "Dengan ini, Anda akan menerima pemberitahuan langsung di perangkat Anda terkait aktivitas gempa terkini."
-                : "Anda telah mematikan notifikasi. Anda tidak akan menerima pemberitahuan langsung mengenai pembaruan sistem atau gempa."}
+                ? t("accountScreen.modalDescActive")
+                : t("accountScreen.modalDescInactive")}
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
               onPress={() => setShowNotifModal(false)}
             >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
+              <Text style={styles.infoButtonText}>
+                {t("accountScreen.modalBtnUnderstand")}
+              </Text>
             </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
-
     </>
   );
 }

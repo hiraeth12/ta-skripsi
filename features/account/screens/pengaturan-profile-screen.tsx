@@ -5,6 +5,7 @@ import { getAuth } from "@react-native-firebase/auth";
 import { getDatabase, ref, update } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Modal,
   Pressable,
@@ -27,6 +28,7 @@ const sanitizeNameParts = (value: string) =>
     .trimStart();
 
 export default function PengaturanProfil() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const { profile, setProfile } = useProfileContext();
   const [isSaving, setIsSaving] = useState(false);
@@ -62,8 +64,8 @@ export default function PengaturanProfil() {
     if (!first) {
       setModalConfig({
         visible: true,
-        title: "Error",
-        message: "Nama depan wajib diisi",
+        title: t("pengaturanProfilScreen.alert.errorTitle"), // <-- Menggunakan t()
+        message: t("pengaturanProfilScreen.alert.missingFirstName"), // <-- Menggunakan t()
         type: "error",
       });
       return;
@@ -78,8 +80,8 @@ export default function PengaturanProfil() {
       if (!user) {
         setModalConfig({
           visible: true,
-          title: "Error",
-          message: "User belum login",
+          title: t("pengaturanProfilScreen.alert.errorTitle"),
+          message: t("pengaturanProfilScreen.alert.userNotLoggedIn"),
           type: "error",
         });
         return;
@@ -103,14 +105,18 @@ export default function PengaturanProfil() {
 
       // ── Optimistic update: context reflects changes immediately across all
       //    screens — no re-fetch needed. ───────────────────────────────────────
-      setProfile((prev: typeof profile) => ({ ...prev, name: fullName, initials }));
+      setProfile((prev: typeof profile) => ({
+        ...prev,
+        name: fullName,
+        initials,
+      }));
 
       router.replace("/main-menu/account");
     } catch {
       setModalConfig({
         visible: true,
-        title: "Error",
-        message: "Gagal memperbarui profil",
+        title: t("pengaturanProfilScreen.alert.errorTitle"),
+        message: t("pengaturanProfilScreen.alert.updateFailed"),
         type: "error",
       });
     } finally {
@@ -128,8 +134,8 @@ export default function PengaturanProfil() {
     if (!didLogout) {
       setModalConfig({
         visible: true,
-        title: "Gagal Keluar",
-        message: "Gagal keluar. Silakan coba lagi.",
+        title: t("pengaturanProfilScreen.alert.logoutFailedTitle"), // <-- Menggunakan t()
+        message: t("pengaturanProfilScreen.alert.logoutFailedMsg"), // <-- Menggunakan t()
         type: "error",
       });
       setIsLoggingOut(false);
@@ -139,7 +145,7 @@ export default function PengaturanProfil() {
   return (
     <>
       <ProfilePageLayout
-        title="Pengaturan Profil"
+        title={t("pengaturanProfilScreen.title")} // <-- Menggunakan t()
         headerName={profile.name}
         headerEmail={profile.email}
         headerLocation={profile.location}
@@ -155,7 +161,9 @@ export default function PengaturanProfil() {
         >
           <View style={styles.inputCard}>
             <View style={styles.inputArea}>
-              <Text style={styles.label}>Nama Depan</Text>
+              <Text style={styles.label}>
+                {t("pengaturanProfilScreen.firstNameLabel")}
+              </Text>
               <TextInput
                 style={styles.input}
                 value={tempForm.namaDepan}
@@ -170,7 +178,9 @@ export default function PengaturanProfil() {
             </View>
 
             <View style={styles.inputArea}>
-              <Text style={styles.label}>Nama Belakang</Text>
+              <Text style={styles.label}>
+                {t("pengaturanProfilScreen.lastNameLabel")}
+              </Text>
               <TextInput
                 style={styles.input}
                 value={tempForm.namaBelakang}
@@ -185,11 +195,24 @@ export default function PengaturanProfil() {
             </View>
 
             <View style={styles.buttonWrapper}>
-              <TouchableOpacity style={styles.btnBatal} onPress={() => router.back()}>
-                <Text style={styles.btnTextBatal}>Batal</Text>
+              <TouchableOpacity
+                style={styles.btnBatal}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.btnTextBatal}>
+                  {t("pengaturanProfilScreen.btnCancel")}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnSimpan} onPress={handleSimpan} disabled={isSaving}>
-                <Text style={styles.btnTextSimpan}>{isSaving ? "Menyimpan..." : "Simpan"}</Text>
+              <TouchableOpacity
+                style={styles.btnSimpan}
+                onPress={handleSimpan}
+                disabled={isSaving}
+              >
+                <Text style={styles.btnTextSimpan}>
+                  {isSaving
+                    ? t("pengaturanProfilScreen.btnSaving")
+                    : t("pengaturanProfilScreen.btnSave")}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -202,7 +225,9 @@ export default function PengaturanProfil() {
           >
             <MaterialCommunityIcons name="logout" size={22} color="#E11D48" />
             <Text style={styles.logoutText}>
-              {isLoggingOut ? "Keluar..." : "Keluar"}
+              {isLoggingOut
+                ? t("pengaturanProfilScreen.btnLogouting")
+                : t("pengaturanProfilScreen.btnLogout")}
             </Text>
           </TouchableOpacity>
 
@@ -222,16 +247,20 @@ export default function PengaturanProfil() {
               color="#E11D48"
               style={styles.confirmIcon}
             />
-            <Text style={styles.confirmTitle}>Keluar dari Akun?</Text>
+            <Text style={styles.confirmTitle}>
+              {t("pengaturanProfilScreen.modalLogoutTitle")}
+            </Text>
             <Text style={styles.confirmDesc}>
-              Apakah Anda benar-benar ingin logout dari akun ini?
+              {t("pengaturanProfilScreen.modalLogoutDesc")}
             </Text>
             <View style={styles.confirmButtonWrapper}>
               <TouchableOpacity
                 style={styles.confirmCancelButton}
                 onPress={() => setLogoutModalVisible(false)}
               >
-                <Text style={styles.confirmCancelText}>Batal</Text>
+                <Text style={styles.confirmCancelText}>
+                  {t("pengaturanProfilScreen.btnCancel")}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.confirmLogoutButton}
@@ -239,7 +268,9 @@ export default function PengaturanProfil() {
                 disabled={isLoggingOut}
               >
                 <Text style={styles.confirmLogoutText}>
-                  {isLoggingOut ? "Keluar..." : "Keluar"}
+                  {isLoggingOut
+                    ? t("pengaturanProfilScreen.btnLogouting")
+                    : t("pengaturanProfilScreen.btnLogout")}
                 </Text>
               </TouchableOpacity>
             </View>

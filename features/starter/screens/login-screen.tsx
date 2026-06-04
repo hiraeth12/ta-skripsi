@@ -1,7 +1,15 @@
-import { styles } from "../styles/login-styles";
+import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
+import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
 import { Ionicons } from "@expo/vector-icons";
+import { getApp } from "@react-native-firebase/app";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+} from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Image,
   KeyboardAvoidingView,
@@ -10,18 +18,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from "react-native"; 
-import AuthButton from "@/components/auth-button";
-import CustomAlert from "@/components/ui/custom-alert"; 
-import { saveFcmTokenToDatabase } from "@/hooks/use-fcm-token-save";
-import { getApp } from "@react-native-firebase/app";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-} from "@react-native-firebase/auth";
+  View,
+} from "react-native";
+import { styles } from "../styles/login-styles";
 
 export default function Login() {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
   const router = useRouter();
   const [secure, setSecure] = useState(true);
   const [email, setEmail] = useState("");
@@ -52,9 +54,10 @@ export default function Login() {
     const trimmedPassword = password.trim();
 
     if (!trimmedEmail || !trimmedPassword) {
+      // <-- Menggunakan t()
       showCustomAlert(
-        "Input belum lengkap",
-        "Email dan kata sandi wajib diisi.",
+        t("loginScreen.alert.missingInputTitle"),
+        t("loginScreen.alert.missingInputMsg"),
         "error",
       );
       return;
@@ -79,9 +82,10 @@ export default function Login() {
       router.replace("/starter/ask-location");
     } catch (e) {
       const error = e as { code?: string; message?: string };
+      // <-- Menggunakan t()
       showCustomAlert(
-        "Login gagal",
-        "Periksa email/kata sandi dan koneksi internet, lalu coba lagi.",
+        t("loginScreen.alert.loginFailedTitle"),
+        t("loginScreen.alert.loginFailedMsg"),
         "error",
       );
     } finally {
@@ -104,9 +108,10 @@ export default function Login() {
           resizeMode="contain"
         />
 
-        <Text style={styles.label}>Email</Text>
+        {/* <-- Menggunakan t() untuk label Email --> */}
+        <Text style={styles.label}>{t("loginScreen.emailLabel")}</Text>
         <TextInput
-          placeholder="email@gmail.com"
+          placeholder={t("loginScreen.emailPlaceholder")}
           placeholderTextColor="#999"
           value={email}
           onChangeText={(v) => setEmail(v.trimStart())}
@@ -115,10 +120,11 @@ export default function Login() {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Kata Sandi</Text>
+        {/* <-- Menggunakan t() untuk label Kata Sandi --> */}
+        <Text style={styles.label}>{t("loginScreen.passwordLabel")}</Text>
         <View style={styles.passwordContainer}>
           <TextInput
-            placeholder="********"
+            placeholder={t("loginScreen.passwordPlaceholder")}
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
@@ -140,21 +146,29 @@ export default function Login() {
         <TouchableOpacity
           onPress={() => router.push("/starter/forgot-password")}
         >
-          <Text style={styles.forgotPassword}>Lupa Kata Sandi?</Text>
+          {/* <-- Menggunakan t() untuk Lupa Kata Sandi --> */}
+          <Text style={styles.forgotPassword}>
+            {t("loginScreen.forgotPasswordText")}
+          </Text>
         </TouchableOpacity>
 
         <AuthButton
-          title={isSubmitting ? "Memproses..." : "Login"}
+          title={
+            isSubmitting
+              ? t("loginScreen.buttonLoading")
+              : t("loginScreen.buttonLogin")
+          }
           onPress={handleLogin}
           disabled={isSubmitting}
         />
 
-        <Text style={styles.signUpText}>Belum Punya Akun?</Text>
+        {/* <-- Menggunakan t() untuk Footer Daftar --> */}
+        <Text style={styles.signUpText}>{t("loginScreen.noAccountText")}</Text>
         <TouchableOpacity onPress={() => router.push("/starter/register")}>
           <Text
             style={{ color: "#1E6F9F", fontWeight: "bold", textAlign: "right" }}
           >
-            Daftar
+            {t("loginScreen.registerText")}
           </Text>
         </TouchableOpacity>
       </ScrollView>

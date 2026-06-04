@@ -33,17 +33,17 @@ export function InAppNotificationModal({
           />
           <Text style={styles.infoTitle}>{data.title}</Text>
           <Text style={styles.infoDesc}>{data.body}</Text>
-          
+
           <View style={styles.actionContainer}>
-            <TouchableOpacity 
-              style={[styles.button, styles.closeButton]} 
+            <TouchableOpacity
+              style={[styles.button, styles.closeButton]}
               onPress={onClose}
             >
               <Text style={styles.closeButtonText}>Tutup</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.button, styles.viewButton]} 
+
+            <TouchableOpacity
+              style={[styles.button, styles.viewButton]}
               onPress={() => {
                 onClose();
                 router.push("/main-menu/notifikasi");

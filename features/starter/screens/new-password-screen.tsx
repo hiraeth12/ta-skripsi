@@ -1,7 +1,9 @@
 import AuthButton from "@/components/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import {
   Image,
   ScrollView,
@@ -10,13 +12,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { resetPasswordWithToken } from "../services/auth-service";
 import { styles } from "../styles/new-password-styles";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
-import CustomAlert from "@/components/ui/custom-alert";
 
 export default function NewPassword() {
-  const { email, resetToken } = useLocalSearchParams<{ email: string; resetToken: string }>();
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+  const { email, resetToken } = useLocalSearchParams<{
+    email: string;
+    resetToken: string;
+  }>();
   const [secure, setSecure] = useState(true);
   const [secureConfirm, setSecureConfirm] = useState(true);
   const [password, setPassword] = useState("");
@@ -41,18 +46,17 @@ export default function NewPassword() {
   const handleResetPassword = async () => {
     if (password.length < 6) {
       showCustomAlert(
-        "Kata Sandi Tidak Valid",
-        "Silakan masukkan kata sandi minimal 6 karakter.",
-        "error"
+        t("newPasswordScreen.alert.invalidPasswordTitle"),
+        t("newPasswordScreen.alert.invalidPasswordMsg"),
+        "error",
       );
       return;
     }
     if (password !== confirmPassword) {
-
       showCustomAlert(
-        "Kata Sandi Tidak Cocok",
-        "Silakan masukkan kata sandi yang sama di kedua kolom.",
-        "error"
+        t("newPasswordScreen.alert.passwordMismatchTitle"),
+        t("newPasswordScreen.alert.passwordMismatchMsg"),
+        "error",
       );
       return;
     }
@@ -63,9 +67,9 @@ export default function NewPassword() {
       router.push("/starter/success-new-password");
     } catch (error) {
       showCustomAlert(
-        "Gagal Menyimpan",
-        "Gagal menyimpan kata sandi baru.",
-        "error"
+        t("newPasswordScreen.alert.saveFailedTitle"),
+        t("newPasswordScreen.alert.saveFailedMsg"),
+        "error",
       );
     } finally {
       setIsLoading(false);
@@ -91,21 +95,16 @@ export default function NewPassword() {
           resizeMode="contain"
         />
 
-        <Text
-          style={styles.label}
-        >
-          Kata Sandi Baru
-        </Text>
+        <Text style={styles.label}>{t("newPasswordScreen.title")}</Text>
 
         <Text style={styles.description}>
-          Silakan buat kata sandi baru yang kuat untuk akun Anda. Pastikan kedua
-          kolom di bawah ini terisi dengan benar.
+          {t("newPasswordScreen.description")}
         </Text>
 
-        <Text style={styles.label}>Kata Sandi</Text>
+        <Text style={styles.label}>{t("newPasswordScreen.passwordLabel")}</Text>
         <View style={styles.passwordContainer}>
           <TextInput
-            placeholder="********"
+            placeholder={t("newPasswordScreen.passwordPlaceholder")}
             placeholderTextColor="#999"
             secureTextEntry={secure}
             style={styles.passwordInput}
@@ -121,10 +120,12 @@ export default function NewPassword() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Konfirmasi Sandi</Text>
+        <Text style={styles.label}>
+          {t("newPasswordScreen.confirmPasswordLabel")}
+        </Text>
         <View style={styles.passwordContainer2}>
           <TextInput
-            placeholder="********"
+            placeholder={t("newPasswordScreen.passwordPlaceholder")}
             placeholderTextColor="#999"
             secureTextEntry={secureConfirm}
             style={styles.passwordInput}
@@ -141,7 +142,11 @@ export default function NewPassword() {
         </View>
 
         <AuthButton
-          title={isLoading ? "Menyimpan..." : "Simpan Kata Sandi Baru"}
+          title={
+            isLoading
+              ? t("newPasswordScreen.buttonLoading")
+              : t("newPasswordScreen.buttonSave")
+          }
           onPress={handleResetPassword}
           disabled={isLoading}
         />

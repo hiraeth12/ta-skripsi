@@ -92,10 +92,7 @@ export default function LocationSearchModal({
     >
       <View style={styles.bottomSheetOverlay}>
         <Animated.View
-          style={[
-            styles.bottomSheetContent,
-            { transform: [{ translateY }] },
-          ]}
+          style={[styles.bottomSheetContent, { transform: [{ translateY }] }]}
         >
           <View style={styles.handleBar} />
 

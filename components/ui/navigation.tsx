@@ -1,5 +1,6 @@
 import Feather from "@expo/vector-icons/Feather";
 import React from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
@@ -8,28 +9,33 @@ interface Props {
 }
 
 export default function BottomNav({ active, onChange }: Props) {
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+
+  // Kita pisahkan 'id' (untuk logika) dan 'label' (untuk tampilan)
   const menus = [
-    { name: "HOME", icon: "home" },
-    { name: "GEMPA", icon: "target" },
-    { name: "RIWAYAT", icon: "clock" },
-    { name: "AKUN", icon: "user" },
+    { id: "HOME", label: t("bottomNav.home"), icon: "home" },
+    { id: "GEMPA", label: t("bottomNav.gempa"), icon: "target" },
+    { id: "RIWAYAT", label: t("bottomNav.riwayat"), icon: "clock" },
+    { id: "AKUN", label: t("bottomNav.akun"), icon: "user" },
   ];
 
   return (
     <View style={styles.wrapper}>
       <View style={styles.container}>
         {menus.map((menu) => {
-          const isActive = active === menu.name;
+          // Pengecekan aktif tetap menggunakan 'id' agar logika tidak rusak
+          const isActive = active === menu.id;
 
           return (
             <TouchableOpacity
-              key={menu.name}
+              key={menu.id}
               style={styles.item}
-              onPress={() => onChange(menu.name)}
+              onPress={() => onChange(menu.id)}
             >
               <Feather name={menu.icon as any} size={24} color="#1B5E80" />
 
-              <Text style={styles.label}>{menu.name}</Text>
+              {/* Teks yang tampil menggunakan 'label' yang sudah diterjemahkan */}
+              <Text style={styles.label}>{menu.label}</Text>
 
               <View
                 style={[

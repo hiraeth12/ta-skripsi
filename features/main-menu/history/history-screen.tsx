@@ -18,14 +18,8 @@ import {
 } from "@react-native-firebase/database";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  memo,
-  useRef,
-  useState,
-  useMemo,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Animated,
   Easing,
@@ -90,6 +84,7 @@ function normalizeDirasakan(
   userLat: number,
   userLon: number,
   haversine: HaversineFn,
+  t: any,
 ): ListItem[] {
   const candidates: any[] = Array.isArray(rawData)
     ? rawData
@@ -107,28 +102,51 @@ function normalizeDirasakan(
       const coordStr = String(candidate?.point?.coordinates ?? "");
       const [lonStr, latStr] = coordStr.split(",");
       const latitude = parseFloat(
-        String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(",", "."),
+        String(candidate?.latitude ?? candidate?.lat ?? latStr ?? "").replace(
+          ",",
+          ".",
+        ),
       );
       const longitude = parseFloat(
-        String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(",", "."),
+        String(candidate?.longitude ?? candidate?.lon ?? lonStr ?? "").replace(
+          ",",
+          ".",
+        ),
       );
+
       if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
 
+      const distanceKm = haversine(
+        userLat,
+        userLon,
+        latitude,
+        longitude,
+      ).toFixed(1);
+
       acc.push({
-        id: String(candidate?.eventid ?? candidate?.eventId ?? `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`),
+        id: String(
+          candidate?.eventid ??
+            candidate?.eventId ??
+            `${candidate?.time ?? ""}-${candidate?.date ?? ""}-${index}`,
+        ),
         latitude,
         longitude,
         magnitude: String(candidate?.magnitude ?? candidate?.mag ?? ""),
-        lokasi: String(candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? ""),
-        waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(candidate?.date ?? candidate?.tanggal ?? "")}`,
-        jarak: `${haversine(userLat, userLon, latitude, longitude).toFixed(1)} km dari lokasi Anda`,
-        distanceKm: haversine(userLat, userLon, latitude, longitude).toFixed(1),
+        lokasi: String(
+          candidate?.area ?? candidate?.wilayah ?? candidate?.lokasi ?? "",
+        ),
+        waktu: `${String(candidate?.time ?? candidate?.jam ?? "")} • ${String(
+          candidate?.date ?? candidate?.tanggal ?? "",
+        )}`,
+        jarak: `${distanceKm}${t("historyScreen.distanceSuffix")}`,
+        distanceKm,
         tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
         jam: String(candidate?.time ?? candidate?.jam ?? ""),
         kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
         felt: String(candidate?.felt ?? ""),
         shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
       });
+
       return acc;
     }, []);
 }
@@ -138,6 +156,7 @@ function normalizeTerdeteksi(
   userLat: number,
   userLon: number,
   haversine: HaversineFn,
+  t: any,
 ): ListItem[] {
   const nodeArray: any[] = Array.isArray(rawData)
     ? rawData
@@ -153,29 +172,54 @@ function normalizeTerdeteksi(
     )
     .reduce<ListItem[]>((acc, item, index) => {
       const coords = item?.geometry?.coordinates || item?.coordinates;
-      const longitude = parseFloat(String(item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0] ?? ""));
-      const latitude = parseFloat(String(item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? ""));
+      const longitude = parseFloat(
+        String(
+          item?.longitude ??
+            item?.lon ??
+            coords?.longitude ??
+            coords?.[0] ??
+            "",
+        ),
+      );
+      const latitude = parseFloat(
+        String(
+          item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1] ?? "",
+        ),
+      );
+
       if (Number.isNaN(latitude) || Number.isNaN(longitude)) return acc;
 
       const props = item?.properties ?? item;
       const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
       const jamFromTime = (jamRaw ?? "").split(".")[0];
-      const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
+      const distanceKm = haversine(
+        userLat,
+        userLon,
+        latitude,
+        longitude,
+      ).toFixed(1);
 
       acc.push({
-        id: String(props?.eventid ?? props?.eventId ?? `${props?.time ?? ""}-${latitude}-${longitude}-${index}`),
+        id: String(
+          props?.eventid ??
+            props?.eventId ??
+            `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
+        ),
         latitude,
         longitude,
         magnitude: String(props?.magnitude ?? props?.mag ?? "0.0"),
         lokasi: String(props?.lokasi ?? props?.place ?? props?.area ?? ""),
-        waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(props?.tanggal ?? tanggalFromTime ?? "")}`,
-        jarak: `${distanceKm} km dari lokasi Anda`,
+        waktu: `${String(props?.jam ?? jamFromTime ?? "")} • ${String(
+          props?.tanggal ?? tanggalFromTime ?? "",
+        )}`,
+        jarak: `${distanceKm}${t("historyScreen.distanceSuffix")}`,
         distanceKm,
         tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
         jam: String(props?.jam ?? jamFromTime ?? ""),
         kedalaman: String(props?.kedalaman ?? props?.depth ?? ""),
         felt: String(props?.felt ?? props?.fase ?? ""),
       });
+
       return acc;
     }, []);
 }
@@ -188,15 +232,27 @@ function SkeletonCard() {
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
       ]),
     );
+
     anim.start();
     return () => anim.stop();
   }, [shimmer]);
 
-  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
+  const opacity = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.7],
+  });
 
   return (
     <Animated.View
@@ -212,11 +268,41 @@ function SkeletonCard() {
         height: ITEM_HEIGHT - 8,
       }}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#CBD5E1", marginRight: 10 }} />
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: "#CBD5E1",
+          marginRight: 10,
+        }}
+      />
+
       <View style={{ flex: 1, gap: 6 }}>
-        <View style={{ height: 12, width: "70%", backgroundColor: "#CBD5E1", borderRadius: 4 }} />
-        <View style={{ height: 10, width: "50%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
-        <View style={{ height: 9, width: "85%", backgroundColor: "#E2E8F0", borderRadius: 4 }} />
+        <View
+          style={{
+            height: 12,
+            width: "70%",
+            backgroundColor: "#CBD5E1",
+            borderRadius: 4,
+          }}
+        />
+        <View
+          style={{
+            height: 10,
+            width: "50%",
+            backgroundColor: "#E2E8F0",
+            borderRadius: 4,
+          }}
+        />
+        <View
+          style={{
+            height: 9,
+            width: "85%",
+            backgroundColor: "#E2E8F0",
+            borderRadius: 4,
+          }}
+        />
       </View>
     </Animated.View>
   );
@@ -225,67 +311,88 @@ function SkeletonCard() {
 function SkeletonList() {
   return (
     <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
-      {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+      {Array.from({ length: 5 }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
     </View>
   );
 }
 
 // ─── List card ────────────────────────────────────────────────────────────────
 
-const EarthquakeListItem = memo(({
-  item,
-  onPress,
-}: {
-  item: ListItem;
-  onPress: (item: ListItem) => void;
-}) => {
-  const magValue = parseFloat(item.magnitude);
-  const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
-  const handlePress = useCallback(() => onPress(item), [item, onPress]);
+const EarthquakeListItem = memo(
+  ({
+    item,
+    onPress,
+    t,
+  }: {
+    item: ListItem;
+    onPress: (item: ListItem) => void;
+    t: any;
+  }) => {
+    const magValue = parseFloat(item.magnitude);
+    const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
 
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() => onPress(item)}
-      style={{
-        backgroundColor: "#FFFFFF",
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 10,
-        marginBottom: 8,
-        flexDirection: "row",
-        alignItems: "center",
-        height: ITEM_HEIGHT - 8,
-      }}
-    >
-      <View
+    return (
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => onPress(item)}
         style={{
-          backgroundColor: magColor,
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          justifyContent: "center",
+          backgroundColor: "#FFFFFF",
+          borderRadius: 8,
+          paddingHorizontal: 10,
+          paddingVertical: 10,
+          marginBottom: 8,
+          flexDirection: "row",
           alignItems: "center",
-          marginRight: 10,
+          height: ITEM_HEIGHT - 8,
         }}
       >
-        <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>{item.magnitude}</Text>
-        <Text style={{ color: "#FFF", fontSize: 8 }}>Mag</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: "#0F172A", fontWeight: "bold", fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
-          {item.lokasi || "-"}
-        </Text>
-        <Text style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>
-          {item.tanggal} • {item.jam}
-        </Text>
-        <Text style={{ color: "#64748B", fontSize: 10 }} numberOfLines={1}>
-          Kedalaman: {item.kedalaman} • {item.distanceKm} km dari Anda
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-});
+        <View
+          style={{
+            backgroundColor: magColor,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            justifyContent: "center",
+            alignItems: "center",
+            marginRight: 10,
+          }}
+        >
+          <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>
+            {item.magnitude}
+          </Text>
+          <Text style={{ color: "#FFF", fontSize: 8 }}>
+            {t("historyScreen.magLabel")}
+          </Text>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: "#0F172A",
+              fontWeight: "bold",
+              fontSize: 13,
+              marginBottom: 2,
+            }}
+            numberOfLines={1}
+          >
+            {item.lokasi || "-"}
+          </Text>
+
+          <Text style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>
+            {item.tanggal} • {item.jam}
+          </Text>
+
+          <Text style={{ color: "#64748B", fontSize: 10 }} numberOfLines={1}>
+            {t("historyScreen.depthPrefix")}
+            {item.kedalaman} • {item.jarak}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  },
+);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -301,6 +408,7 @@ function roundCoord(n: number): number {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function History() {
+  const { t } = useTranslation();
   const router = useRouter();
   const isFocused = useIsFocused();
   const session = useUserSession();
@@ -329,16 +437,20 @@ export default function History() {
   const tabParam = asSingle(searchParams.tab);
   const initialTab: EarthquakeTab =
     tabParam === "terdeteksi" ? "GEMPA TERDETEKSI" : "GEMPA DIRASAKAN";
-  const now = useMemo(() => new Date(), [])
+  const now = useMemo(() => new Date(), []);
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [activeTab, setActiveTab] = useState<EarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
-  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(initialTab === "GEMPA DIRASAKAN");
-  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(initialTab === "GEMPA TERDETEKSI");
+  const [hasMountedDirasakan, setHasMountedDirasakan] = useState(
+    initialTab === "GEMPA DIRASAKAN",
+  );
+  const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(
+    initialTab === "GEMPA TERDETEKSI",
+  );
+
   // Panel animation: 0 = slid in (visible), LIST_PANEL_HEIGHT% = slid out (hidden)
-  const LIST_PANEL_HEIGHT_PCT = 40; // must match the panel's height below
   const listPanelSlide = useRef(
     new Animated.Value(asSingle(searchParams.selectedEventId) ? 1 : 0),
   ).current;
@@ -347,8 +459,8 @@ export default function History() {
     Animated.timing(listPanelSlide, {
       toValue: 0,
       duration: 400,
-      easing: Easing.out(Easing.bezier(0.16, 1, 0.3, 1)), // smoother deceleration
-      useNativeDriver: false, // drives a % height — can't use native driver for layout props
+      easing: Easing.out(Easing.bezier(0.16, 1, 0.3, 1)),
+      useNativeDriver: false,
     }).start();
   }, [listPanelSlide]);
 
@@ -356,10 +468,11 @@ export default function History() {
     Animated.timing(listPanelSlide, {
       toValue: 1,
       duration: 300,
-      easing: Easing.inOut(Easing.ease), // smooth accel/decel
+      easing: Easing.inOut(Easing.ease),
       useNativeDriver: false,
     }).start();
   }, [listPanelSlide]);
+
   const [items, setItems] = useState<ListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [isOpeningFilter, setIsOpeningFilter] = useState(false);
@@ -367,27 +480,35 @@ export default function History() {
     lat: roundCoord(-6.9175),
     lon: roundCoord(107.6191),
   });
+
   const rawYear = Number.parseInt(asSingle(searchParams.filterYear), 10);
   const rawMonth = Number.parseInt(asSingle(searchParams.filterMonth), 10);
   const rawMonthsParam = asSingle(searchParams.filterMonths);
+
   const rawMonths = useMemo(
     () => parseFilterMonthsParam(rawMonthsParam),
     [rawMonthsParam],
   );
+
   const effectiveFilter = useMemo(() => {
     const fallback = getNowYearMonth(now);
     const base = {
       year: Number.isFinite(rawYear) ? rawYear : fallback.year,
       month: Number.isFinite(rawMonth) ? rawMonth : fallback.month,
     };
-    const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+    const tabKey: HistoryTabKey =
+      activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+
     return clampYearMonth(base, tabKey, now);
   }, [activeTab, now, rawMonth, rawYear]);
-  const tabKey: HistoryTabKey = activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+
+  const tabKey: HistoryTabKey =
+    activeTab === "GEMPA TERDETEKSI" ? "terdeteksi" : "dirasakan";
+
   const effectiveMonths = useMemo(() => {
-    const baseMonths = rawMonths.length > 0
-      ? rawMonths
-      : [effectiveFilter.month];
+    const baseMonths =
+      rawMonths.length > 0 ? rawMonths : [effectiveFilter.month];
+
     return normalizeFilterMonths(baseMonths, effectiveFilter.year, tabKey, now);
   }, [effectiveFilter.month, effectiveFilter.year, now, rawMonths, tabKey]);
 
@@ -405,12 +526,18 @@ export default function History() {
     const eventId = asSingle(searchParams.selectedEventId);
     const latitude = parseFloat(asSingle(searchParams.selectedLatitude));
     const longitude = parseFloat(asSingle(searchParams.selectedLongitude));
-    if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+
+    if (!eventId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return null;
+    }
 
     const tanggal = asSingle(searchParams.selectedTanggal);
     const jam = asSingle(searchParams.selectedJam);
     const waktu = asSingle(searchParams.selectedWaktu);
-    const [fallbackJam, fallbackTanggal] = waktu.split("•").map((p) => p.trim());
+    const [fallbackJam, fallbackTanggal] = waktu
+      .split("•")
+      .map((p) => p.trim());
+
     const distanceKm =
       asSingle(searchParams.selectedDistanceKm) ||
       asSingle(searchParams.selectedJarak).replace(/[^0-9.,]/g, "") ||
@@ -433,27 +560,36 @@ export default function History() {
 
   const clearSelectionParams = useCallback(() => {
     router.setParams({
-      tab: undefined, selectedEventId: undefined, selectedLatitude: undefined,
-      selectedLongitude: undefined, selectedMagnitude: undefined, selectedLocation: undefined,
-      selectedWaktu: undefined, selectedJarak: undefined, selectedDistanceKm: undefined,
-      selectedTanggal: undefined, selectedJam: undefined, selectedKedalaman: undefined,
-      selectedFelt: undefined, selectedShakemap: undefined,
+      tab: undefined,
+      selectedEventId: undefined,
+      selectedLatitude: undefined,
+      selectedLongitude: undefined,
+      selectedMagnitude: undefined,
+      selectedLocation: undefined,
+      selectedWaktu: undefined,
+      selectedJarak: undefined,
+      selectedDistanceKm: undefined,
+      selectedTanggal: undefined,
+      selectedJam: undefined,
+      selectedKedalaman: undefined,
+      selectedFelt: undefined,
+      selectedShakemap: undefined,
     });
   }, [router]);
 
   // ── Tab handlers ───────────────────────────────────────────────────────────
 
-  const handleAppTabPress = useCallback((tab: EarthquakeTab) => {
-    // FIX: Clear stale externalSelection params when switching tabs.
-    // Without this, the params persist in the URL and when the content component
-    // for the newly-active tab mounts/activates it reads the old params and calls
-    // openCard() again even though the user already dismissed the card.
-    clearSelectionParams();
-    setActiveTab(tab);
-    showListPanel();
-    if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
-    else setHasMountedTerdeteksi(true);
-  }, [clearSelectionParams, showListPanel]);
+  const handleAppTabPress = useCallback(
+    (tab: EarthquakeTab) => {
+      clearSelectionParams();
+      setActiveTab(tab);
+      showListPanel();
+
+      if (tab === "GEMPA DIRASAKAN") setHasMountedDirasakan(true);
+      else setHasMountedTerdeteksi(true);
+    },
+    [clearSelectionParams, showListPanel],
+  );
 
   const handleExternalSelectionHandled = useCallback(() => {
     clearSelectionParams();
@@ -461,6 +597,7 @@ export default function History() {
 
   const handleFilterPress = useCallback(() => {
     if (isOpeningFilter) return;
+
     setIsOpeningFilter(true);
     router.push({
       pathname: "/main-menu/filter-gempa-screen",
@@ -472,7 +609,13 @@ export default function History() {
         returnTo: "history",
       },
     });
-  }, [activeTab, effectiveFilter.year, effectiveMonths, isOpeningFilter, router]);
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveMonths,
+    isOpeningFilter,
+    router,
+  ]);
 
   useEffect(() => {
     if (isFocused) {
@@ -497,7 +640,9 @@ export default function History() {
 
   useEffect(() => {
     let isMounted = true;
-    const cacheKey = `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(effectiveMonths)}`;
+    const cacheKey = `${TAB_CACHE[activeTab]}_${effectiveFilter.year}-${serializeFilterMonths(
+      effectiveMonths,
+    )}`;
     const isDir = activeTab === "GEMPA DIRASAKAN";
     const orderField = isDir ? "date" : "time";
 
@@ -512,27 +657,37 @@ export default function History() {
             setListLoading(false);
           }
         }
-      } catch { }
+      } catch {}
 
       // Phase 2: one-shot Firebase fetch
       try {
         const app = getApp();
-        const db = DATABASE_URL ? getDatabase(app, DATABASE_URL) : getDatabase(app);
+        const db = DATABASE_URL
+          ? getDatabase(app, DATABASE_URL)
+          : getDatabase(app);
+
         const snapshots = await Promise.all(
           effectiveMonths.map(async (month) => {
             const range = isDir
               ? buildDirasakanDateRange(effectiveFilter.year, month)
               : buildTerdeteksiTimeRange(effectiveFilter.year, month);
+
             const dataQuery = query(
-              ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
+              ref(
+                db,
+                isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items",
+              ),
               orderByChild(orderField),
               startAt(range.start),
               endAt(range.end),
             );
+
             return get(dataQuery);
           }),
         );
+
         if (!isMounted) return;
+
         const hasAnyData = snapshots.some((snapshot) => snapshot.exists());
         if (!hasAnyData) {
           setItems([]);
@@ -541,41 +696,64 @@ export default function History() {
         }
 
         const combinedRaw: unknown[] = [];
+
         snapshots.forEach((snapshot) => {
           if (!snapshot.exists()) return;
+
           const value = snapshot.val();
           const arr = Array.isArray(value)
             ? value
             : value && typeof value === "object"
               ? Object.values(value)
               : [];
+
           combinedRaw.push(...arr);
         });
 
         const mergedNormalized = isDir
-          ? normalizeDirasakan(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm)
-          : normalizeTerdeteksi(combinedRaw, userLocation.lat, userLocation.lon, haversineDistanceKm);
+          ? normalizeDirasakan(
+              combinedRaw,
+              userLocation.lat,
+              userLocation.lon,
+              haversineDistanceKm,
+              t,
+            )
+          : normalizeTerdeteksi(
+              combinedRaw,
+              userLocation.lat,
+              userLocation.lon,
+              haversineDistanceKm,
+              t,
+            );
 
         const filtered = mergedNormalized.filter((item) =>
           effectiveMonths.some((month) =>
             isDir
               ? matchesDirasakanMonth(item.tanggal, effectiveFilter.year, month)
-              : matchesTerdeteksiMonth(item.tanggal, effectiveFilter.year, month),
+              : matchesTerdeteksiMonth(
+                  item.tanggal,
+                  effectiveFilter.year,
+                  month,
+                ),
           ),
         );
 
         // Deduplicate by id while preserving order
         const seen = new Set<string>();
         const normalized: typeof filtered = [];
+
         for (const it of filtered) {
           const key = String(it.id ?? "");
           if (!key) continue;
           if (seen.has(key)) continue;
+
           seen.add(key);
           normalized.push(it);
         }
 
-        AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(() => { });
+        AsyncStorage.setItem(cacheKey, JSON.stringify(normalized)).catch(
+          () => {},
+        );
         setCacheData(cacheKey, normalized);
 
         if (isMounted) {
@@ -590,16 +768,26 @@ export default function History() {
     // Keep stale items visible while loading — no blank flash
     setListLoading(true);
     void fetchData();
-    return () => { isMounted = false; };
-  }, [activeTab, effectiveFilter.year, effectiveMonths, userLocation.lat, userLocation.lon]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveMonths,
+    userLocation.lat,
+    userLocation.lon,
+    haversineDistanceKm,
+    t,
+  ]);
 
   // ── List item press → fly to marker ──────────────────────────────────────
-  // Sets params which the content component reads as externalSelection.
-  // The content component then calls flyToAndOpen (fly → 300ms delay → card slides up).
 
   const openHistoryForItem = useCallback(
     (item: ListItem) => {
       router.setParams({ selectedEventId: undefined });
+
       setTimeout(() => {
         router.setParams({
           tab: activeTab === "GEMPA DIRASAKAN" ? "dirasakan" : "terdeteksi",
@@ -621,6 +809,7 @@ export default function History() {
           filterMonths: serializeFilterMonths(effectiveMonths),
         });
       }, 0);
+
       // Slide list panel away so map is full screen during fly-in
       hideListPanel();
     },
@@ -630,26 +819,37 @@ export default function History() {
   // ── FlatList helpers ──────────────────────────────────────────────────────
 
   const getItemLayout = useCallback(
-    (_: any, index: number) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index }),
+    (_: any, index: number) => ({
+      length: ITEM_HEIGHT,
+      offset: ITEM_HEIGHT * index,
+      index,
+    }),
     [],
   );
 
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => (
-      <EarthquakeListItem item={item} onPress={openHistoryForItem} />
+      <EarthquakeListItem item={item} onPress={openHistoryForItem} t={t} />
     ),
-    [openHistoryForItem],
+    [openHistoryForItem, t],
   );
 
   const keyExtractor = useCallback((item: ListItem) => item.id, []);
 
   const listEmpty = useMemo(
     () => (
-      <Text style={{ color: "#E6F4FF", textAlign: "center", marginTop: 10, fontSize: 12 }}>
-        Data gempa belum tersedia.
+      <Text
+        style={{
+          color: "#E6F4FF",
+          textAlign: "center",
+          marginTop: 10,
+          fontSize: 12,
+        }}
+      >
+        {t("historyScreen.emptyDataText")}
       </Text>
     ),
-    [],
+    [t],
   );
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
@@ -662,28 +862,53 @@ export default function History() {
           onTabPress={handleAppTabPress}
           disabled={loading}
         />
+
         <View style={styles.designSection}>
           <View style={styles.periodChip}>
             <Text style={styles.periodChipText}>
-              {effectiveMonths.map((month) => MONTH_NAMES_ID[month - 1]).join(", ")} {effectiveFilter.year}
+              {effectiveMonths
+                .map((month) =>
+                  t(`months.${month}`, {
+                    defaultValue: MONTH_NAMES_ID[month - 1],
+                  }),
+                )
+                .join(", ")}{" "}
+              {effectiveFilter.year}
             </Text>
           </View>
+
           <View style={styles.actionRow}>
             <View style={{ flex: 1 }} />
+
             <TouchableOpacity
-              style={[styles.sidePill, styles.sidePillRight, styles.sidePillRightContent]}
+              style={[
+                styles.sidePill,
+                styles.sidePillRight,
+                styles.sidePillRightContent,
+              ]}
               activeOpacity={0.85}
               onPress={handleFilterPress}
               disabled={isOpeningFilter}
             >
               <Ionicons name="options" size={17} color="#FFFFFF" />
-              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>FILTER</Text>
+              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
+                {t("historyScreen.filterBtnText")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
     ),
-    [activeTab, effectiveFilter.year, effectiveMonths, handleAppTabPress, handleFilterPress, isOpeningFilter, loading],
+    [
+      activeTab,
+      effectiveFilter.year,
+      effectiveMonths,
+      handleAppTabPress,
+      handleFilterPress,
+      isOpeningFilter,
+      loading,
+      t,
+    ],
   );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
@@ -702,13 +927,16 @@ export default function History() {
           right: 0,
           bottom: listPanelSlide.interpolate({
             inputRange: [0, 1],
-            outputRange: ["40%", "0%"]
+            outputRange: ["40%", "0%"],
           }),
         }}
       >
         {hasMountedDirasakan && (
           <View
-            style={[styles.tabPane, activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane]}
+            style={[
+              styles.tabPane,
+              activeTab !== "GEMPA DIRASAKAN" && styles.hiddenPane,
+            ]}
             pointerEvents={activeTab === "GEMPA DIRASAKAN" ? "auto" : "none"}
           >
             <GempaDirasakanHistoryContent
@@ -716,7 +944,6 @@ export default function History() {
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
-              // When card is dismissed → slide the list panel back in
               onCardClose={() => showListPanel()}
               onCardOpen={() => hideListPanel()}
               filterYear={effectiveFilter.year}
@@ -728,7 +955,10 @@ export default function History() {
 
         {hasMountedTerdeteksi && (
           <View
-            style={[styles.tabPane, activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane]}
+            style={[
+              styles.tabPane,
+              activeTab !== "GEMPA TERDETEKSI" && styles.hiddenPane,
+            ]}
             pointerEvents={activeTab === "GEMPA TERDETEKSI" ? "auto" : "none"}
           >
             <GempaTerdeteksiHistoryContent
@@ -762,39 +992,49 @@ export default function History() {
           shadowOpacity: 0.1,
           shadowRadius: 8,
           zIndex: 10,
-          // Translate the panel down by its own height (100%) when hidden
-          transform: [{
-            translateY: listPanelSlide.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 500], // large enough to be off-screen
-            }),
-          }],
+          transform: [
+            {
+              translateY: listPanelSlide.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 500],
+              }),
+            },
+          ],
         }}
       >
-          <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-            <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 14, textAlign: "center" }}>
-              {activeTab === "GEMPA DIRASAKAN" ? "Gempa Dirasakan Terbaru" : "Gempa Terdeteksi Terbaru"}
-            </Text>
-          </View>
+        <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontWeight: "bold",
+              fontSize: 14,
+              textAlign: "center",
+            }}
+          >
+            {activeTab === "GEMPA DIRASAKAN"
+              ? t("historyScreen.listTitleDirasakan")
+              : t("historyScreen.listTitleTerdeteksi")}
+          </Text>
+        </View>
 
-          {listLoading && items.length === 0 ? (
-            <SkeletonList />
-          ) : (
-            <FlatList
-              data={items}
-              keyExtractor={keyExtractor}
-              renderItem={renderItem}
-              getItemLayout={getItemLayout}
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={8}
-              initialNumToRender={6}
-              windowSize={3}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
-              ListEmptyComponent={listEmpty}
-            />
-          )}
-        </Animated.View>
+        {listLoading && items.length === 0 ? (
+          <SkeletonList />
+        ) : (
+          <FlatList
+            data={items}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            getItemLayout={getItemLayout}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={8}
+            initialNumToRender={6}
+            windowSize={3}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
+            ListEmptyComponent={listEmpty}
+          />
+        )}
+      </Animated.View>
     </View>
   );
 }
