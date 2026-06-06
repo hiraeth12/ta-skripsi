@@ -9,13 +9,7 @@ import {
 } from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { goBackToAccount } from "../navigation";
 import { useProfileContext } from "../profile-context";
@@ -132,75 +126,70 @@ export default function UbahKataSandi() {
         extraScrollHeight={24}
         keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.inputCard}>
-            {PASSWORD_FIELDS.map(({ label, key }) => (
-              <View key={key} style={styles.inputArea}>
-                <Text style={styles.label}>{label}</Text>
-                <View
-                  style={[
-                    styles.passwordContainer,
-                    key === "konfirmasiPassword" &&
-                      errorVisible &&
-                      styles.inputErrorBorder,
-                  ]}
-                >
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="********"
-                    placeholderTextColor="#999"
-                    secureTextEntry={secure[key]}
-                    value={form[key]}
-                    onChangeText={(txt) => setForm({ ...form, [key]: txt })}
-                    selectionColor="#1E6F9F"
-                  />
-                  <TouchableOpacity onPress={() => toggleSecure(key)}>
-                    <Ionicons
-                      name={secure[key] ? "eye-off-outline" : "eye-outline"}
-                      size={20}
-                      color="#888"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-
-            {errorVisible && (
-              <View style={styles.errorBox}>
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={18}
-                  color="#E11D48"
+        <View style={styles.inputCard}>
+          {PASSWORD_FIELDS.map(({ label, key }) => (
+            <View key={key} style={styles.inputArea}>
+              <Text style={styles.label}>{label}</Text>
+              <View
+                style={[
+                  styles.passwordContainer,
+                  key === "konfirmasiPassword" &&
+                    errorVisible &&
+                    styles.inputErrorBorder,
+                ]}
+              >
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="********"
+                  placeholderTextColor="#999"
+                  secureTextEntry={secure[key]}
+                  value={form[key]}
+                  onChangeText={(txt) => setForm({ ...form, [key]: txt })}
+                  selectionColor="#1E6F9F"
                 />
-                <Text style={styles.errorText}>
-                  Kata sandi baru dan konfirmasi tidak cocok
-                </Text>
+                <TouchableOpacity onPress={() => toggleSecure(key)}>
+                  <Ionicons
+                    name={secure[key] ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#888"
+                  />
+                </TouchableOpacity>
               </View>
-            )}
-
-            <View style={styles.buttonWrapper}>
-              <TouchableOpacity
-                style={styles.btnBatal}
-                onPress={() => goBackToAccount(router)}
-              >
-                <Text style={styles.btnTextBatal}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.btnSimpan}
-                onPress={handleSimpan}
-                disabled={isSaving}
-              >
-                <Text style={styles.btnTextSimpan}>
-                  {isSaving ? "Menyimpan..." : "Simpan"}
-                </Text>
-              </TouchableOpacity>
             </View>
+          ))}
+
+          {errorVisible && (
+            <View style={styles.errorBox}>
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={18}
+                color="#E11D48"
+              />
+              <Text style={styles.errorText}>
+                Kata sandi baru dan konfirmasi tidak cocok
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.buttonWrapper}>
+            <TouchableOpacity
+              style={styles.btnBatal}
+              onPress={() => goBackToAccount(router)}
+            >
+              <Text style={styles.btnTextBatal}>Batal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnSimpan}
+              onPress={handleSimpan}
+              disabled={isSaving}
+            >
+              <Text style={styles.btnTextSimpan}>
+                {isSaving ? "Menyimpan..." : "Simpan"}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <View style={{ height: 40 }} />
-        </ScrollView>
+        </View>
+        <View style={styles.bottomSpacer} />
       </KeyboardAwareScrollView>
       <CustomAlert
         visible={modalConfig.visible}

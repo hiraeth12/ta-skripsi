@@ -3,6 +3,7 @@ import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { WarningTabs } from "@/components/warning-tabs";
 import type { MapViewType } from "@/constants/map";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
@@ -10,7 +11,7 @@ import { shareQuake } from "@/utils/share";
 import type { WzArea, WzLevel } from "@/utils/wzarea-highlights";
 import { Feather } from "@expo/vector-icons";
 import type { ReactNode } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -28,6 +29,7 @@ import {
   safeText,
   type TsunamiEventGroup,
 } from "../utils/tsunami-content-utils";
+import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
 const API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL ?? "";
@@ -70,17 +72,23 @@ function getWarningSubject(subject: string): string {
 type Props = {
   tabBar: ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  onOpenNarasi?: (url: string) => void;
   isActive?: boolean;
 };
 
 export default function TsunamiContent({
   tabBar,
   onLoadingChange,
+  onOpenNarasi,
   isActive = true,
 }: Props) {
   const [eventGroups, setEventGroups] = useState<TsunamiEventGroup[]>([]);
   const [selectedEventIndex, setSelectedEventIndex] = useState(0);
   const [selectedWarningIndex, setSelectedWarningIndex] = useState(0);
+  const [narasiAvailability, setNarasiAvailability] = useState<{
+    warningId: string;
+    url: string;
+  } | null>(null);
   const [tsunamiInfoVisible, setTsunamiInfoVisible] = useState(false);
   const mapRef = useRef<MapViewType | null>(null);
   const latestDataSignatureRef = useRef<string | null>(null);
@@ -110,6 +118,10 @@ export default function TsunamiContent({
     [selectedWarning],
   );
   const selectedWarningSubject = getWarningSubject(selectedWarning.subject);
+  const selectedNarasiUrl =
+    narasiAvailability?.warningId === selectedWarning.id
+      ? narasiAvailability.url
+      : null;
   const selectedMapWzAreas = useMemo(
     () => toMapWzAreas(selectedWarning.wzAreas),
     [selectedWarning.wzAreas],
@@ -170,6 +182,25 @@ export default function TsunamiContent({
       "tsunami",
     );
   }, [selectedGroup, selectedWarning, selectedWarningSubject]);
+
+  useEffect(() => {
+    const candidateNarasiUrl = buildNarasiUrl(selectedWarning.shakemap);
+    const warningId = selectedWarning.id;
+
+    setNarasiAvailability(null);
+    if (!candidateNarasiUrl || warningId === EMPTY_WARNING.id) return;
+
+    const controller = new AbortController();
+    checkTextAssetAvailable(candidateNarasiUrl, controller.signal).then(
+      (available) => {
+        if (!controller.signal.aborted && available) {
+          setNarasiAvailability({ warningId, url: available });
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [selectedWarning.id, selectedWarning.shakemap]);
 
   const fetchTsunamiEvents = useCallback(
     async (
@@ -251,6 +282,16 @@ export default function TsunamiContent({
         {tabBar}
         {showCard && (
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
+            {selectedNarasiUrl && onOpenNarasi && (
+              <TouchableOpacity
+                style={styles.mapButton}
+                onPress={() => onOpenNarasi(selectedNarasiUrl)}
+              >
+                <Feather name="file-text" size={12} color="white" />
+                <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.mapButton}
               onPress={shareSelectedWarning}

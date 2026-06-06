@@ -11,6 +11,23 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		gap: 10,
 	},
+	mapButtons: {
+		flexDirection: "row",
+		gap: 6,
+		alignSelf: "flex-end",
+		paddingHorizontal: 14,
+	},
+	mapButton: {
+		backgroundColor: "#0891B2",
+		paddingHorizontal: 10,
+		paddingVertical: 6,
+		borderRadius: 333,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 4,
+		marginTop: 55,
+	},
+	mapButtonText: { color: "#fff", fontSize: 10 },
 	locationCard: {
 		position: "absolute",
 		bottom: 0,

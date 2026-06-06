@@ -69,7 +69,7 @@ function parseArgs(argv) {
 
 function buildTestEventId(warning) {
   const baseEventId = warning.eventId || warning.warningId || "tsunami_warning";
-  return `${baseEventId}_${warning.warningId}_test_${Date.now()}`;
+  return `${baseEventId}_${warning.warningId}_test`;
 }
 
 function extractSubjectPd(subject) {
@@ -268,8 +268,7 @@ async function testTsunamiNotification() {
         timestamp: warning.timestamp,
         wzAreas: warning.wzAreas,
       },
-      { skipDedupe: true, dryRun: options.dryRun, debugRecipients: true },
-    );
+      { dryRun: options.dryRun, debugRecipients: true },);
 
     if (!options.dryRun && result.eligibleCount === 0) {
       throw new Error(buildNoEligibleRecipientMessage(result));

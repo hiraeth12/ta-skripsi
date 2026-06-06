@@ -2,6 +2,19 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
+  loadingMenuList: {
+    gap: 12,
+    marginTop: 10,
+    padding: 20,
+  },
+  menuScroll: {
+    flex: 1,
+  },
+  menuScrollContent: {
+    flexGrow: 1,
+    gap: 12,
+    paddingBottom: 4,
+  },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -9,6 +22,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingHorizontal: 15,
     borderRadius: 12,
+    gap: 10,
     height: 58,
     elevation: 3,
     shadowColor: "#000",
@@ -16,20 +30,30 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  menuLeft: { 
-    flexDirection: "row", 
-    alignItems: "center" 
+  menuLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
   },
   iconWrapper: {
     width: 40,
+    flexShrink: 0,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
-  menuText: { 
-    fontSize: 15, 
-    fontWeight: "600", 
-    color: "#333" 
+  menuText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  menuRightControl: {
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // MODAL STYLES

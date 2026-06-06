@@ -1,13 +1,12 @@
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/utils/cache";
 import type { UserLocation } from "@/features/main-menu/account/session";
 import { haversineDistanceKm } from "@/utils/geo";
-import { safeText } from "@/features/main-menu/earthquake/utils/tsunami-content-utils";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useRef, useState } from "react";
 import type { TsunamiQuake } from "../components/tsunami-card";
 import { DIRASAKAN_API_URL, TERDETEKSI_API_URL, TSUNAMI_API_URL } from "../constants";
 import type { DirasakanQuake, TerdeteksiQuake } from "../types";
-import { buildShakemapUrl, formatCoord } from "../utils/coord-utils";
+import { buildShakemapUrl, buildNarasiUrl, buildHistoryUrl, formatCoord } from "../utils/coord-utils";
 import { parseDirasakanPayload } from "../utils/parse-dirasakan";
 import { parseTerdeteksiPayload } from "../utils/parse-terdeteksi";
 import { getLatestTsunamiQuake } from "../utils/parse-tsunami";
@@ -23,6 +22,22 @@ function withCacheBuster(url: string): string {
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 
+/**
+ * Cek apakah narasi tersedia untuk event tertentu dengan melakukan HEAD request.
+ * Return URL-nya jika tersedia, null jika tidak.
+ */
+async function checkNarasiAvailable(
+  narasiUrl: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  try {
+    const res = await fetch(narasiUrl, { method: "HEAD", signal });
+    return res.ok ? narasiUrl : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useHomeData(isMountedRef: React.RefObject<boolean>) {
   const [dirasakanData, setDirasakanData] = useState<DirasakanQuake | null>(
     () => getCachedData(CACHE_KEYS.DIRASAKAN) ?? null,
@@ -36,6 +51,11 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
   const [dirasakanShakeMapUrl, setDirasakanShakeMapUrl] = useState<
     string | null
   >(null);
+  // URL narasi resmi: null = belum dicek / tidak tersedia, string = tersedia
+  const [dirasakanNarasiUrl, setDirasakanNarasiUrl] = useState<string | null>(null);
+  const [tsunamiNarasiUrl, setTsunamiNarasiUrl] = useState<string | null>(null);
+  const [terdeteksiHistoryUrl, setTerdeteksiHistoryUrl] = useState<string | null>(null);
+  const terdeteksiHistoryEventIdRef = useRef<string | null>(null);
 
   const fetchLatestHomeCards = useCallback(
     async (
@@ -99,9 +119,27 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
               ? prev
               : data,
           );
-          setDirasakanShakeMapUrl(
-            p.shakemap ? buildShakemapUrl(p.shakemap) : null,
-          );
+
+          // Set shakemap URL
+          const shakemapUrl = p.shakemap ? buildShakemapUrl(p.shakemap) : null;
+          setDirasakanShakeMapUrl(shakemapUrl);
+
+          // Cek dan set narasi URL dari shakemap event ID
+          if (p.shakemap) {
+            const narasiUrl = buildNarasiUrl(p.shakemap);
+            if (narasiUrl) {
+              // Reset dulu ke null (sembunyikan button) sampai cek selesai
+              setDirasakanNarasiUrl(null);
+              const available = await checkNarasiAvailable(narasiUrl, signal);
+              if (isMountedRef.current && !signal?.aborted) {
+                setDirasakanNarasiUrl(available);
+              }
+            } else {
+              setDirasakanNarasiUrl(null);
+            }
+          } else {
+            setDirasakanNarasiUrl(null);
+          }
         }
       }
 
@@ -138,6 +176,19 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         const parsed = parseTerdeteksiPayload(latest);
         if (!parsed) return;
 
+        const latestRecord = latest as Record<string, unknown>;
+        const latestProps =
+          latestRecord.properties && typeof latestRecord.properties === "object"
+            ? (latestRecord.properties as Record<string, unknown>)
+            : {};
+        const featureId = String(
+          latestRecord.id ??
+            latestProps.id ??
+            latestProps.eventid ??
+            latestProps.identifier ??
+            "",
+        ).trim();
+
         const { latitude: uLat, longitude: uLon } = location;
         const latCoord = formatCoord(parsed.latitude);
         const lonCoord = formatCoord(parsed.longitude);
@@ -154,6 +205,7 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
           fase: parsed.fase,
           latitude: parsed.latitude,
           longitude: parsed.longitude,
+          eventId: featureId || undefined,
         };
 
         setCacheData(CACHE_KEYS.TERDETEKSI, data);
@@ -165,6 +217,27 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
               ? prev
               : data,
           );
+
+          const historyUrl = featureId ? buildHistoryUrl(featureId) : null;
+          if (!featureId || !historyUrl) {
+            terdeteksiHistoryEventIdRef.current = null;
+            setTerdeteksiHistoryUrl(null);
+            return;
+          }
+
+          if (terdeteksiHistoryEventIdRef.current !== featureId) {
+            terdeteksiHistoryEventIdRef.current = featureId;
+            setTerdeteksiHistoryUrl(null);
+          }
+
+          const available = await checkNarasiAvailable(historyUrl, signal);
+          if (
+            isMountedRef.current &&
+            !signal?.aborted &&
+            terdeteksiHistoryEventIdRef.current === featureId
+          ) {
+            setTerdeteksiHistoryUrl(available);
+          }
         }
       }
 
@@ -177,7 +250,6 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         const raw = await res.text();
         const parsed = xmlParser.parse(raw) as Record<string, unknown>;
 
-        // getLatestTsunamiQuake menggantikan getLatestTsunamiInfo + getTsunamiInfoItems + parseTsunamiPayload
         const data = getLatestTsunamiQuake(parsed);
         if (!data || signal?.aborted || !isMountedRef.current) return;
 
@@ -190,6 +262,22 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
               ? prev
               : data,
           );
+
+          // Cek dan set narasi URL dari shakemap tsunami
+          if (data.shakemap) {
+            const narasiUrl = buildNarasiUrl(data.shakemap);
+            if (narasiUrl) {
+              setTsunamiNarasiUrl(null);
+              const available = await checkNarasiAvailable(narasiUrl, signal);
+              if (isMountedRef.current && !signal?.aborted) {
+                setTsunamiNarasiUrl(available);
+              }
+            } else {
+              setTsunamiNarasiUrl(null);
+            }
+          } else {
+            setTsunamiNarasiUrl(null);
+          }
         }
       }
 
@@ -206,6 +294,9 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
     tsunamiData,
     setTsunamiData,
     dirasakanShakeMapUrl,
+    dirasakanNarasiUrl,
+    tsunamiNarasiUrl,
+    terdeteksiHistoryUrl,
     fetchLatestHomeCards,
   };
 }

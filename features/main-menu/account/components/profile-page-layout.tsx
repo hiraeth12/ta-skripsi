@@ -31,10 +31,20 @@ export default function ProfilePageLayout({
           </TouchableOpacity> */}
         </View>
 
-        <Text style={styles.userName}>{headerName}</Text>
-        <Text style={styles.userDetails}>{headerEmail}</Text>
-        <Text style={styles.userDetails}>{headerLocation}</Text>
-        {headerPhone ? <Text style={styles.userDetails}>{headerPhone}</Text> : null}
+        <Text style={styles.userName} numberOfLines={1}>
+          {headerName}
+        </Text>
+        <Text style={styles.userDetails} numberOfLines={1}>
+          {headerEmail}
+        </Text>
+        <Text style={styles.userDetails} numberOfLines={1}>
+          {headerLocation}
+        </Text>
+        {headerPhone ? (
+          <Text style={styles.userDetails} numberOfLines={1}>
+            {headerPhone}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.menuContainer}>
@@ -47,7 +57,6 @@ export default function ProfilePageLayout({
           {children}
         </View>
       </View>
-      <View style={styles.menuBottomFill} />
     </View>
   );
 }
@@ -56,6 +65,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   headerSection: {
     alignItems: "center",
+    paddingHorizontal: 20,
     paddingVertical: 20,
     backgroundColor: "#fff",
   },
@@ -93,23 +103,29 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000",
     marginBottom: 5,
+    maxWidth: "100%",
+    textAlign: "center",
   },
-  userDetails: { fontSize: 14, color: "#555", marginBottom: 2 },
+  userDetails: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 2,
+    maxWidth: "100%",
+    textAlign: "center",
+  },
   menuContainer: {
+    flex: 1,
     backgroundColor: "#0C4A6E",
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
   },
-  menuBottomFill: {
-    flex: 1,
-    backgroundColor: "#0C4A6E",
-  },
   menuContent: {
+    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 20,
-    gap: 12
+    gap: 12,
   },
-  titleRow: { marginBottom: 15 },
+  titleRow: { marginBottom: 3 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 });

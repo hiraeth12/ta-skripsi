@@ -2,6 +2,7 @@ import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import type { MapViewType } from "@/constants/map";
+import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
@@ -10,6 +11,7 @@ import { shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
+import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
@@ -32,15 +34,18 @@ type LatestQuake = {
 type Props = {
   tabBar: React.ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  onOpenHistory?: (url: string) => void;
   isActive?: boolean;
 };
 
 export default function GempaTerdeteksi({
   tabBar,
   onLoadingChange,
+  onOpenHistory,
   isActive = true,
 }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
+  const [historyUrl, setHistoryUrl] = useState<string | null>(null);
   const mapRef = useRef<MapViewType | null>(null);
   const { networkErrorVisible, showNetworkError, dismissNetworkError } =
     useNetworkError();
@@ -95,8 +100,12 @@ export default function GempaTerdeteksi({
         if (isNaN(latitude) || isNaN(longitude))
           return { changed: false, ok: true };
 
-        const eventId = `${props.time ?? ""}_${latitude}_${longitude}`;
-        const isSameEvent = eventId && eventId === latestEventIdRef.current;
+        const sourceEventId = String(
+          latest?.id ?? props?.id ?? props?.eventid ?? props?.identifier ?? "",
+        ).trim();
+        const eventKey =
+          sourceEventId || `${props.time ?? ""}_${latitude}_${longitude}`;
+        const isSameEvent = eventKey && eventKey === latestEventIdRef.current;
 
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
@@ -112,7 +121,7 @@ export default function GempaTerdeteksi({
 
         if (isSameEvent) return { changed: false, ok: true };
 
-        latestEventIdRef.current = eventId;
+        latestEventIdRef.current = eventKey;
 
         const [tanggal, jamRaw] = (props.time ?? "").split(" ");
         const jam = (jamRaw ?? "").split(".")[0];
@@ -131,6 +140,7 @@ export default function GempaTerdeteksi({
           latText: formatLatText(latitude),
           lonText: formatLonText(longitude),
         });
+        setHistoryUrl(null);
 
         if (!wasOffline) {
           mapRef.current?.animateToRegion(
@@ -139,6 +149,19 @@ export default function GempaTerdeteksi({
           );
         }
         isFirstLoadRef.current = false;
+
+        const candidateHistoryUrl = sourceEventId
+          ? buildHistoryUrl(sourceEventId)
+          : null;
+        if (candidateHistoryUrl) {
+          const available = await checkTextAssetAvailable(
+            candidateHistoryUrl,
+            abortSignal,
+          );
+          if (!abortSignal?.aborted && latestEventIdRef.current === eventKey) {
+            setHistoryUrl(available);
+          }
+        }
 
         return { changed: true, ok: true };
       } catch (e) {
@@ -281,6 +304,15 @@ export default function GempaTerdeteksi({
               value={latestQuake.felt}
               styles={styles}
             />
+          )}
+          {historyUrl && onOpenHistory && (
+            <TouchableOpacity
+              style={styles.simulasiBtn}
+              activeOpacity={0.8}
+              onPress={() => historyUrl && onOpenHistory(historyUrl)}
+            >
+              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+            </TouchableOpacity>
           )}
         </Animated.View>
       )}

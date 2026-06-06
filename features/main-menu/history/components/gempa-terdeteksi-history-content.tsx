@@ -2,6 +2,8 @@ import EarthquakeMap from "@/components/ui/earthquake-map";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
+import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
+import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { formatLatText, formatLonText, parseCoordinateText } from "@/utils/geo";
 import {
@@ -15,7 +17,7 @@ import {
     startAt,
 } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, View } from "react-native";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
     buildTerdeteksiTimeRange,
@@ -35,6 +37,7 @@ const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 
 type QuakeItem = {
   eventId: string;
+  historyEventId?: string;
   latitude: number;
   longitude: number;
   magnitude: string;
@@ -76,6 +79,7 @@ type Props = {
   onListSelectionHandled?: () => void;
   onCardClose?: () => void;
   onCardOpen?: () => void;
+  onOpenHistory?: (url: string) => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
   filterYear?: number;
@@ -83,6 +87,27 @@ type Props = {
 };
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function getHistoryEventId(item: any): string {
+  return firstText(
+    item?.id,
+    item?.properties?.id,
+    item?.properties?.eventid,
+    item?.properties?.eventId,
+    item?.properties?.identifier,
+    item?.eventid,
+    item?.eventId,
+    item?.source?.id,
+  );
+}
 
 function buildQuakeItem(item: any, index: number): QuakeItem | null {
   const coords = item?.geometry?.coordinates || item?.coordinates;
@@ -97,16 +122,14 @@ function buildQuakeItem(item: any, index: number): QuakeItem | null {
   const props = item?.properties ?? item;
   const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
   const jam = (jamRaw ?? "").split(".")[0];
+  const historyEventId = getHistoryEventId(item);
 
-  const eventId = String(
-    props?.eventId ??
-      props?.id ??
-      props?.eventid ??
-      `${props?.time ?? ""}-${latitude}-${longitude}-${index}`,
-  );
+  const eventId =
+    historyEventId || `${props?.time ?? ""}-${latitude}-${longitude}-${index}`;
 
   return {
     eventId,
+    historyEventId: historyEventId || undefined,
     latitude,
     longitude,
     magnitude: parseFloat(
@@ -132,6 +155,7 @@ export function GempaTerdeteksiHistoryContent({
   onListSelectionHandled,
   onCardClose,
   onCardOpen,
+  onOpenHistory,
   externalSelection,
   isActive = true,
   filterYear,
@@ -163,6 +187,7 @@ export function GempaTerdeteksiHistoryContent({
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
+  const [historyUrl, setHistoryUrl] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
@@ -207,6 +232,27 @@ export function GempaTerdeteksiHistoryContent({
     selectedIndex !== null && quakes[selectedIndex]
       ? quakes[selectedIndex]
       : overrideQuake;
+
+  useEffect(() => {
+    const candidateHistoryUrl = activeQuake?.historyEventId
+      ? buildHistoryUrl(activeQuake.historyEventId)
+      : null;
+
+    setHistoryUrl(null);
+    if (!candidateHistoryUrl) return;
+
+    const controller = new AbortController();
+
+    void checkTextAssetAvailable(candidateHistoryUrl, controller.signal).then(
+      (availableUrl) => {
+        if (!controller.signal.aborted) {
+          setHistoryUrl(availableUrl);
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [activeQuake?.historyEventId]);
 
   const markerCoordinates = useMemo(
     () =>
@@ -333,6 +379,7 @@ export function GempaTerdeteksiHistoryContent({
         ? quakes[targetIndex]
         : {
             eventId: externalSelection.eventId,
+            historyEventId: undefined,
             latitude: externalSelection.latitude,
             longitude: externalSelection.longitude,
             magnitude: externalSelection.magnitude,
@@ -593,6 +640,16 @@ export function GempaTerdeteksiHistoryContent({
               value={activeQuake.felt}
               styles={styles}
             />
+          )}
+
+          {historyUrl && onOpenHistory && (
+            <TouchableOpacity
+              style={styles.simulasiBtn}
+              activeOpacity={0.8}
+              onPress={() => onOpenHistory(historyUrl)}
+            >
+              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+            </TouchableOpacity>
           )}
         </Animated.View>
       )}

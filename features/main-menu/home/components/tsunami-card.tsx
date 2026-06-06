@@ -31,12 +31,18 @@ export const TsunamiCard = ({
   data,
   onShakeMap,
   hasShakeMap,
+  onNarasi,
+  hasNarasi,
   onCardPress,
   onShare,
 }: {
   data: TsunamiQuake | null;
   onShakeMap: () => void;
   hasShakeMap: boolean;
+  /** Callback untuk membuka modal narasi resmi BMKG */
+  onNarasi: () => void;
+  /** true = narasi tersedia dan button ditampilkan */
+  hasNarasi: boolean;
   onCardPress: () => void;
   onShare: () => void;
 }) => {
@@ -74,22 +80,39 @@ export const TsunamiCard = ({
           </View>
         ) : (
           <Image
-            source={require("../../../../assets/images/navigation-map.png")}
+            source={require("@/assets/images/navigation-map.png")}
             style={styles.mapImage}
           />
         )}
         <View style={styles.mapButtons}>
-          <TouchableOpacity
-            style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
-            onPress={(e) => {
-              e.stopPropagation();
-              onShakeMap();
-            }}
-            disabled={!hasShakeMap}
-          >
-            <Feather name="map" size={12} color="white" />
-            <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
-          </TouchableOpacity>
+          {/* Button NARASI RESMI: hanya tampil jika hasNarasi = true */}
+          {hasNarasi && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onNarasi();
+              }}
+            >
+              <Feather name="file-text" size={12} color="white" />
+              <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Button PETA GUNCANGAN: hanya tampil jika hasShakeMap = true */}
+          {hasShakeMap && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onShakeMap();
+              }}
+            >
+              <Feather name="map" size={12} color="white" />
+              <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.mapButton}
             onPress={(e) => {

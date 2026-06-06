@@ -5,11 +5,14 @@ import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { WarningTabs } from "@/components/warning-tabs";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
+import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/utils/cache";
 import { formatLatText, formatLonText } from "@/utils/geo";
 import { buildTsunamiMapSlides, safeText } from "@/utils/tsunami-shared-utils";
 import type { WzArea, WzLevel } from "@/utils/wzarea-highlights";
+import { Feather } from "@expo/vector-icons";
 import { getDatabase } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -161,6 +164,7 @@ type Props = {
   onListSelectionHandled?: () => void;
   onCardClose?: () => void;
   onCardOpen?: () => void;
+  onOpenNarasi?: (url: string) => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
   filters?: TsunamiHistoryFilters;
@@ -174,6 +178,7 @@ export function TsunamiHistoryContent({
   onListSelectionHandled,
   onCardClose,
   onCardOpen,
+  onOpenNarasi,
   externalSelection,
   isActive = true,
   filters,
@@ -192,6 +197,10 @@ export function TsunamiHistoryContent({
   const [overrideEvent, setOverrideEvent] =
     useState<TsunamiHistoryEvent | null>(null);
   const [selectedWarningIndex, setSelectedWarningIndex] = useState(0);
+  const [narasiWarning, setNarasiWarning] = useState<{
+    warningId: string;
+    url: string;
+  } | null>(null);
   const [tsunamiInfoVisible, setTsunamiInfoVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -209,6 +218,9 @@ export function TsunamiHistoryContent({
   const activeWarning =
     activeEvent?.warnings[selectedWarningIndex] ??
     getLatestWarning(activeEvent);
+  const activeWarningKey = activeWarning.warningId || activeWarning.id;
+  const activeNarasiUrl =
+    narasiWarning?.warningId === activeWarningKey ? narasiWarning.url : null;
 
   const tsunamiMapSlides = useMemo(
     () => buildTsunamiMapSlides(activeWarning),
@@ -254,6 +266,30 @@ export function TsunamiHistoryContent({
       : activeEvent?.latestHeadline;
 
   useEffect(() => {
+    const candidateNarasiUrl = activeWarning.shakemap
+      ? buildNarasiUrl(activeWarning.shakemap)
+      : null;
+
+    setNarasiWarning(null);
+    if (!candidateNarasiUrl || activeWarningKey === EMPTY_WARNING.id) return;
+
+    const controller = new AbortController();
+
+    void checkTextAssetAvailable(candidateNarasiUrl, controller.signal).then(
+      (availableUrl) => {
+        if (!controller.signal.aborted && availableUrl) {
+          setNarasiWarning({
+            warningId: activeWarningKey,
+            url: availableUrl,
+          });
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [activeWarning.shakemap, activeWarningKey]);
+
+  useEffect(() => {
     if (tsunamiMapSlides.length > 0) {
       preloadMapSlides(tsunamiMapSlides);
     }
@@ -277,6 +313,7 @@ export function TsunamiHistoryContent({
     showCardRef,
     translateY,
     opacity,
+    btnOpacity,
     panResponder,
     openCard: openCardAnimation,
     dismissCard: dismissCardAnimation,
@@ -502,7 +539,20 @@ export function TsunamiHistoryContent({
         wzAreas={activeMapWzAreas}
       />
 
-      <View style={styles.topControls}>{tabBar}</View>
+      <View style={styles.topControls}>
+        {tabBar}
+        {showCard && activeNarasiUrl && onOpenNarasi && (
+          <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => onOpenNarasi(activeNarasiUrl)}
+            >
+              <Feather name="file-text" size={12} color="white" />
+              <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </View>
 
       {showCard && activeEvent && (
         <Animated.View

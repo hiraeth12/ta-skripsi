@@ -27,6 +27,7 @@ export type TerdeteksiQuake = {
   fase: string;
   latitude: number;
   longitude: number;
+  eventId?: string;
 };
 
 export interface FirebaseLocation extends GeoLocation {

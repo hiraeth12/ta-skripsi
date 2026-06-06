@@ -1,4 +1,6 @@
 import EarthquakeTabBar from "@/components/ui/earthquake-tab-bar";
+import { ModalHistoricalProcess } from "@/components/ui/modal-historical-process";
+import { ModalNarasi } from "@/components/ui/modal-narasi";
 import Skeleton from "@/components/ui/skeleton";
 import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -293,11 +295,13 @@ export default function History() {
     filterMonths?: string;
     restoreListPanel?: string;
     restoreListPanelToken?: string;
+    selectedEventId?: string;
   }>();
 
   // ── Tab ──────────────────────────────────────────────────────────────────
 
   const tabParam = asSingle(searchParams.tab);
+  const selectedEventId = asSingle(searchParams.selectedEventId);
   const initialTab: HistoryEarthquakeTab =
     tabParam === "tsunami"
       ? "RIWAYAT TSUNAMI"
@@ -307,6 +311,19 @@ export default function History() {
 
   const [activeTab, setActiveTab] = useState<HistoryEarthquakeTab>(initialTab);
   const [loading, setLoading] = useState(false);
+  const [isHistoryCardOpen, setIsHistoryCardOpen] = useState(
+    Boolean(selectedEventId),
+  );
+  const [narasiVisible, setNarasiVisible] = useState(false);
+  const [narasiHtmlContent, setNarasiHtmlContent] = useState<string | null>(
+    null,
+  );
+  const [narasiLoading, setNarasiLoading] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyRawContent, setHistoryRawContent] = useState<string | null>(
+    null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(
     initialTab === "GEMPA DIRASAKAN",
   );
@@ -378,9 +395,6 @@ export default function History() {
 
   // ── Panel animation ───────────────────────────────────────────────────────
 
-  const { selectedEventId } = useLocalSearchParams<{
-    selectedEventId?: string;
-  }>();
   const listPanelSlide = useRef(
     new Animated.Value(selectedEventId ? 1 : 0),
   ).current;
@@ -388,9 +402,16 @@ export default function History() {
   const cardOpenRef = useRef(Boolean(selectedEventId));
   const lastRestoreListPanelTokenRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (selectedEventId) {
+      setIsHistoryCardOpen(true);
+    }
+  }, [selectedEventId]);
+
   const showListPanel = useCallback(() => {
     listPanelVisibleRef.current = true;
     cardOpenRef.current = false;
+    setIsHistoryCardOpen(false);
     Animated.timing(listPanelSlide, {
       toValue: 0,
       duration: 400,
@@ -411,6 +432,7 @@ export default function History() {
 
   const handleCardOpen = useCallback(() => {
     cardOpenRef.current = true;
+    setIsHistoryCardOpen(true);
     hideListPanel();
   }, [hideListPanel]);
 
@@ -532,6 +554,7 @@ export default function History() {
         router.setParams(nextParams);
       }, 0);
       cardOpenRef.current = true;
+      setIsHistoryCardOpen(true);
       hideListPanel();
     },
     [activeTab, effectiveFilter.year, effectiveMonths, hideListPanel, router],
@@ -606,35 +629,38 @@ export default function History() {
           disabled={loading}
           tabs={HISTORY_TABS}
         />
-        <View style={styles.designSection}>
-          <View style={styles.periodChip}>
-            <Text style={styles.periodChipText}>{periodLabel}</Text>
+        {!isHistoryCardOpen && (
+          <View style={styles.designSection}>
+            <View style={styles.periodChip}>
+              <Text style={styles.periodChipText}>{periodLabel}</Text>
+            </View>
+            <View style={styles.actionRow}>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={[
+                  styles.sidePill,
+                  styles.sidePillRight,
+                  styles.sidePillRightContent,
+                ]}
+                activeOpacity={0.85}
+                onPress={handleFilterPress}
+                disabled={isOpeningFilter}
+              >
+                <Ionicons name="options" size={17} color="#FFFFFF" />
+                <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
+                  FILTER
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.actionRow}>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={[
-                styles.sidePill,
-                styles.sidePillRight,
-                styles.sidePillRightContent,
-              ]}
-              activeOpacity={0.85}
-              onPress={handleFilterPress}
-              disabled={isOpeningFilter}
-            >
-              <Ionicons name="options" size={17} color="#FFFFFF" />
-              <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
-                FILTER
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        )}
       </View>
     ),
     [
       activeTab,
       handleAppTabPress,
       handleFilterPress,
+      isHistoryCardOpen,
       isOpeningFilter,
       loading,
       periodLabel,
@@ -645,6 +671,40 @@ export default function History() {
     () => clearSelectionParams(),
     [clearSelectionParams],
   );
+
+  const openNarasi = useCallback(async (url: string) => {
+    setNarasiHtmlContent(null);
+    setNarasiLoading(true);
+    setNarasiVisible(true);
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`narasi fetch failed: ${res.status}`);
+      const text = await res.text();
+      setNarasiHtmlContent(text);
+    } catch {
+      setNarasiHtmlContent(null);
+    } finally {
+      setNarasiLoading(false);
+    }
+  }, []);
+
+  const openHistory = useCallback(async (url: string) => {
+    setHistoryRawContent(null);
+    setHistoryLoading(true);
+    setHistoryVisible(true);
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
+      const text = await res.text();
+      setHistoryRawContent(text);
+    } catch {
+      setHistoryRawContent(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
@@ -681,6 +741,7 @@ export default function History() {
               onListSelectionHandled={handleExternalSelectionHandled}
               onCardClose={handleCardClose}
               onCardOpen={handleCardOpen}
+              onOpenNarasi={openNarasi}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={dirasakanActive}
@@ -702,6 +763,7 @@ export default function History() {
               onListSelectionHandled={handleExternalSelectionHandled}
               onCardClose={handleCardClose}
               onCardOpen={handleCardOpen}
+              onOpenHistory={openHistory}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
               isActive={terdeteksiActive}
@@ -723,6 +785,7 @@ export default function History() {
               onListSelectionHandled={handleExternalSelectionHandled}
               onCardClose={handleCardClose}
               onCardOpen={handleCardOpen}
+              onOpenNarasi={openNarasi}
               filters={tsunamiFilters}
               isActive={tsunamiActive}
             />
@@ -739,6 +802,24 @@ export default function History() {
         renderItem={renderItem}
         slideAnim={listPanelSlide}
         title={listTitle}
+      />
+      <ModalNarasi
+        visible={narasiVisible}
+        htmlContent={narasiHtmlContent}
+        loading={narasiLoading}
+        onClose={() => {
+          setNarasiVisible(false);
+          setNarasiHtmlContent(null);
+        }}
+      />
+      <ModalHistoricalProcess
+        visible={historyVisible}
+        rawContent={historyRawContent}
+        loading={historyLoading}
+        onClose={() => {
+          setHistoryVisible(false);
+          setHistoryRawContent(null);
+        }}
       />
     </View>
   );

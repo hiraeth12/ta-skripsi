@@ -28,7 +28,6 @@ export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps
     >
       <View style={styles.modalOverlayBottom}>
         <View style={[styles.modalCardBottom, { height: height * 0.9 }]}>
-          <View style={styles.handleBar} />
           <View style={styles.modalHeaderBottom}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
@@ -49,7 +48,7 @@ export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps
           </ScrollView>
           <View style={styles.modalFooter}>
             <Text style={styles.scrollHint}>
-              * Data diperbarui secara otomatis dari BMKG ShakeMap
+              * Data diperbarui secara otomatis oleh BMKG 
             </Text>
           </View>
         </View>
@@ -69,14 +68,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     width: "100%",
-  },
-  handleBar: {
-    width: 40,
-    height: 5,
-    backgroundColor: "#ccc",
-    borderRadius: 10,
-    alignSelf: "center",
-    marginTop: 12,
   },
   modalHeaderBottom: {
     flexDirection: "row",
