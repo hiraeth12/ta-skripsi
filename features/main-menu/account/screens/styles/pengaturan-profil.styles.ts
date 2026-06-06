@@ -79,6 +79,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingBottom: 20,
   },
 
@@ -156,6 +157,9 @@ export const styles = StyleSheet.create({
     color: "#E11D48",
     fontWeight: "bold",
     marginLeft: 8,
+  },
+  bottomSpacer: {
+    height: 40,
   },
   modalOverlay: {
     flex: 1,

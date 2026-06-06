@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { getDatabase } from "./firebase-admin-config.js";
@@ -101,13 +100,6 @@ function dedupKeyForItem(item) {
   ].join("|");
 }
 
-function createPayloadChecksum(itemsByKey) {
-  return crypto
-    .createHash("sha1")
-    .update(JSON.stringify(itemsByKey))
-    .digest("hex");
-}
-
 async function syncOnce() {
   const envPath = path.resolve(process.cwd(), ".env");
   const env = readEnvFile(envPath);
@@ -153,6 +145,7 @@ async function syncOnce() {
   const historyFeatures = parseDetectedFeatures(historyRawText);
   const latestFeatures = parseDetectedFeatures(latestRawText);
 
+  // Merge kedua API dan dedup berdasarkan eventid
   const mergedItems = [
     ...historyFeatures.map((feature, index) =>
       parseDetectedItem(feature, index, "histori"),
@@ -176,62 +169,62 @@ async function syncOnce() {
     String(b.time).localeCompare(String(a.time)),
   );
 
-  const latestItem = uniqueItems[0] ?? null;
-
-  const itemsByKey = {};
-  for (const item of uniqueItems) {
-    const key = dedupKeyForItem(item)
-      .replace(/[.$#[\]/]/g, "_")
-      .replace(/\s+/g, "_");
-    itemsByKey[key] = item;
-  }
-
-  const payload = {
-    sourceUrls: {
-      history: historyApiUrl,
-      latest: latestApiUrl,
-    },
-    filteredFromYear: 2023,
-    syncedAt: new Date().toISOString(),
-    totalItems: uniqueItems.length,
-    lastEventId: latestItem?.eventid ?? null,
-    items: itemsByKey,
-    datasetChecksum: createPayloadChecksum(itemsByKey),
-  };
-
-  // FIX: Konsisten pakai Admin SDK (bukan fetch REST)
-  const db = getDatabase();
-  const currentMetaRes = await db.ref("gempa_terdeteksi").get();
-
-  let currentData = {};
-  if (currentMetaRes.exists()) {
-    currentData = currentMetaRes.val();
-  }
-
-  const currentLastEventId = String(currentData?.lastEventId ?? "");
-  const currentTotalItems = Number(currentData?.totalItems ?? 0);
-  const currentChecksum = String(currentData?.datasetChecksum ?? "");
-  const nextLastEventId = String(payload.lastEventId ?? "");
-
-  if (
-    currentLastEventId === nextLastEventId &&
-    currentTotalItems === payload.totalItems &&
-    currentChecksum === payload.datasetChecksum
-  ) {
+  if (uniqueItems.length === 0) {
     return {
       ok: true,
       skipped: true,
-      reason: "No new merged data",
+      reason: "No valid items from API",
       writePath: "/gempa_terdeteksi",
-      totalItems: payload.totalItems,
-      lastEventId: payload.lastEventId,
+      lastEventId: null,
     };
   }
 
-  await db.ref("gempa_terdeteksi").set(payload);
+  const latestItem = uniqueItems[0];
+  const latestEventId = latestItem.eventid;
 
-  const verifySnapshot = await db.ref("gempa_terdeteksi/totalItems").get();
-  const verifyTotalItems = verifySnapshot.exists() ? verifySnapshot.val() : null;
+  const db = getDatabase();
+
+  // 1 read ringan — hanya ambil lastEventId yang tersimpan
+  const lastEventIdSnap = await db.ref("gempa_terdeteksi/lastEventId").get();
+  const storedLastEventId = lastEventIdSnap.exists()
+    ? String(lastEventIdSnap.val())
+    : null;
+
+  // Filter: hanya item yang eventid-nya lebih baru dari yang tersimpan
+  // eventid format YYYYMMDDHHmmss — aman dibandingkan sebagai string
+  const newItems = storedLastEventId
+    ? uniqueItems.filter((item) => String(item.eventid) > storedLastEventId)
+    : uniqueItems;
+
+  if (newItems.length === 0) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "No new items from API",
+      writePath: "/gempa_terdeteksi",
+      lastEventId: latestEventId,
+    };
+  }
+
+  // Bangun updates — hanya item baru
+  const updates = {};
+  for (const item of newItems) {
+    const key = dedupKeyForItem(item)
+      .replace(/[.$#[\]/]/g, "_")
+      .replace(/\s+/g, "_");
+    updates[`gempa_terdeteksi/items/${key}`] = item;
+  }
+
+  // Update metadata
+  updates["gempa_terdeteksi/lastEventId"] = latestEventId;
+  updates["gempa_terdeteksi/syncedAt"] = new Date().toISOString();
+  updates["gempa_terdeteksi/sourceUrls"] = {
+    history: historyApiUrl,
+    latest: latestApiUrl,
+  };
+  updates["gempa_terdeteksi/filteredFromYear"] = 2023;
+
+  await db.ref().update(updates);
 
   return {
     ok: true,
@@ -239,9 +232,8 @@ async function syncOnce() {
     writePath: "/gempa_terdeteksi",
     filteredFromYear: 2023,
     mergedFrom: ["histori", "gempaQL"],
-    writtenItems: uniqueItems.length,
-    verifiedTotalItems: verifyTotalItems,
-    lastEventId: payload.lastEventId,
+    newItems: newItems.length,
+    lastEventId: latestEventId,
   };
 }
 
@@ -268,7 +260,6 @@ async function run() {
     return;
   }
 
-  // FIX: Tambah try/catch di single run mode
   try {
     const result = await syncOnce();
     console.log("[sync] Done:", JSON.stringify(result));
@@ -278,7 +269,6 @@ async function run() {
   }
 }
 
-// FIX: Tambah .finally() agar Firebase Admin connection tidak menggantung
 run().finally(() => {
   process.exit(0);
 });

@@ -79,8 +79,7 @@ export const styles = StyleSheet.create({
 
   mainContentContainer: {
     flex: 1,
-    paddingBottom: 20,
-    justifyContent: "space-between", // Pushes button to bottom, card takes remaining space
+    minHeight: 0,
   },
   infoCard: {
     backgroundColor: "#fff",
@@ -88,7 +87,7 @@ export const styles = StyleSheet.create({
     padding: 20,
     flex: 1,          // Fills available space between top and button
     flexShrink: 1,    // Allows card to shrink so button is never hidden
-    marginBottom: 12,
+    minHeight: 0,
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -122,8 +121,6 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   btnBack: {
-    marginTop: 8,
-    marginBottom: 10,
     paddingVertical: 14,
     borderRadius: 10,
     borderWidth: 1.5,

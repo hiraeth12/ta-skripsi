@@ -7,12 +7,13 @@ import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    Modal,
-    Pressable,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Modal,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Skeleton from "@/components/ui/skeleton";
 import { saveFcmTokenToDatabase } from "@/utils/fcm";
@@ -149,7 +150,7 @@ export default function Account() {
           />
           <Skeleton width={200} height={14} borderRadius={4} />
         </View>
-        <View style={{ padding: 20, marginTop: 10 }}>
+        <View style={styles.loadingMenuList}>
           {[...Array(6)].map((_, i) => (
             <View key={i} style={styles.menuItem}>
               <View style={styles.menuLeft}>
@@ -179,53 +180,63 @@ export default function Account() {
         headerLocation={profile.location}
         headerInitials={profile.initials}
       >
-        <MenuLink
-          icon="account-circle-outline"
-          title="Pengaturan Profil"
-          onPress={() => navigate("/main-menu/pengaturan")}
-        />
-        <MenuLink
-          icon="lock-outline"
-          title="Ubah Kata Sandi"
-          onPress={() => navigate("/main-menu/ubah-kata-sandi")}
-        />
-        <MenuLink
-          icon="map-marker-outline"
-          title="Ubah Lokasi"
-          onPress={() => navigate("/main-menu/ubah-lokasi")}
-        />
-        <MenuLink
-          icon="earth"
-          title="Ubah Bahasa"
-          onPress={() => navigate("/main-menu/ubah-bahasa")}
-        />
+        <ScrollView
+          style={styles.menuScroll}
+          contentContainerStyle={styles.menuScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <MenuLink
+            icon="account-circle-outline"
+            title="Pengaturan Profil"
+            onPress={() => navigate("/main-menu/pengaturan")}
+          />
+          <MenuLink
+            icon="lock-outline"
+            title="Ubah Kata Sandi"
+            onPress={() => navigate("/main-menu/ubah-kata-sandi")}
+          />
+          <MenuLink
+            icon="map-marker-outline"
+            title="Ubah Lokasi"
+            onPress={() => navigate("/main-menu/ubah-lokasi")}
+          />
+          <MenuLink
+            icon="earth"
+            title="Ubah Bahasa"
+            onPress={() => navigate("/main-menu/ubah-bahasa")}
+          />
 
-        <View style={styles.menuItem}>
-          <View style={styles.menuLeft}>
-            <View style={styles.iconWrapper}>
-              <Ionicons
-                name="notifications-outline"
-                size={25}
-                color="#1E6F9F"
+          <View style={styles.menuItem}>
+            <View style={styles.menuLeft}>
+              <View style={styles.iconWrapper}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={25}
+                  color="#1E6F9F"
+                />
+              </View>
+              <Text style={styles.menuText} numberOfLines={1}>
+                Notifikasi Push
+              </Text>
+            </View>
+            <View style={styles.menuRightControl}>
+              <Switch
+                trackColor={{ false: "#D1D1D1", true: "#B2D8EC" }}
+                thumbColor={isNotificationsEnabled ? "#1E6F9F" : "#f4f3f4"}
+                onValueChange={handleToggleNotification}
+                value={isNotificationsEnabled}
+                disabled={isToggleProcessing}
+                style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
               />
             </View>
-            <Text style={styles.menuText}>Notifikasi Push</Text>
           </View>
-          <Switch
-            trackColor={{ false: "#D1D1D1", true: "#B2D8EC" }}
-            thumbColor={isNotificationsEnabled ? "#1E6F9F" : "#f4f3f4"}
-            onValueChange={handleToggleNotification}
-            value={isNotificationsEnabled}
-            disabled={isToggleProcessing}
-            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-          />
-        </View>
 
-        <MenuLink
-          icon="cellphone-information"
-          title="Tentang Aplikasi"
-          onPress={() => navigate("/main-menu/tentang-aplikasi")}
-        />
+          <MenuLink
+            icon="cellphone-information"
+            title="Tentang Aplikasi"
+            onPress={() => navigate("/main-menu/tentang-aplikasi")}
+          />
+        </ScrollView>
       </ProfilePageLayout>
 
       <Modal visible={showNotifModal} transparent animationType="fade">
@@ -271,8 +282,12 @@ const MenuLink = ({ icon, title, onPress }: any) => (
       <View style={styles.iconWrapper}>
         <MaterialCommunityIcons name={icon} size={25} color="#1E6F9F" />
       </View>
-      <Text style={styles.menuText}>{title}</Text>
+      <Text style={styles.menuText} numberOfLines={1}>
+        {title}
+      </Text>
     </View>
-    <Ionicons name="chevron-forward" size={18} color="#999" />
+    <View style={styles.menuRightControl}>
+      <Ionicons name="chevron-forward" size={18} color="#999" />
+    </View>
   </TouchableOpacity>
 );

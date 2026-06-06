@@ -58,6 +58,14 @@ export const styles = StyleSheet.create({
   titleRow: { marginBottom: 15 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
 
+  languageScroll: {
+    flex: 1,
+  },
+  languageScrollContent: {
+    flexGrow: 1,
+    gap: 12,
+    paddingBottom: 4,
+  },
   languageItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -65,7 +73,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingHorizontal: 15,
     borderRadius: 12,
-    marginBottom: 12,
+    gap: 10,
     height: 60,
     elevation: 3,
     shadowColor: "#000",
@@ -73,9 +81,15 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  menuLeft: { flexDirection: "row", alignItems: "center" },
+  menuLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
   flagWrapper: {
     width: 40,
+    flexShrink: 0,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
@@ -88,7 +102,18 @@ export const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: "#D1D1D1", // Abu-abu tipis
   },
-  menuText: { fontSize: 15, fontWeight: "600", color: "#333" },
+  menuText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  menuRightControl: {
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // MODAL STYLES (MATCH HOME/PREVIOUS)
   modalOverlay: {
@@ -145,7 +170,6 @@ export const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingHorizontal: 15,
     borderRadius: 12,
-    marginBottom: 12,
     height: 60,
     elevation: 3,
     shadowColor: "#000",
@@ -158,5 +182,5 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1E6F9F",
     fontWeight: "600",
-  }
+  },
 });

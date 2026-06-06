@@ -207,7 +207,7 @@ export default function PengaturanProfil() {
             </Text>
           </TouchableOpacity>
 
-          <View style={{ height: 40 }} />
+          <View style={styles.bottomSpacer} />
         </KeyboardAwareScrollView>
       </ProfilePageLayout>
 

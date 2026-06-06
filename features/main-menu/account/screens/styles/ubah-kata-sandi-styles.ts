@@ -53,7 +53,10 @@ export const styles = StyleSheet.create({
   menuContent: { paddingHorizontal: 20, paddingTop: 20, flex: 1 },
   titleRow: { marginBottom: 15 },
   sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  scrollContent: { paddingBottom: 20 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
 
   inputCard: {
     backgroundColor: "#fff",
@@ -122,6 +125,9 @@ export const styles = StyleSheet.create({
 
   keyboardScroll: {
     flex: 1,
+  },
+  bottomSpacer: {
+    height: 40,
   },
 });
 
