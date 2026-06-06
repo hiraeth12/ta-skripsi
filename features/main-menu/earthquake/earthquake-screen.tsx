@@ -1,3 +1,5 @@
+import { ModalHistoricalProcess } from "@/components/ui/modal-historical-process";
+import { ModalNarasi } from "@/components/ui/modal-narasi";
 import EarthquakeTabBar, {
     EARTHQUAKE_MAP_TABS,
     type EarthquakeMapTab,
@@ -19,6 +21,12 @@ export default function Earthquake() {
   const [hasMountedDirasakan, setHasMountedDirasakan] = useState(true);
   const [hasMountedTerdeteksi, setHasMountedTerdeteksi] = useState(false);
   const [hasMountedTsunami, setHasMountedTsunami] = useState(false);
+  const [narasiVisible, setNarasiVisible] = useState(false);
+  const [narasiHtmlContent, setNarasiHtmlContent] = useState<string | null>(null);
+  const [narasiLoading, setNarasiLoading] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyRawContent, setHistoryRawContent] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     const rawTab = Array.isArray(tab) ? tab[0] : tab;
@@ -63,6 +71,40 @@ export default function Earthquake() {
     [activeTab, handleTabPress, loading],
   );
 
+  const openNarasi = useCallback(async (url: string) => {
+    setNarasiHtmlContent(null);
+    setNarasiLoading(true);
+    setNarasiVisible(true);
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`narasi fetch failed: ${res.status}`);
+      const text = await res.text();
+      setNarasiHtmlContent(text);
+    } catch {
+      setNarasiHtmlContent(null);
+    } finally {
+      setNarasiLoading(false);
+    }
+  }, []);
+
+  const openHistory = useCallback(async (url: string) => {
+    setHistoryRawContent(null);
+    setHistoryLoading(true);
+    setHistoryVisible(true);
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
+      const text = await res.text();
+      setHistoryRawContent(text);
+    } catch {
+      setHistoryRawContent(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
   const tsunamiActive = isFocused && activeTab === "TSUNAMI";
@@ -80,6 +122,7 @@ export default function Earthquake() {
           <GempaDirasakan
             tabBar={renderTabBar()}
             onLoadingChange={setLoading}
+            onOpenNarasi={openNarasi}
             isActive={dirasakanActive}
           />
         </View>
@@ -96,6 +139,7 @@ export default function Earthquake() {
           <GempaTerdeteksi
             tabBar={renderTabBar()}
             onLoadingChange={setLoading}
+            onOpenHistory={openHistory}
             isActive={terdeteksiActive}
           />
         </View>
@@ -109,10 +153,29 @@ export default function Earthquake() {
           <TsunamiContent
             tabBar={renderTabBar()}
             onLoadingChange={setLoading}
+            onOpenNarasi={openNarasi}
             isActive={tsunamiActive}
           />
         </View>
       )}
+      <ModalNarasi
+        visible={narasiVisible}
+        htmlContent={narasiHtmlContent}
+        loading={narasiLoading}
+        onClose={() => {
+          setNarasiVisible(false);
+          setNarasiHtmlContent(null);
+        }}
+      />
+      <ModalHistoricalProcess
+        visible={historyVisible}
+        rawContent={historyRawContent}
+        loading={historyLoading}
+        onClose={() => {
+          setHistoryVisible(false);
+          setHistoryRawContent(null);
+        }}
+      />
     </View>
   );
 }

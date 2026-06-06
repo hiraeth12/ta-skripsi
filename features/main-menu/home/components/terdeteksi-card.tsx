@@ -19,16 +19,21 @@ type TerdeteksiQuake = {
   fase: string;
   latitude?: number;
   longitude?: number;
+  eventId?: string;
 };
 
 export const TerdeteksiCard = ({
   data,
   onCardPress,
   onShare,
+  onHistory,
+  hasHistory,
 }: {
   data: TerdeteksiQuake | null;
   onCardPress: () => void;
   onShare: () => void;
+  onHistory: () => void;
+  hasHistory: boolean;
 }) => {
   const mapRef = useRef<MapViewType | null>(null);
 
@@ -62,11 +67,24 @@ export const TerdeteksiCard = ({
           </View>
         ) : (
           <Image
-            source={require("../../../../assets/images/navigation-map.png")}
+            source={require("@/assets/images/navigation-map.png")}
             style={styles.mapImage}
           />
         )}
         <View style={styles.mapButtons}>
+          {hasHistory && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onHistory();
+              }}
+            >
+              <Feather name="activity" size={12} color="white" />
+              <Text style={styles.mapButtonText}>PROSES HISTORIS</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.mapButton}
             onPress={(e) => {

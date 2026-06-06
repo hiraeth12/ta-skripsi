@@ -4,6 +4,7 @@ import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import {
     getRealisticShakeRadiiMeters,
     parseDepthKm,
@@ -17,6 +18,7 @@ import { Animated, Text, TouchableOpacity, View } from "react-native";
 
 import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
+import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
@@ -49,16 +51,19 @@ type LatestQuake = {
 type Props = {
   tabBar: React.ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  onOpenNarasi?: (url: string) => void;
   isActive?: boolean;
 };
 
 export default function GempaDirasakan({
   tabBar,
   onLoadingChange,
+  onOpenNarasi,
   isActive = true,
 }: Props) {
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
+  const [narasiUrl, setNarasiUrl] = useState<string | null>(null);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
 
   const {
@@ -72,6 +77,7 @@ export default function GempaDirasakan({
   } = useCardAnimation();
 
   const latestEventId = useRef<string | null>(null);
+  const narasiEventIdRef = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isFetching = useRef(false);
 
@@ -163,9 +169,8 @@ export default function GempaDirasakan({
         }
 
         if (!isSameEvent) {
-          setShakeMapUrl(
-            latest.shakemap ? `${SHAKEMAP_BASE}/${latest.shakemap}` : null,
-          );
+          const rawShakeMap = String(latest.shakemap ?? "").trim();
+          setShakeMapUrl(rawShakeMap ? `${SHAKEMAP_BASE}/${rawShakeMap}` : null);
           setLatestQuake({
             id: eventId || `${latitude}-${longitude}-${Date.now()}`,
             latitude,
@@ -193,6 +198,24 @@ export default function GempaDirasakan({
             );
           }
           isFirstLoad.current = false;
+
+          const eventKey =
+            eventId || `${latest.date ?? ""}-${latest.time ?? ""}-${latitude}-${longitude}`;
+          narasiEventIdRef.current = eventKey;
+          setNarasiUrl(null);
+
+          const candidateNarasiUrl = rawShakeMap
+            ? buildNarasiUrl(rawShakeMap)
+            : null;
+          if (candidateNarasiUrl) {
+            const available = await checkTextAssetAvailable(
+              candidateNarasiUrl,
+              abortSignal,
+            );
+            if (!abortSignal?.aborted && narasiEventIdRef.current === eventKey) {
+              setNarasiUrl(available);
+            }
+          }
         }
 
         return { changed: !isSameEvent, ok: true, latitude, longitude };
@@ -253,6 +276,16 @@ export default function GempaDirasakan({
         {tabBar}
         {showCard && (
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
+            {narasiUrl && onOpenNarasi && (
+              <TouchableOpacity
+                style={styles.mapButton}
+                onPress={() => onOpenNarasi(narasiUrl)}
+              >
+                <Feather name="file-text" size={12} color="white" />
+                <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.mapButton}
               onPress={() => shareQuake(latestQuake, "dirasakan")}

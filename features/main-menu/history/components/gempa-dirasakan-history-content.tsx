@@ -3,6 +3,8 @@ import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
+import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import {
     formatLatText,
@@ -19,6 +21,7 @@ import {
     ref,
     startAt,
 } from "@react-native-firebase/database";
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
@@ -86,6 +89,7 @@ type Props = {
   onListSelectionHandled?: () => void;
   onCardClose?: () => void;
   onCardOpen?: () => void;
+  onOpenNarasi?: (url: string) => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
   filterYear?: number;
@@ -172,6 +176,7 @@ export function GempaDirasakanHistoryContent({
   onListSelectionHandled,
   onCardClose,
   onCardOpen,
+  onOpenNarasi,
   externalSelection,
   isActive = true,
   filterYear,
@@ -206,6 +211,7 @@ export function GempaDirasakanHistoryContent({
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
+  const [narasiUrl, setNarasiUrl] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
@@ -236,6 +242,7 @@ export function GempaDirasakanHistoryContent({
     showCardRef,
     translateY,
     opacity,
+    btnOpacity,
     panResponder,
     openCard: openCardAnimation,
     dismissCard: dismissCardAnimation,
@@ -253,6 +260,27 @@ export function GempaDirasakanHistoryContent({
   const shakeMapUrl = activeQuake?.shakemap
     ? `${SHAKEMAP_BASE}/${activeQuake.shakemap}`
     : null;
+
+  useEffect(() => {
+    const candidateNarasiUrl = activeQuake?.shakemap
+      ? buildNarasiUrl(activeQuake.shakemap)
+      : null;
+
+    setNarasiUrl(null);
+    if (!candidateNarasiUrl) return;
+
+    const controller = new AbortController();
+
+    void checkTextAssetAvailable(candidateNarasiUrl, controller.signal).then(
+      (availableUrl) => {
+        if (!controller.signal.aborted) {
+          setNarasiUrl(availableUrl);
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [activeQuake?.eventId, activeQuake?.shakemap]);
 
   const markerCoordinates = useMemo(
     () =>
@@ -632,7 +660,20 @@ export function GempaDirasakanHistoryContent({
         isCardOpen={showCard}
       />
 
-      <View style={styles.topControls}>{tabBar}</View>
+      <View style={styles.topControls}>
+        {tabBar}
+        {showCard && narasiUrl && onOpenNarasi && (
+          <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => onOpenNarasi(narasiUrl)}
+            >
+              <Feather name="file-text" size={12} color="white" />
+              <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </View>
 
       {showCard && activeQuake && (
         <Animated.View
