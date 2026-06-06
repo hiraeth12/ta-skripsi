@@ -12,53 +12,44 @@ const FETCH_TIMEOUT_MS = 30_000;
 
 function readEnvFileIfExists(envPath) {
   if (!fs.existsSync(envPath)) return {};
-
   const raw = fs.readFileSync(envPath, "utf8");
   const env = {};
-
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex < 0) continue;
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim();
+    const sep = trimmed.indexOf("=");
+    if (sep < 0) continue;
+    const key = trimmed.slice(0, sep).trim();
+    const value = trimmed.slice(sep + 1).trim();
     env[key] = value;
   }
-
   return env;
 }
 
 function loadEnv() {
   const merged = { ...process.env };
-  const envFiles = [
+  for (const file of [
     path.resolve(PROJECT_ROOT, ".env"),
     path.resolve(PROJECT_ROOT, ".env.development"),
-  ];
-
-  for (const file of envFiles) {
-    const parsed = readEnvFileIfExists(file);
-    for (const [key, value] of Object.entries(parsed)) {
+  ]) {
+    for (const [key, value] of Object.entries(readEnvFileIfExists(file))) {
       if (merged[key] === undefined) {
         merged[key] = value;
         process.env[key] = value;
       }
     }
   }
-
   return merged;
 }
 
-function withCacheBuster(url) {
+function withCacheBuster(url, intervalMs = CACHE_BUST_INTERVAL_MS) {
   const base = String(url ?? "").trim();
-  const separator = base.includes("?")
-    ? base.endsWith("?") || base.endsWith("&")
-      ? ""
-      : "&"
-    : "?";
-  return `${base}${separator}t=${Date.now()}`;
+  const bucket = Math.floor(Date.now() / intervalMs);
+  const sep =
+    base.includes("?")
+      ? base.endsWith("?") || base.endsWith("&") ? "" : "&"
+      : "?";
+  return `${base}${sep}t=${bucket}`;
 }
 
 function normalizeArray(value) {
@@ -70,23 +61,35 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+function cleanFirebaseValue(value) {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.map(cleanFirebaseValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, cleanFirebaseValue(v)]),
+    );
+  }
+  return value;
+}
+
+function normalizeNestedList(value) {
+  return normalizeArray(value).map(cleanFirebaseValue);
+}
+
 function sanitizeFirebaseKey(value) {
-  const sanitized = text(value)
-    .replace(/[.#$\[\]\/]/g, "_")
+  const s = text(value)
+    .replace(/[.#$[\]/]/g, "_")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
-
-  return sanitized || "unknown";
+  return s || "unknown";
 }
 
 function parsePointCoordinates(coordStr) {
-  const [lonStr, latStr] = text(coordStr).split(",").map((part) => part.trim());
+  const [lonStr, latStr] = text(coordStr).split(",").map((p) => p.trim());
   const longitude = Number.parseFloat(lonStr);
   const latitude = Number.parseFloat(latStr);
-
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-
   return { latitude, longitude };
 }
 
@@ -95,24 +98,27 @@ function formatKeyNumber(value) {
   return String(Math.round(value * 10000) / 10000);
 }
 
+function expandTwoDigitYear(rawYear) {
+  if (rawYear.length !== 2) return rawYear;
+  const twoDigit = Number(rawYear);
+  const currentTwoDigit = new Date().getFullYear() % 100;
+  return twoDigit <= currentTwoDigit ? `20${rawYear}` : `19${rawYear}`;
+}
+
 function parseDateTimeKey(dateValue, timeValue) {
   const dateText = text(dateValue);
   const timeText = text(timeValue);
   const dateMatch = dateText.match(/^(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})$/);
   const timeMatch = timeText.match(/^(\d{1,2}):(\d{2}):(\d{2})/);
-
   if (!dateMatch || !timeMatch) {
     return sanitizeFirebaseKey(`${dateText}_${timeText}`);
   }
-
   const day = dateMatch[1].padStart(2, "0");
   const month = dateMatch[2].padStart(2, "0");
-  const rawYear = dateMatch[3];
-  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  const year = expandTwoDigitYear(dateMatch[3]);
   const hour = timeMatch[1].padStart(2, "0");
   const minute = timeMatch[2];
   const second = timeMatch[3];
-
   return `${year}${month}${day}${hour}${minute}${second}`;
 }
 
@@ -121,42 +127,24 @@ function parseTimesent(value) {
   const match = valueText.match(
     /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/,
   );
-
   if (!match) return Number.NEGATIVE_INFINITY;
 
-  const day = Number.parseInt(match[1], 10);
-  const month = Number.parseInt(match[2], 10) - 1;
-  const year = Number.parseInt(match[3], 10);
-  const hour = Number.parseInt(match[4], 10);
-  const minute = Number.parseInt(match[5], 10);
-  const second = Number.parseInt(match[6], 10);
-  const timestamp = new Date(year, month, day, hour, minute, second).getTime();
+  const dd = match[1].padStart(2, "0");
+  const mm = match[2].padStart(2, "0");
+  const yyyy = match[3];
+  const HH = match[4].padStart(2, "0");
+  const MM = match[5];
+  const SS = match[6];
 
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+  const ts = new Date(`${yyyy}-${mm}-${dd}T${HH}:${MM}:${SS}+07:00`).getTime();
+  return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
 }
 
 function extractWarningId(subject, identifier, timesent, index) {
   const match = text(subject).match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
   if (match) return sanitizeFirebaseKey(`PD-${match[1].replace(/\./g, "-")}`);
-
   const fallback = text(identifier) || text(timesent) || `warning_${index}`;
   return sanitizeFirebaseKey(fallback);
-}
-
-function normalizeNestedList(value) {
-  return normalizeArray(value).map((item) => cleanFirebaseValue(item));
-}
-
-function cleanFirebaseValue(value) {
-  if (value === undefined || value === null) return "";
-  if (Array.isArray(value)) return value.map((item) => cleanFirebaseValue(item));
-  if (typeof value === "object") {
-    return Object.entries(value).reduce((acc, [key, entry]) => {
-      acc[key] = cleanFirebaseValue(entry);
-      return acc;
-    }, {});
-  }
-  return value;
 }
 
 function getAlertRoot(parsed) {
@@ -184,7 +172,7 @@ function normalizeInfoCandidate(info, index, alertMeta) {
     coordStr,
     text(info?.magnitude),
   ]
-    .map((part) => part.toLowerCase())
+    .map((p) => p.toLowerCase())
     .join("|");
 
   const warning = {
@@ -202,7 +190,6 @@ function normalizeInfoCandidate(info, index, alertMeta) {
     sshmap: text(info?.sshmap),
     wzarea: normalizeNestedList(info?.wzarea),
     obsarea: normalizeNestedList(info?.obsarea),
-    raw: cleanFirebaseValue(info),
     rawIndex: index,
     timesentMs: parseTimesent(timesent),
     eventid: text(info?.eventid),
@@ -237,21 +224,20 @@ function compositeEventKey(candidate) {
 }
 
 function latestWarningFrom(warnings) {
-  const hasValidTimesent = warnings.some(
-    (warning) => warning.timesentMs !== Number.NEGATIVE_INFINITY,
+  const hasValid = warnings.some(
+    (w) => w.timesentMs !== Number.NEGATIVE_INFINITY,
   );
-
-  if (!hasValidTimesent) return warnings[warnings.length - 1] ?? null;
-
-  return [...warnings].sort((a, b) => {
-    if (b.timesentMs !== a.timesentMs) return b.timesentMs - a.timesentMs;
-    return b.rawIndex - a.rawIndex;
-  })[0] ?? null;
+  if (!hasValid) return warnings[warnings.length - 1] ?? null;
+  return (
+    [...warnings].sort((a, b) => {
+      if (b.timesentMs !== a.timesentMs) return b.timesentMs - a.timesentMs;
+      return b.rawIndex - a.rawIndex;
+    })[0] ?? null
+  );
 }
 
 function groupCandidates(candidates, alertMeta) {
   const grouped = new Map();
-
   for (const candidate of candidates) {
     const group = grouped.get(candidate.eventSignature);
     if (group) {
@@ -259,7 +245,6 @@ function groupCandidates(candidates, alertMeta) {
       group.warnings.push(candidate.warning);
       continue;
     }
-
     grouped.set(candidate.eventSignature, {
       candidates: [candidate],
       warnings: [candidate.warning],
@@ -270,7 +255,7 @@ function groupCandidates(candidates, alertMeta) {
   return Array.from(grouped.values()).map((group) => {
     const base = group.candidates[0];
     const eventIds = new Set(
-      group.candidates.map((item) => item.eventid).filter(Boolean),
+      group.candidates.map((c) => c.eventid).filter(Boolean),
     );
     const latestWarning = latestWarningFrom(group.warnings);
     const eventKey =
@@ -304,54 +289,48 @@ function buildWarningPayload(warning) {
     sshmap: warning.sshmap,
     wzarea: warning.wzarea,
     obsarea: warning.obsarea,
-    raw: warning.raw,
   };
 }
 
-function comparablePayload(value) {
-  return JSON.stringify(cleanFirebaseValue(value));
-}
+async function syncGroup(db, group, nowIso) {
+  const result = { syncedEvents: 0, newWarnings: 0 };
 
-async function fetchWithTimeout(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    return await fetch(withCacheBuster(url), { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function upsertEvent(db, group, nowIso, stats) {
-  const eventRef = db.ref(`${TSUNAMI_EVENTS_PATH}/${group.eventKey}`);
-  const snapshot = await eventRef.get();
-  const existing = snapshot.exists() ? snapshot.val() : {};
   const latest = group.latestWarning ?? group.warnings[group.warnings.length - 1];
+  if (!latest) return result;
 
-  if (!latest) return;
+  const eventPath = `${TSUNAMI_EVENTS_PATH}/${group.eventKey}`;
+  const latestIdSnap = await db.ref(`${eventPath}/latestWarningId`).get();
+  const storedLatestWarningId = latestIdSnap.exists() ? latestIdSnap.val() : null;
 
-  const warningsUpdates = {};
-  const existingWarnings = existing?.warnings ?? {};
+  if (storedLatestWarningId === latest.warningId) {
+    return result;
+  }
 
+  const newWarnings = [];
   for (const warning of group.warnings) {
-    const payload = buildWarningPayload(warning);
-    const current = existingWarnings?.[warning.warningId];
-
-    if (!current) {
-      console.log(`New tsunami warning saved: ${warning.warningId}`);
-      stats.newWarnings += 1;
-      warningsUpdates[`warnings/${warning.warningId}`] = payload;
-      continue;
-    }
-
-    if (comparablePayload(current) !== comparablePayload(payload)) {
-      stats.updatedWarnings += 1;
-      warningsUpdates[`warnings/${warning.warningId}`] = payload;
+    const snap = await db
+      .ref(`${eventPath}/warnings/${warning.warningId}`)
+      .get();
+    if (!snap.exists()) {
+      newWarnings.push(warning);
     }
   }
 
-  const rootPayload = {
+  if (newWarnings.length === 0) {
+  }
+
+  const createdAtSnap = await db.ref(`${eventPath}/createdAt`).get();
+  const createdAt = createdAtSnap.exists() ? createdAtSnap.val() : nowIso;
+
+  for (const warning of newWarnings) {
+    await db
+      .ref(`${eventPath}/warnings/${warning.warningId}`)
+      .set(buildWarningPayload(warning));
+    console.log(`New tsunami warning saved: ${warning.warningId}`);
+    result.newWarnings += 1;
+  }
+
+  await db.ref(eventPath).update({
     eventKey: group.eventKey,
     identifier: group.alertMeta.identifier,
     sender: group.alertMeta.sender,
@@ -374,25 +353,23 @@ async function upsertEvent(db, group, nowIso, stats) {
     latestSubject: latest.subject,
     latestHeadline: latest.headline,
     latestTimesent: latest.timesent,
-    createdAt: text(existing?.createdAt) || nowIso,
+    createdAt,
     updatedAt: nowIso,
-  };
+  });
 
-  const updates = { ...rootPayload };
-  for (const [key, value] of Object.entries(warningsUpdates)) {
-    updates[key] = value;
-  }
-
-  if (Object.keys(warningsUpdates).length === 0) {
-    const rootChanged = Object.entries(rootPayload).some(
-      ([key, value]) => comparablePayload(existing?.[key]) !== comparablePayload(value),
-    );
-    if (!rootChanged) return;
-  }
-
-  await eventRef.update(updates);
   console.log(`Tsunami event synced: ${group.eventKey}`);
-  stats.syncedEvents += 1;
+  result.syncedEvents = 1;
+  return result;
+}
+
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(withCacheBuster(url), { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function syncTsunamiEvents(options = {}) {
@@ -423,6 +400,7 @@ export async function syncTsunamiEvents(options = {}) {
     const parser = new XMLParser({ ignoreAttributes: false });
     const parsed = parser.parse(raw);
     const alert = getAlertRoot(parsed);
+
     const alertMeta = {
       identifier: text(alert.identifier),
       sender: text(alert.sender),
@@ -451,17 +429,22 @@ export async function syncTsunamiEvents(options = {}) {
     const groups = groupCandidates(candidates, alertMeta);
     const db = options.db || getDatabase();
     const nowIso = new Date().toISOString();
-    const stats = {
-      syncedEvents: 0,
-      newWarnings: 0,
-      updatedWarnings: 0,
-    };
 
+    const results = [];
     for (const group of groups) {
-      await upsertEvent(db, group, nowIso, stats);
+      const result = await syncGroup(db, group, nowIso);
+      results.push(result);
     }
 
-    if (stats.newWarnings === 0 && stats.updatedWarnings === 0) {
+    const stats = results.reduce(
+      (acc, r) => ({
+        syncedEvents: acc.syncedEvents + r.syncedEvents,
+        newWarnings: acc.newWarnings + r.newWarnings,
+      }),
+      { syncedEvents: 0, newWarnings: 0 },
+    );
+
+    if (stats.newWarnings === 0) {
       console.log("No new tsunami warning");
     }
 
@@ -473,7 +456,6 @@ export async function syncTsunamiEvents(options = {}) {
       warningCount: candidates.length,
       syncedEvents: stats.syncedEvents,
       newWarnings: stats.newWarnings,
-      updatedWarnings: stats.updatedWarnings,
     };
   } catch (error) {
     console.error(`Failed to sync tsunami warning: ${error.message}`);

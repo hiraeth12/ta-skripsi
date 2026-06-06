@@ -96,7 +96,7 @@ function parseTimesent(value) {
   const hour = Number.parseInt(match[4], 10);
   const minute = Number.parseInt(match[5], 10);
   const second = Number.parseInt(match[6], 10);
-  const timestamp = new Date(year, month, day, hour, minute, second).getTime();
+  const timestamp = Date.UTC(year, month, day, hour - 7, minute, second);
 
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
@@ -105,7 +105,7 @@ function extractWarningId(subject, identifier, timesent, index) {
   const match = text(subject).match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
   if (match) return `PD-${match[1].replace(/\./g, "-")}`;
 
-  return text(identifier) || text(timesent) || `warning_${index}`;
+  return text(identifier) || `warning_${index}`;
 }
 
 function getAlertRoot(parsed) {
@@ -599,7 +599,19 @@ export async function fetchTsunamiWarnings(apiUrl) {
 
 export async function fetchLatestTsunamiWarning(apiUrl) {
   const warnings = await fetchTsunamiWarnings(apiUrl);
-  return warnings[0] ?? null;
+  if (warnings.length === 0) return null;
+
+  const latest = warnings[0];
+  if (latest.wzAreas?.length > 0) return latest;
+
+  const fallback = warnings.find(
+    (w) =>
+      w.pointCoordinates === latest.pointCoordinates &&
+      w.magnitude === latest.magnitude &&
+      w.wzAreas?.length > 0,
+  );
+
+  return fallback ?? latest;
 }
 
 function normalizeNotificationInput(inputOrHeadline, ...legacyArgs) {
