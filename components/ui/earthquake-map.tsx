@@ -20,7 +20,8 @@ const SENSOR_SEISMIC_GLOBAL =
   process.env.EXPO_PUBLIC_SENSOR_SEISMIC_GLOBAL_URL || "";
 
 const KABKOTA_FEATURES = kabkotaGeoJson.features as unknown as GeoJsonFeature[];
-const KABKOTA_GEO_INDEX = buildGeoJsonIndex(KABKOTA_FEATURES);
+const { index: KABKOTA_GEO_INDEX, ctx: KABKOTA_GEO_CONTEXT } =
+  buildGeoJsonIndex(KABKOTA_FEATURES);
 
 type MapRegion = {
   latitude: number;
@@ -524,6 +525,7 @@ const EarthquakeMap = memo(
         wzAreas,
         KABKOTA_FEATURES,
         KABKOTA_GEO_INDEX,
+        KABKOTA_GEO_CONTEXT,
       );
 
       return {

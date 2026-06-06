@@ -71,8 +71,17 @@ const LEVEL_PRIORITY: Record<WzLevel, number> = {
   NORMAL: 1,
 };
 
-let geoCanonicalByCompact = new Map<string, string>();
-let geoCanonicalNames = new Set<string>();
+export type GeoContext = {
+  canonicalByCompact: Map<string, string>;
+  canonicalNames: Set<string>;
+};
+
+function createGeoContext(): GeoContext {
+  return {
+    canonicalByCompact: new Map(),
+    canonicalNames: new Set(),
+  };
+}
 
 function normalizeNameBase(raw: string): string {
   return raw.replace(/-/g, " ").replace(/\s+/g, " ").toLowerCase().trim();
@@ -86,23 +95,23 @@ function stripPrefix(s: string): string {
   return s.replace(/^kabupaten\s+/, "").replace(/^kota\s+/, "").trim();
 }
 
-function stripDirectionalSuffix(s: string): string {
-  if (geoCanonicalNames.has(s)) return s;
+function stripDirectionalSuffix(s: string, ctx: GeoContext): string {
+  if (ctx.canonicalNames.has(s)) return s;
   return s.replace(/\s+bagian\s+(selatan|utara|timur|barat)$/i, "").trim();
 }
 
-function getMatchKey(normalized: string): string {
-  return stripDirectionalSuffix(stripPrefix(normalized));
+function getMatchKey(normalized: string, ctx: GeoContext): string {
+  return stripDirectionalSuffix(stripPrefix(normalized), ctx);
 }
 
-function resolveCanonicalName(normalized: string): string {
-  const key = getMatchKey(normalized);
+function resolveCanonicalName(normalized: string, ctx: GeoContext): string {
+  const key = getMatchKey(normalized, ctx);
   const compact = compactName(key);
-  const exact = geoCanonicalByCompact.get(compact);
+  const exact = ctx.canonicalByCompact.get(compact);
 
   if (exact) return exact;
 
-  for (const [geoCompact, canonical] of geoCanonicalByCompact.entries()) {
+  for (const [geoCompact, canonical] of ctx.canonicalByCompact.entries()) {
     if (compact.length > geoCompact.length && compact.includes(geoCompact)) {
       return canonical;
     }
@@ -111,8 +120,8 @@ function resolveCanonicalName(normalized: string): string {
   return normalized;
 }
 
-function normalizeName(raw: string): string {
-  return resolveCanonicalName(normalizeNameBase(raw))
+function normalizeName(raw: string, ctx: GeoContext): string {
+  return resolveCanonicalName(normalizeNameBase(raw), ctx)
     .replace(/\s+/g, " ")
     .toLowerCase()
     .trim();
@@ -138,11 +147,14 @@ function cloneFeatureWithStyle(
   };
 }
 
-export function buildWzAreaLookup(wzAreas: WzArea[]): Map<string, WzArea> {
+export function buildWzAreaLookup(
+  wzAreas: WzArea[],
+  ctx: GeoContext,
+): Map<string, WzArea> {
   const lookup = new Map<string, WzArea>();
 
   for (const area of wzAreas) {
-    const key = getMatchKey(normalizeName(area.district));
+    const key = getMatchKey(normalizeName(area.district, ctx), ctx);
     if (!key) continue;
 
     const existing = lookup.get(key);
@@ -159,9 +171,8 @@ export function buildWzAreaLookup(wzAreas: WzArea[]): Map<string, WzArea> {
 
 export function buildGeoJsonIndex(
   features: GeoJsonFeature[],
-): Map<string, number> {
-  const nextCanonicalNames = new Set<string>();
-  const nextCanonicalByCompact = new Map<string, string>();
+): { index: Map<string, number>; ctx: GeoContext } {
+  const ctx = createGeoContext();
 
   for (const feature of features) {
     const raw = String(feature.properties["alt_name"] ?? "");
@@ -169,43 +180,40 @@ export function buildGeoJsonIndex(
 
     const normalized = normalizeNameBase(raw);
     const withoutPrefix = stripPrefix(normalized);
-    if (withoutPrefix) nextCanonicalNames.add(withoutPrefix);
+    if (withoutPrefix) ctx.canonicalNames.add(withoutPrefix);
   }
-
-  geoCanonicalNames = nextCanonicalNames;
 
   for (const feature of features) {
     const raw = String(feature.properties["alt_name"] ?? "");
     if (!raw) continue;
 
     const normalized = normalizeNameBase(raw);
-    const canonical = getMatchKey(normalized);
+    const canonical = getMatchKey(normalized, ctx);
     if (!canonical) continue;
 
-    nextCanonicalByCompact.set(compactName(canonical), canonical);
-    nextCanonicalByCompact.set(compactName(normalized), canonical);
+    ctx.canonicalByCompact.set(compactName(canonical), canonical);
+    ctx.canonicalByCompact.set(compactName(normalized), canonical);
   }
-
-  geoCanonicalByCompact = nextCanonicalByCompact;
 
   const index = new Map<string, number>();
   features.forEach((feature, featureIndex) => {
     const raw = String(feature.properties["alt_name"] ?? "");
     if (!raw) return;
 
-    const key = getMatchKey(normalizeName(raw));
+    const key = getMatchKey(normalizeName(raw, ctx), ctx);
     if (key) index.set(key, featureIndex);
   });
 
-  return index;
+  return { index, ctx };
 }
 
 export function resolveMatchedFeatures(
   wzAreas: WzArea[],
   features: GeoJsonFeature[],
   geoIndex: Map<string, number>,
+  ctx: GeoContext,
 ): MatchedFeature[] {
-  const wzLookup = buildWzAreaLookup(wzAreas);
+  const wzLookup = buildWzAreaLookup(wzAreas, ctx);
   const result: MatchedFeature[] = [];
   const usedIndices = new Set<number>();
 
@@ -255,18 +263,21 @@ export function resolveMatchedFeatures(
 export function getFeatureStyle(
   properties: Record<string, unknown>,
   wzLookup: Map<string, WzArea>,
+  ctx: GeoContext,
 ): HighlightStyle {
   const raw = String(properties["alt_name"] ?? "");
   if (!raw) return DEFAULT_STYLE;
 
-  const geoKey = getMatchKey(normalizeName(raw));
+  const geoKey = getMatchKey(normalizeName(raw, ctx), ctx);
   const exact = wzLookup.get(geoKey);
   if (exact) return getStyle(exact.level);
 
   for (const [wzKey, area] of wzLookup.entries()) {
-    if (geoKey.includes(wzKey) || wzKey.includes(geoKey)) {
-      return getStyle(area.level);
-    }
+    if (geoKey.includes(wzKey)) return getStyle(area.level);
+  }
+
+  for (const [wzKey, area] of wzLookup.entries()) {
+    if (wzKey.includes(geoKey)) return getStyle(area.level);
   }
 
   return DEFAULT_STYLE;

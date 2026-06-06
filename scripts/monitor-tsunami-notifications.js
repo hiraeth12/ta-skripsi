@@ -30,10 +30,15 @@ export async function monitorTsunamiAndNotify() {
         } else {
           checkDelayMs = Math.min(checkDelayMs + 10_000, MAX_CHECK_MS);
         }
-      } catch {
+      } catch (error) {
+        console.error("[monitor-tsunami] checkAndNotify error:", error?.message || error);
         checkDelayMs = Math.min(checkDelayMs + 10_000, MAX_CHECK_MS);
       } finally {
-        timer = setTimeout(checkAndNotify, checkDelayMs);
+        timer = setTimeout(() => {
+          checkAndNotify().catch((error) => {
+            console.error("[monitor-tsunami] unhandled loop error:", error?.message || error);
+          });
+        }, checkDelayMs);
       }
     }
 
@@ -44,7 +49,7 @@ export async function monitorTsunamiAndNotify() {
       if (snapshot.exists()) {
         lastKnownWarningId = snapshot.val()?.warningId || null;
       }
-    } catch {}
+    } catch { }
 
     await checkAndNotify();
 

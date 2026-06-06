@@ -43,6 +43,10 @@ type PersistedLatestSeen = {
   tsunami: string;
 };
 
+type PushNotificationOptions = {
+  silent?: boolean;
+};
+
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
 const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
 const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL;
@@ -69,6 +73,8 @@ let storageInitPromise: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 let currentDayKey = getLocalDayKey();
 let latestEmittedTsunamiNotificationId = "";
+let tsunamiPollingStartedAt = 0;
+let hasTsunamiBaselineSnapshot = false;
 
 const latestSeen: PersistedLatestSeen = {
   dirasakan: "",
@@ -96,6 +102,28 @@ function getLocalDayKey() {
 
 function recomputeUnreadCount(notifications: QuakeNotification[]) {
   return notifications.reduce((total, item) => total + (item.isRead ? 0 : 1), 0);
+}
+
+function getTsunamiEventId(notificationId: string) {
+  return notificationId.replace(/^tsunami:/, "");
+}
+
+function getLatestTsunamiNotification(notifications: QuakeNotification[]) {
+  return notifications
+    .filter((item) => item.type === "Tsunami")
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
+}
+
+function resetTsunamiPollingBaseline() {
+  tsunamiPollingStartedAt = Date.now();
+  hasTsunamiBaselineSnapshot = false;
+}
+
+function shouldSilenceTsunamiBaseline(timestamp: number) {
+  if (hasTsunamiBaselineSnapshot) return false;
+
+  hasTsunamiBaselineSnapshot = true;
+  return tsunamiPollingStartedAt > 0 && timestamp <= tsunamiPollingStartedAt;
 }
 
 function getLevel(magnitude: number): "Rendah" | "Sedang" | "Kuat" {
@@ -147,6 +175,7 @@ async function loadPersistedData(): Promise<void> {
       AsyncStorage.getItem(STORAGE_KEY_NOTIFICATIONS),
       AsyncStorage.getItem(STORAGE_KEY_LATEST_SEEN),
     ]);
+    let latestTsunamiInStorage: QuakeNotification | undefined;
 
     if (rawNotifications) {
       const saved: QuakeNotification[] = JSON.parse(rawNotifications);
@@ -162,6 +191,11 @@ async function loadPersistedData(): Promise<void> {
           notifications: todayNotifications,
           unreadCount: recomputeUnreadCount(todayNotifications),
         };
+
+        latestTsunamiInStorage = getLatestTsunamiNotification(todayNotifications);
+        if (latestTsunamiInStorage) {
+          latestEmittedTsunamiNotificationId = latestTsunamiInStorage.id;
+        }
       }
     }
 
@@ -170,6 +204,11 @@ async function loadPersistedData(): Promise<void> {
       latestSeen.dirasakan = saved.dirasakan ?? "";
       latestSeen.terdeteksi = saved.terdeteksi ?? "";
       latestSeen.tsunami = saved.tsunami ?? "";
+    }
+
+    if (!latestSeen.tsunami && latestTsunamiInStorage) {
+      latestSeen.tsunami = getTsunamiEventId(latestTsunamiInStorage.id);
+      await persistLatestSeen();
     }
   } catch {
   }
@@ -270,7 +309,10 @@ function emitTsunamiNotification(notification: QuakeNotification) {
   });
 }
 
-function pushNotification(notification: QuakeNotification) {
+function pushNotification(
+  notification: QuakeNotification,
+  { silent = false }: PushNotificationOptions = {},
+) {
   if (state.notifications.some((item) => item.id === notification.id)) return;
 
   const notifications = [notification, ...state.notifications]
@@ -278,7 +320,11 @@ function pushNotification(notification: QuakeNotification) {
     .slice(0, MAX_NOTIFICATIONS);
 
   setState({ notifications, unreadCount: recomputeUnreadCount(notifications) });
-  emitTsunamiNotification(notification);
+  if (silent && notification.type === "Tsunami") {
+    latestEmittedTsunamiNotificationId = notification.id;
+  } else if (!silent) {
+    emitTsunamiNotification(notification);
+  }
 
   void persistNotifications(notifications);
 }
@@ -300,7 +346,6 @@ function scheduleDailyReset() {
 
     latestSeen.dirasakan = "";
     latestSeen.terdeteksi = "";
-    latestSeen.tsunami = "";
     void persistLatestSeen();
 
     scheduleDailyReset();
@@ -315,7 +360,6 @@ function resetIfDayChanged() {
 
   latestSeen.dirasakan = "";
   latestSeen.terdeteksi = "";
-  latestSeen.tsunami = "";
   void persistLatestSeen();
 }
 
@@ -482,17 +526,28 @@ async function fetchTsunamiNotification() {
     warningId || latestGroup.id || `${latestGroup.tanggal}-${latestGroup.jam}`,
   );
 
-  if (!eventId || eventId === latestSeen.tsunami) return;
+  if (!eventId) return;
+
+  const notificationId = `tsunami:${eventId}`;
+
+  if (eventId === latestSeen.tsunami) {
+    hasTsunamiBaselineSnapshot = true;
+    return;
+  }
 
   // Cek apakah notifikasi ini sudah ada (dari persistent storage)
-  const alreadyExists = state.notifications.some(
-    (item) => item.id === `tsunami:${eventId}`,
+  const existingNotification = state.notifications.find(
+    (item) => item.id === notificationId,
   );
 
   latestSeen.tsunami = eventId;
   void persistLatestSeen();
 
-  if (alreadyExists) return;
+  if (existingNotification) {
+    latestEmittedTsunamiNotificationId = existingNotification.id;
+    hasTsunamiBaselineSnapshot = true;
+    return;
+  }
 
   const date = String(latestGroup.tanggal ?? "");
   const time = String(latestGroup.jam ?? "");
@@ -502,21 +557,26 @@ async function fetchTsunamiNotification() {
   const location = String(latestGroup.wilayah ?? "").trim();
   const magnitude = String(latestGroup.magnitude ?? "").trim();
   const magnitudeValue = Number.parseFloat(magnitude) || 0;
+  const timestamp = getTsunamiTimestamp(latestWarning.timesentMs, date, time);
+  const shouldSilentBaseline = shouldSilenceTsunamiBaseline(timestamp);
 
-  pushNotification({
-    id: `tsunami:${eventId}`,
-    type: "Tsunami",
-    magnitude,
-    location: location || "Lokasi tidak tersedia",
-    date,
-    time,
-    level: getLevel(magnitudeValue),
-    timestamp: getTsunamiTimestamp(latestWarning.timesentMs, date, time),
-    isRead: false,
-    title: subject || "Peringatan Tsunami",
-    headline,
-    message: description || headline || location,
-  });
+  pushNotification(
+    {
+      id: notificationId,
+      type: "Tsunami",
+      magnitude,
+      location: location || "Lokasi tidak tersedia",
+      date,
+      time,
+      level: getLevel(magnitudeValue),
+      timestamp,
+      isRead: false,
+      title: subject || "Peringatan Tsunami",
+      headline,
+      message: description || headline || location,
+    },
+    { silent: shouldSilentBaseline },
+  );
 }
 
 async function pollLatestQuakes() {
@@ -552,6 +612,7 @@ async function initAndStartPolling() {
 function startPolling() {
   if (pollTimer) return;
   scheduleDailyReset();
+  resetTsunamiPollingBaseline();
   void initAndStartPolling();
 }
 
@@ -568,6 +629,8 @@ function stopPollingIfUnused() {
 
   storageInitialized = false;
   storageInitPromise = null;
+  tsunamiPollingStartedAt = 0;
+  hasTsunamiBaselineSnapshot = false;
 }
 
 function subscribe(listener: () => void) {
