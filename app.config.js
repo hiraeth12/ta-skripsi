@@ -171,6 +171,8 @@ export default ({ config }) => {
       withAndroidNotificationSound,
       withAndroidCleanCodegenOrder,
       ...pluginsWithMapbox,
+      "@react-native-community/datetimepicker",
+      
     ],
   };
 };

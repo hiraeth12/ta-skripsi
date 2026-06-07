@@ -10,9 +10,6 @@ import {
   parseDepthKm,
 } from "../utils/earthquake-impact.js";
 
-/**
- * Load environment variables from .env file
- */
 function readEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return {};
 

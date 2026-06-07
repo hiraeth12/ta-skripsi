@@ -26,10 +26,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
+    buildDirasakanDateRangesForIsoRange,
     buildDirasakanDateRange,
+    getDirasakanEventTimeMs,
     getNowYearMonth,
+    isDirasakanInDateRange,
     matchesDirasakanMonth,
     normalizeFilterMonths,
+    sortDirasakanNewestFirst,
 } from "../utils/filter";
 import styles from "./styles/gempa-dirasakan-history-content";
 
@@ -45,6 +49,7 @@ const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 
 type QuakeItem = {
   eventId: string;
+  eventTimeMs: number;
   latitude: number;
   longitude: number;
   distanceKm: string;
@@ -94,6 +99,9 @@ type Props = {
   isActive?: boolean;
   filterYear?: number;
   filterMonths?: number[];
+  filterMode?: "bulan" | "range";
+  filterDateFrom?: string;
+  filterDateTo?: string;
   /** Called by parent when this tab is switched TO — triggers fly-in to newest quake */
   onTabActivate?: (flyToNewest: () => void) => void;
 };
@@ -145,6 +153,7 @@ function buildQuakeItem(
         candidate?.eventid ??
         `${candidate?.tanggal ?? candidate?.date ?? ""}-${candidate?.jam ?? candidate?.time ?? ""}-${index}`,
     ),
+    eventTimeMs: getDirasakanEventTimeMs(candidate),
     latitude,
     longitude,
     distanceKm,
@@ -181,6 +190,9 @@ export function GempaDirasakanHistoryContent({
   isActive = true,
   filterYear,
   filterMonths,
+  filterMode = "bulan",
+  filterDateFrom,
+  filterDateTo,
   onTabActivate,
 }: Props) {
   const now = useMemo(() => new Date(), []);
@@ -200,11 +212,20 @@ export function GempaDirasakanHistoryContent({
   );
   const ranges = useMemo(
     () =>
-      effectiveMonths.map((month) => ({
-        month,
-        ...buildDirasakanDateRange(effectiveYear, month),
-      })),
-    [effectiveMonths, effectiveYear],
+      filterMode === "range"
+        ? buildDirasakanDateRangesForIsoRange(filterDateFrom, filterDateTo, now)
+        : effectiveMonths.map((month) => ({
+            month,
+            ...buildDirasakanDateRange(effectiveYear, month),
+          })),
+    [
+      effectiveMonths,
+      effectiveYear,
+      filterDateFrom,
+      filterDateTo,
+      filterMode,
+      now,
+    ],
   );
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -454,6 +475,10 @@ export function GempaDirasakanHistoryContent({
         ? quakes[targetIndex]
         : {
             eventId: externalSelection.eventId,
+            eventTimeMs: getDirasakanEventTimeMs({
+              tanggal: externalSelection.tanggal,
+              jam: externalSelection.jam,
+            }),
             latitude: externalSelection.latitude,
             longitude: externalSelection.longitude,
             distanceKm: externalSelection.distanceKm,
@@ -526,6 +551,7 @@ export function GempaDirasakanHistoryContent({
     const runFetch = async () => {
       onLoadingChange?.(true);
 
+      try {
       const snapshots = await Promise.all(
         ranges.map(async (rangeItem) =>
           get(
@@ -563,31 +589,26 @@ export function GempaDirasakanHistoryContent({
         return;
       }
 
-      const merged = candidates
-        .sort((a, b) => {
-          const keyA = String(
-            a?.eventid ??
-              a?.eventId ??
-              a?.timesent ??
-              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
-          );
-          const keyB = String(
-            b?.eventid ??
-              b?.eventId ??
-              b?.timesent ??
-              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
-          );
-          return keyB.localeCompare(keyA);
-        })
-        .filter((candidate) =>
-          effectiveMonths.some((month) =>
-            matchesDirasakanMonth(
-              candidate?.tanggal ?? candidate?.date,
-              effectiveYear,
-              month,
+      const filtered = candidates.filter((candidate) =>
+        filterMode === "range"
+          ? isDirasakanInDateRange(candidate, filterDateFrom, filterDateTo, now)
+          : effectiveMonths.some((month) =>
+              matchesDirasakanMonth(
+                candidate?.tanggal ?? candidate?.date,
+                effectiveYear,
+                month,
+              ),
             ),
-          ),
-        )
+      );
+
+      if (filtered.length === 0) {
+        dataSignatureRef.current = null;
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
+      }
+
+      const merged = sortDirasakanNewestFirst(filtered)
         .reduce<QuakeItem[]>((acc, candidate, index) => {
           const item = buildQuakeItem(candidate, index, haversineDistanceKm);
           if (item) acc.push(item);
@@ -597,7 +618,9 @@ export function GempaDirasakanHistoryContent({
 
       const normalized = dedupeByKey(merged, (q) => q.eventId, MAX_POINTS);
 
-      const signature = normalized.map((q) => q.eventId).join("|");
+      const signature = normalized
+        .map((q) => `${q.eventId}:${q.eventTimeMs}`)
+        .join("|");
       if (signature === dataSignatureRef.current) {
         onLoadingChange?.(false);
         return;
@@ -629,6 +652,13 @@ export function GempaDirasakanHistoryContent({
       // Only touch selection when card is open — prevents reopening after dismiss
       if (!showCardRef.current) return;
       if (foundIndex >= 0) setSelectedIndex(foundIndex);
+      } catch {
+        if (!isMountedRef.current) return;
+        dataSignatureRef.current = null;
+        setQuakes([]);
+      } finally {
+        if (isMountedRef.current) onLoadingChange?.(false);
+      }
     };
 
     void runFetch();
@@ -636,7 +666,17 @@ export function GempaDirasakanHistoryContent({
     return () => {
       isMountedRef.current = false;
     };
-  }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
+  }, [
+    effectiveMonths,
+    effectiveYear,
+    filterDateFrom,
+    filterDateTo,
+    filterMode,
+    isActive,
+    now,
+    onLoadingChange,
+    ranges,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

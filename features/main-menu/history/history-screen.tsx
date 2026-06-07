@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
+  memo,
   type ReactElement,
   useCallback,
   useEffect,
@@ -18,6 +19,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -31,7 +33,12 @@ import { useExternalSelection } from "./hooks/use-external-selection";
 import { useHistoryFetch } from "./hooks/use-history-fetch";
 import { useHistoryFilter } from "./hooks/use-history-filter";
 import styles from "./styles/history-screen";
-import { MONTH_NAMES_ID, serializeFilterMonths } from "./utils/filter";
+import {
+  MONTH_NAMES_ID,
+  parseIsoDate,
+  resolveIsoDateRange,
+  serializeFilterMonths,
+} from "./utils/filter";
 import {
   HISTORY_TABS,
   type HistoryEarthquakeTab,
@@ -45,6 +52,130 @@ const LIST_CONTENT_CONTAINER_STYLE = {
   paddingHorizontal: 12,
   paddingBottom: 8,
 };
+
+const listStyles = StyleSheet.create({
+  skeletonList: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+  },
+  skeletonCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    height: ITEM_HEIGHT - 8,
+  },
+  skeletonIcon: {
+    marginRight: 10,
+  },
+  skeletonBody: {
+    flex: 1,
+    gap: 6,
+  },
+  skeletonLineMuted: {
+    backgroundColor: "#E2E8F0",
+  },
+  item: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    height: ITEM_HEIGHT - 8,
+  },
+  magBadgeHigh: {
+    backgroundColor: "#EF4444",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  magBadgeNormal: {
+    backgroundColor: "#F59E0B",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  magValue: {
+    color: "#FFF",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  magLabel: {
+    color: "#FFF",
+    fontSize: 8,
+  },
+  itemBody: {
+    flex: 1,
+  },
+  itemLocation: {
+    color: "#0F172A",
+    fontWeight: "bold",
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  itemDatetime: {
+    color: "#475569",
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  itemDescription: {
+    color: "#64748B",
+    fontSize: 10,
+  },
+  panel: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "40%",
+    backgroundColor: "#0C4A6E",
+    paddingTop: 12,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    zIndex: 10,
+  },
+  panelTitleWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  panelTitle: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  separator: {
+    height: 8,
+  },
+  emptyText: {
+    color: "#E6F4FF",
+    textAlign: "center",
+    marginTop: 10,
+    fontSize: 12,
+  },
+  topControlsSpacer: {
+    flex: 1,
+  },
+  mapArea: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,35 +216,25 @@ function SkeletonCard() {
   });
   return (
     <Animated.View
-      style={{
-        opacity,
-        backgroundColor: "#FFFFFF",
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 10,
-        marginBottom: 8,
-        flexDirection: "row",
-        alignItems: "center",
-        height: ITEM_HEIGHT - 8,
-      }}
+      style={[listStyles.skeletonCard, { opacity }]}
     >
       <Skeleton
         width={40}
         height={40}
         borderRadius={20}
-        style={{ marginRight: 10 }}
+        style={listStyles.skeletonIcon}
       />
-      <View style={{ flex: 1, gap: 6 }}>
+      <View style={listStyles.skeletonBody}>
         <Skeleton width="70%" height={12} />
         <Skeleton
           width="50%"
           height={10}
-          style={{ backgroundColor: "#E2E8F0" }}
+          style={listStyles.skeletonLineMuted}
         />
         <Skeleton
           width="85%"
           height={9}
-          style={{ backgroundColor: "#E2E8F0" }}
+          style={listStyles.skeletonLineMuted}
         />
       </View>
     </Animated.View>
@@ -122,7 +243,7 @@ function SkeletonCard() {
 
 function SkeletonList() {
   return (
-    <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
+    <View style={listStyles.skeletonList}>
       {Array.from({ length: 5 }).map((_, i) => (
         <SkeletonCard key={i} />
       ))}
@@ -130,63 +251,42 @@ function SkeletonList() {
   );
 }
 
-const EarthquakeListItem = ({
-  item,
-  onPress,
-}: {
+type EarthquakeListItemProps = {
   item: ListItem;
   onPress: (item: ListItem) => void;
-}) => {
+};
+
+const EarthquakeListItem = memo(function EarthquakeListItem({
+  item,
+  onPress,
+}: EarthquakeListItemProps) {
   const magValue = parseFloat(item.magnitude);
-  const magColor = magValue >= 5 ? "#EF4444" : "#F59E0B";
+  const magBadgeStyle =
+    magValue >= 5 ? listStyles.magBadgeHigh : listStyles.magBadgeNormal;
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
   const isTsunami = item.eventType === "tsunami";
+
   return (
     <TouchableOpacity
       activeOpacity={0.8}
       onPress={handlePress}
-      style={{
-        backgroundColor: "#FFFFFF",
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 10,
-        flexDirection: "row",
-        alignItems: "center",
-        height: ITEM_HEIGHT - 8,
-      }}
+      style={listStyles.item}
     >
-      <View
-        style={{
-          backgroundColor: magColor,
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          justifyContent: "center",
-          alignItems: "center",
-          marginRight: 10,
-        }}
-      >
-        <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 14 }}>
-          {item.magnitude}
-        </Text>
-        <Text style={{ color: "#FFF", fontSize: 8 }}>Mag</Text>
+      <View style={magBadgeStyle}>
+        <Text style={listStyles.magValue}>{item.magnitude}</Text>
+        <Text style={listStyles.magLabel}>Mag</Text>
       </View>
-      <View style={{ flex: 1 }}>
+      <View style={listStyles.itemBody}>
         <Text
-          style={{
-            color: "#0F172A",
-            fontWeight: "bold",
-            fontSize: 13,
-            marginBottom: 2,
-          }}
+          style={listStyles.itemLocation}
           numberOfLines={1}
         >
           {item.lokasi || "-"}
         </Text>
-        <Text style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>
+        <Text style={listStyles.itemDatetime}>
           {item.tanggal} • {item.jam}
         </Text>
-        <Text style={{ color: "#64748B", fontSize: 10 }} numberOfLines={1}>
+        <Text style={listStyles.itemDescription} numberOfLines={1}>
           {isTsunami
             ? `Kedalaman: ${item.kedalaman} • ${item.status || "-"}`
             : `Kedalaman: ${item.kedalaman} • ${item.distanceKm} km dari Anda`}
@@ -194,20 +294,15 @@ const EarthquakeListItem = ({
       </View>
     </TouchableOpacity>
   );
-};
+});
+
+function ListItemSeparator() {
+  return <View style={listStyles.separator} />;
+}
 
 // ─── HistoryListPanel ─────────────────────────────────────────────────────────
 
-function HistoryListPanel({
-  emptyComponent,
-  getItemLayout,
-  items,
-  keyExtractor,
-  listLoading,
-  renderItem,
-  slideAnim,
-  title,
-}: {
+type HistoryListPanelProps = {
   emptyComponent: ReactElement;
   getItemLayout: (
     _: unknown,
@@ -219,23 +314,22 @@ function HistoryListPanel({
   renderItem: ({ item }: { item: ListItem }) => ReactElement;
   slideAnim: Animated.Value;
   title: string;
-}) {
-  return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: "40%",
-        backgroundColor: "#0C4A6E",
-        paddingTop: 12,
-        elevation: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        zIndex: 10,
+};
+
+const HistoryListPanel = memo(function HistoryListPanel({
+  emptyComponent,
+  getItemLayout,
+  items,
+  keyExtractor,
+  listLoading,
+  renderItem,
+  slideAnim,
+  title,
+}: HistoryListPanelProps) {
+  const panelStyle = useMemo(
+    () => [
+      listStyles.panel,
+      {
         transform: [
           {
             translateY: slideAnim.interpolate({
@@ -244,19 +338,15 @@ function HistoryListPanel({
             }),
           },
         ],
-      }}
-    >
-      <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
-        <Text
-          style={{
-            color: "#FFFFFF",
-            fontWeight: "bold",
-            fontSize: 14,
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </Text>
+      },
+    ],
+    [slideAnim],
+  );
+
+  return (
+    <Animated.View style={panelStyle}>
+      <View style={listStyles.panelTitleWrap}>
+        <Text style={listStyles.panelTitle}>{title}</Text>
       </View>
       {listLoading && items.length === 0 ? (
         <SkeletonList />
@@ -274,12 +364,12 @@ function HistoryListPanel({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={LIST_CONTENT_CONTAINER_STYLE}
           ListEmptyComponent={emptyComponent}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ItemSeparatorComponent={ListItemSeparator}
         />
       )}
     </Animated.View>
   );
-}
+});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -293,6 +383,9 @@ export default function History() {
     filterYear?: string;
     filterMonth?: string;
     filterMonths?: string;
+    filterMode?: string;
+    filterDateFrom?: string;
+    filterDateTo?: string;
     restoreListPanel?: string;
     restoreListPanelToken?: string;
     selectedEventId?: string;
@@ -350,6 +443,23 @@ export default function History() {
   // ── Filter (dari hook) ────────────────────────────────────────────────────
 
   const now = useMemo(() => new Date(), []);
+  const isTsunamiTab = activeTab === "RIWAYAT TSUNAMI";
+  const filterModeParam = asSingle(searchParams.filterMode);
+  const effectiveFilterMode: "bulan" | "range" = useMemo(() => {
+    if (isTsunamiTab) return "bulan";
+    return filterModeParam === "bulan" ? "bulan" : "range";
+  }, [filterModeParam, isTsunamiTab]);
+  const effectiveDateRange = useMemo(
+    () =>
+      resolveIsoDateRange(
+        asSingle(searchParams.filterDateFrom),
+        asSingle(searchParams.filterDateTo),
+        now,
+      ),
+    [now, searchParams.filterDateFrom, searchParams.filterDateTo],
+  );
+  const filterDateFrom = effectiveDateRange.from;
+  const filterDateTo = effectiveDateRange.to;
   const { effectiveFilter, effectiveMonths, tsunamiFilters } = useHistoryFilter(
     {
       activeTab,
@@ -391,6 +501,9 @@ export default function History() {
     tsunamiFilters,
     userLat: userLocation.lat,
     userLon: userLocation.lon,
+    filterMode: effectiveFilterMode,
+    filterDateFrom,
+    filterDateTo,
   });
 
   // ── Panel animation ───────────────────────────────────────────────────────
@@ -499,6 +612,11 @@ export default function History() {
     if (activeTab !== "RIWAYAT TSUNAMI") {
       nextParams.filterMonth = String(effectiveMonths[0]);
       nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
+      nextParams.filterMode = effectiveFilterMode;
+      if (effectiveFilterMode === "range") {
+        nextParams.filterDateFrom = filterDateFrom;
+        nextParams.filterDateTo = filterDateTo;
+      }
     }
     if (listPanelVisibleRef.current || cardOpenRef.current) {
       nextParams.restoreListPanel = "1";
@@ -510,7 +628,10 @@ export default function History() {
   }, [
     activeTab,
     effectiveFilter.year,
+    effectiveFilterMode,
     effectiveMonths,
+    filterDateFrom,
+    filterDateTo,
     isOpeningFilter,
     pathname,
     router,
@@ -550,6 +671,11 @@ export default function History() {
         if (activeTab !== "RIWAYAT TSUNAMI") {
           nextParams.filterMonth = String(effectiveMonths[0]);
           nextParams.filterMonths = serializeFilterMonths(effectiveMonths);
+          nextParams.filterMode = effectiveFilterMode;
+          if (effectiveFilterMode === "range") {
+            nextParams.filterDateFrom = filterDateFrom;
+            nextParams.filterDateTo = filterDateTo;
+          }
         }
         router.setParams(nextParams);
       }, 0);
@@ -557,7 +683,16 @@ export default function History() {
       setIsHistoryCardOpen(true);
       hideListPanel();
     },
-    [activeTab, effectiveFilter.year, effectiveMonths, hideListPanel, router],
+    [
+      activeTab,
+      effectiveFilter.year,
+      effectiveFilterMode,
+      effectiveMonths,
+      filterDateFrom,
+      filterDateTo,
+      hideListPanel,
+      router,
+    ],
   );
 
   // ── FlatList helpers ──────────────────────────────────────────────────────
@@ -580,14 +715,7 @@ export default function History() {
 
   const listEmpty = useMemo(
     () => (
-      <Text
-        style={{
-          color: "#E6F4FF",
-          textAlign: "center",
-          marginTop: 10,
-          fontSize: 12,
-        }}
-      >
+      <Text style={listStyles.emptyText}>
         {activeTab === "RIWAYAT TSUNAMI"
           ? "Data tsunami belum tersedia."
           : "Data gempa belum tersedia."}
@@ -606,6 +734,22 @@ export default function History() {
 
   const periodLabel = useMemo(() => {
     if (activeTab !== "RIWAYAT TSUNAMI") {
+      if (effectiveFilterMode === "range") {
+        const formatRangeDate = (value: string) => {
+          const parsed = parseIsoDate(value);
+          if (!parsed) return value;
+          return parsed.toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          });
+        };
+
+        return `${formatRangeDate(filterDateFrom)} - ${formatRangeDate(
+          filterDateTo,
+        )}`;
+      }
+
       const first = MONTH_NAMES_ID[(effectiveMonths[0] ?? 1) - 1];
       const last =
         MONTH_NAMES_ID[(effectiveMonths[effectiveMonths.length - 1] ?? 1) - 1];
@@ -618,7 +762,14 @@ export default function History() {
       return `${monthLabel} ${effectiveFilter.year}`;
     }
     return String(effectiveFilter.year);
-  }, [activeTab, effectiveFilter.year, effectiveMonths]);
+  }, [
+    activeTab,
+    effectiveFilter.year,
+    effectiveFilterMode,
+    effectiveMonths,
+    filterDateFrom,
+    filterDateTo,
+  ]);
 
   const tabBar = useMemo(
     () => (
@@ -635,7 +786,7 @@ export default function History() {
               <Text style={styles.periodChipText}>{periodLabel}</Text>
             </View>
             <View style={styles.actionRow}>
-              <View style={{ flex: 1 }} />
+              <View style={listStyles.topControlsSpacer} />
               <TouchableOpacity
                 style={[
                   styles.sidePill,
@@ -706,26 +857,37 @@ export default function History() {
     }
   }, []);
 
+  const closeNarasi = useCallback(() => {
+    setNarasiVisible(false);
+    setNarasiHtmlContent(null);
+  }, []);
+
+  const closeHistory = useCallback(() => {
+    setHistoryVisible(false);
+    setHistoryRawContent(null);
+  }, []);
+
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
   const tsunamiActive = isFocused && activeTab === "RIWAYAT TSUNAMI";
+  const mapAreaStyle = useMemo(
+    () => [
+      listStyles.mapArea,
+      {
+        bottom: listPanelSlide.interpolate({
+          inputRange: [0, 1],
+          outputRange: ["40%", "0%"],
+        }),
+      },
+    ],
+    [listPanelSlide],
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
-      <Animated.View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: listPanelSlide.interpolate({
-            inputRange: [0, 1],
-            outputRange: ["40%", "0%"],
-          }),
-        }}
-      >
+      <Animated.View style={mapAreaStyle}>
         {hasMountedDirasakan && (
           <View
             style={[
@@ -744,6 +906,9 @@ export default function History() {
               onOpenNarasi={openNarasi}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
+              filterMode={effectiveFilterMode}
+              filterDateFrom={filterDateFrom}
+              filterDateTo={filterDateTo}
               isActive={dirasakanActive}
             />
           </View>
@@ -766,6 +931,9 @@ export default function History() {
               onOpenHistory={openHistory}
               filterYear={effectiveFilter.year}
               filterMonths={effectiveMonths}
+              filterMode={effectiveFilterMode}
+              filterDateFrom={filterDateFrom}
+              filterDateTo={filterDateTo}
               isActive={terdeteksiActive}
             />
           </View>
@@ -807,19 +975,13 @@ export default function History() {
         visible={narasiVisible}
         htmlContent={narasiHtmlContent}
         loading={narasiLoading}
-        onClose={() => {
-          setNarasiVisible(false);
-          setNarasiHtmlContent(null);
-        }}
+        onClose={closeNarasi}
       />
       <ModalHistoricalProcess
         visible={historyVisible}
         rawContent={historyRawContent}
         loading={historyLoading}
-        onClose={() => {
-          setHistoryVisible(false);
-          setHistoryRawContent(null);
-        }}
+        onClose={closeHistory}
       />
     </View>
   );
