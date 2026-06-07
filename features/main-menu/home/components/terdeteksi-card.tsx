@@ -16,7 +16,7 @@ type TerdeteksiQuake = {
   wilayah: string;
   tanggal: string;
   jam: string;
-  fase: string;
+  status: string;
   latitude?: number;
   longitude?: number;
   eventId?: string;
@@ -138,11 +138,11 @@ export const TerdeteksiCard = ({
           label="Jam :"
           value={data?.jam ?? "-"}
         />
-        {!!data?.fase && (
+        {!!data?.status && (
           <DetailItem
             icon="alert-circle-outline"
-            label="Fase :"
-            value={data.fase}
+            label="Status :"
+            value={data.status}
           />
         )}
       </View>

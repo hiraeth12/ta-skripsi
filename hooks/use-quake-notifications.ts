@@ -13,6 +13,10 @@ import {
   EMPTY_WARNING,
   fetchTsunamiGroups,
 } from "@/features/main-menu/earthquake/utils/tsunami-content-utils";
+import {
+  getLatestTerdeteksiGempa,
+  parseTerdeteksiPayload,
+} from "@/features/main-menu/home/utils/parse-terdeteksi";
 import { notificationEmitter } from "@/services/fcm-event-emitter";
 
 export type QuakeNotifType = "Dirasakan" | "Terdeteksi" | "Tsunami";
@@ -48,7 +52,8 @@ type PushNotificationOptions = {
 };
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
-const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
+const TERDETEKSI_API_URL_FAST =
+  process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL_FAST;
 const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL;
 const FIREBASE_DATABASE_URL =
   process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
@@ -132,10 +137,27 @@ function getLevel(magnitude: number): "Rendah" | "Sedang" | "Kuat" {
   return "Rendah";
 }
 
+function withCacheBuster(url: string): string {
+  const base = url.trim();
+  if (!base) return "";
+  if (base.endsWith("=") || base.endsWith("?") || base.endsWith("&")) {
+    return `${base}${Date.now()}`;
+  }
+  return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
 function parseTimestamp(date: string, time: string) {
   const cleanTime = (time ?? "").replace(/ WIB| WITA| WIT/gi, "").trim();
   const rawDate = (date ?? "").trim();
   if (!rawDate || !cleanTime) return Date.now();
+
+  const slashDateMatch = rawDate.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (slashDateMatch) {
+    const [, year, month, day] = slashDateMatch;
+    const normalizedDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    const parsed = new Date(`${normalizedDate}T${cleanTime}+07:00`).getTime();
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
 
   const monthMap: Record<string, string> = {
     Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr",
@@ -457,28 +479,18 @@ async function fetchDirasakanNotification() {
 }
 
 async function fetchTerdeteksiNotification() {
-  if (!TERDETEKSI_API_URL) return;
+  if (!TERDETEKSI_API_URL_FAST) return;
 
-  const response = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`);
-  const data = await response.json();
+  const response = await fetch(withCacheBuster(TERDETEKSI_API_URL_FAST));
+  const raw = await response.text();
+  const parser = new XMLParser({ ignoreAttributes: false });
+  const parsedXml = parser.parse(raw);
+  const latest = getLatestTerdeteksiGempa(parsedXml);
+  const parsed = parseTerdeteksiPayload(latest);
 
-  const features = data?.features;
-  if (!Array.isArray(features) || features.length === 0) return;
+  if (!parsed) return;
 
-  const sorted = [...features].sort((a, b) => {
-    const tA = String(a?.properties?.time ?? "");
-    const tB = String(b?.properties?.time ?? "");
-    return tB.localeCompare(tA);
-  });
-
-  const latest = sorted[0];
-  if (!latest) return;
-
-  const props = latest?.properties ?? {};
-  const eventId = String(
-    props.ids ?? props.id ??
-    `${props.time}-${props.mag}-${props.place}-${latest?.geometry?.coordinates?.[0]}`,
-  );
+  const eventId = parsed.eventId.trim();
 
   if (!eventId || eventId === latestSeen.terdeteksi) return;
 
@@ -491,15 +503,15 @@ async function fetchTerdeteksiNotification() {
 
   if (alreadyExists) return;
 
-  const magnitude = Number.parseFloat(String(props.mag ?? "0")) || 0;
-  const [date = "", timeRaw = ""] = String(props.time ?? "").split(" ");
-  const time = timeRaw.split(".")[0] ?? "";
+  const magnitude = Number.parseFloat(parsed.magnitude) || 0;
+  const date = parsed.tanggal;
+  const time = parsed.jam;
 
   pushNotification({
     id: `terdeteksi:${eventId}`,
     type: "Terdeteksi",
-    magnitude: magnitude.toFixed(1),
-    location: String(props.place ?? "Lokasi tidak tersedia"),
+    magnitude: parsed.magnitude,
+    location: parsed.wilayah || "Lokasi tidak tersedia",
     date,
     time,
     level: getLevel(magnitude),

@@ -4,11 +4,11 @@ import { haversineDistanceKm } from "@/utils/geo";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useRef, useState } from "react";
 import type { TsunamiQuake } from "../components/tsunami-card";
-import { DIRASAKAN_API_URL, TERDETEKSI_API_URL, TSUNAMI_API_URL } from "../constants";
+import { DIRASAKAN_API_URL, TERDETEKSI_API_URL_FAST, TSUNAMI_API_URL } from "../constants";
 import type { DirasakanQuake, TerdeteksiQuake } from "../types";
 import { buildShakemapUrl, buildNarasiUrl, buildHistoryUrl, formatCoord } from "../utils/coord-utils";
 import { parseDirasakanPayload } from "../utils/parse-dirasakan";
-import { parseTerdeteksiPayload } from "../utils/parse-terdeteksi";
+import { getLatestTerdeteksiGempa, parseTerdeteksiPayload } from "../utils/parse-terdeteksi";
 import { getLatestTsunamiQuake } from "../utils/parse-tsunami";
 
 function withCacheBuster(url: string): string {
@@ -21,11 +21,6 @@ function withCacheBuster(url: string): string {
 }
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
-
-/**
- * Cek apakah narasi tersedia untuk event tertentu dengan melakukan HEAD request.
- * Return URL-nya jika tersedia, null jika tidak.
- */
 async function checkNarasiAvailable(
   narasiUrl: string,
   signal?: AbortSignal,
@@ -144,50 +139,20 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
       }
 
       async function fetchTerdeteksi() {
-        if (!TERDETEKSI_API_URL) return;
+        if (!TERDETEKSI_API_URL_FAST) return;
 
-        const res = await fetch(withCacheBuster(TERDETEKSI_API_URL), { signal });
+        const res = await fetch(withCacheBuster(TERDETEKSI_API_URL_FAST), { signal });
         if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
-        const body = (await res.json()) as { features?: unknown[] };
-        const features = body?.features;
-        if (
-          !Array.isArray(features) ||
-          features.length === 0 ||
-          signal?.aborted ||
-          !isMountedRef.current
-        )
-          return;
+        const raw = await res.text();
+        const xml = xmlParser.parse(raw) as Record<string, unknown>;
+        const gempaNode = getLatestTerdeteksiGempa(xml);
+        if (!gempaNode || signal?.aborted || !isMountedRef.current) return;
 
-        const latest = [...features].sort((a, b) => {
-          const aTime = String(
-            (a as Record<string, unknown>)?.properties
-              ? (((a as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? "")
-              : "",
-          );
-          const bTime = String(
-            (b as Record<string, unknown>)?.properties
-              ? (((b as Record<string, unknown>).properties as Record<string, unknown>)?.time ?? "")
-              : "",
-          );
-          return bTime.localeCompare(aTime);
-        })[0];
-
-        const parsed = parseTerdeteksiPayload(latest);
+        const parsed = parseTerdeteksiPayload(gempaNode);
         if (!parsed) return;
 
-        const latestRecord = latest as Record<string, unknown>;
-        const latestProps =
-          latestRecord.properties && typeof latestRecord.properties === "object"
-            ? (latestRecord.properties as Record<string, unknown>)
-            : {};
-        const featureId = String(
-          latestRecord.id ??
-            latestProps.id ??
-            latestProps.eventid ??
-            latestProps.identifier ??
-            "",
-        ).trim();
+        const eventId = parsed.eventId.trim();
 
         const { latitude: uLat, longitude: uLon } = location;
         const latCoord = formatCoord(parsed.latitude);
@@ -202,10 +167,10 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
           wilayah: parsed.wilayah,
           tanggal: parsed.tanggal,
           jam: parsed.jam,
-          fase: parsed.fase,
+          status: parsed.status,
           latitude: parsed.latitude,
           longitude: parsed.longitude,
-          eventId: featureId || undefined,
+          eventId: eventId || undefined,
         };
 
         setCacheData(CACHE_KEYS.TERDETEKSI, data);
@@ -218,15 +183,15 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
               : data,
           );
 
-          const historyUrl = featureId ? buildHistoryUrl(featureId) : null;
-          if (!featureId || !historyUrl) {
+          const historyUrl = eventId ? buildHistoryUrl(eventId) : null;
+          if (!eventId || !historyUrl) {
             terdeteksiHistoryEventIdRef.current = null;
             setTerdeteksiHistoryUrl(null);
             return;
           }
 
-          if (terdeteksiHistoryEventIdRef.current !== featureId) {
-            terdeteksiHistoryEventIdRef.current = featureId;
+          if (terdeteksiHistoryEventIdRef.current !== eventId) {
+            terdeteksiHistoryEventIdRef.current = eventId;
             setTerdeteksiHistoryUrl(null);
           }
 
@@ -234,7 +199,7 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
           if (
             isMountedRef.current &&
             !signal?.aborted &&
-            terdeteksiHistoryEventIdRef.current === featureId
+            terdeteksiHistoryEventIdRef.current === eventId
           ) {
             setTerdeteksiHistoryUrl(available);
           }

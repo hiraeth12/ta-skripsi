@@ -5,7 +5,7 @@ import type { MapViewType } from "@/constants/map";
 import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
 import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
-import { formatLatText, formatLonText, parseCoordinateText } from "@/utils/geo";
+import { formatLatText, formatLonText } from "@/utils/geo";
 import {
     endAt,
     get,
@@ -20,11 +20,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
-    buildTerdeteksiTimeRange,
+    buildTerdeteksiEventTimeMsRange,
     getNowYearMonth,
-    matchesTerdeteksiMonth,
     normalizeFilterMonths,
 } from "../utils/filter";
+import {
+    isTerdeteksiInMonth,
+    normalizeTerdeteksiHistoryItem,
+    sortTerdeteksiNewestFirst,
+    toTerdeteksiHistoryArray,
+} from "../utils/terdeteksi-history";
 import styles from "./styles/gempa-terdeteksi-content";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -38,6 +43,7 @@ const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 type QuakeItem = {
   eventId: string;
   historyEventId?: string;
+  eventTimeMs: number;
   latitude: number;
   longitude: number;
   magnitude: string;
@@ -88,60 +94,24 @@ type Props = {
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
 
-function firstText(...values: unknown[]): string {
-  for (const value of values) {
-    const text = String(value ?? "").trim();
-    if (text) return text;
-  }
-  return "";
-}
-
-function getHistoryEventId(item: any): string {
-  return firstText(
-    item?.id,
-    item?.properties?.id,
-    item?.properties?.eventid,
-    item?.properties?.eventId,
-    item?.properties?.identifier,
-    item?.eventid,
-    item?.eventId,
-    item?.source?.id,
-  );
-}
-
-function buildQuakeItem(item: any, index: number): QuakeItem | null {
-  const coords = item?.geometry?.coordinates || item?.coordinates;
-  const latitude = parseCoordinateText(
-    item?.latitude ?? item?.lat ?? coords?.latitude ?? coords?.[1],
-  );
-  const longitude = parseCoordinateText(
-    item?.longitude ?? item?.lon ?? coords?.longitude ?? coords?.[0],
-  );
-  if (latitude === null || longitude === null) return null;
-
-  const props = item?.properties ?? item;
-  const [tanggalFromTime, jamRaw] = String(props?.time ?? "").split(" ");
-  const jam = (jamRaw ?? "").split(".")[0];
-  const historyEventId = getHistoryEventId(item);
-
-  const eventId =
-    historyEventId || `${props?.time ?? ""}-${latitude}-${longitude}-${index}`;
+function buildQuakeItem(rawItem: unknown): QuakeItem | null {
+  const item = normalizeTerdeteksiHistoryItem(rawItem);
+  if (!item) return null;
 
   return {
-    eventId,
-    historyEventId: historyEventId || undefined,
-    latitude,
-    longitude,
-    magnitude: parseFloat(
-      String(props?.mag ?? props?.magnitude ?? "0"),
-    ).toFixed(1),
-    wilayah: String(props?.place ?? props?.area ?? props?.lokasi ?? ""),
-    tanggal: String(props?.tanggal ?? tanggalFromTime ?? ""),
-    jam: String(props?.jam ?? jam ?? ""),
-    kedalaman: `${parseFloat(String(props?.depth ?? props?.kedalaman ?? "0")).toFixed(1)} km`,
-    felt: String(props?.fase ?? props?.felt ?? ""),
-    latText: formatLatText(latitude),
-    lonText: formatLonText(longitude),
+    eventId: item.eventid,
+    historyEventId: item.eventid,
+    eventTimeMs: item.eventTimeMs,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    magnitude: item.magnitude,
+    wilayah: item.lokasi,
+    tanggal: item.tanggal,
+    jam: item.jam,
+    kedalaman: item.kedalaman,
+    felt: item.felt,
+    latText: formatLatText(item.latitude),
+    lonText: formatLonText(item.longitude),
   };
 }
 
@@ -180,7 +150,7 @@ export function GempaTerdeteksiHistoryContent({
     () =>
       effectiveMonths.map((month) => ({
         month,
-        ...buildTerdeteksiTimeRange(effectiveYear, month),
+        ...buildTerdeteksiEventTimeMsRange(effectiveYear, month),
       })),
     [effectiveMonths, effectiveYear],
   );
@@ -379,7 +349,11 @@ export function GempaTerdeteksiHistoryContent({
         ? quakes[targetIndex]
         : {
             eventId: externalSelection.eventId,
-            historyEventId: undefined,
+            historyEventId: externalSelection.eventId,
+            eventTimeMs:
+              Date.parse(
+                `${externalSelection.tanggal}T${externalSelection.jam}`,
+              ) || Number.NEGATIVE_INFINITY,
             latitude: externalSelection.latitude,
             longitude: externalSelection.longitude,
             magnitude: externalSelection.magnitude,
@@ -448,101 +422,97 @@ export function GempaTerdeteksiHistoryContent({
     const db = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
 
     const runFetch = async () => {
-      const snapshots = await Promise.all(
-        ranges.map(async (rangeItem) =>
-          get(
-            query(
-              ref(db, DB_PATH),
-              orderByChild("time"),
-              startAt(rangeItem.start),
-              endAt(rangeItem.end),
-              limitToLast(20),
+      onLoadingChange?.(true);
+
+      try {
+        const snapshots = await Promise.all(
+          ranges.map(async (rangeItem) =>
+            get(
+              query(
+                ref(db, DB_PATH),
+                orderByChild("eventTimeMs"),
+                startAt(rangeItem.start),
+                endAt(rangeItem.end),
+                limitToLast(20),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      if (!isMountedRef.current) return;
-      if (!snapshots.some((snapshot) => snapshot?.exists?.())) {
+        if (!isMountedRef.current) return;
+        if (!snapshots.some((snapshot) => snapshot?.exists?.())) {
+          dataSignatureRef.current = null;
+          setQuakes([]);
+          return;
+        }
+
+        const candidates = snapshots.flatMap((snapshot) =>
+          snapshot?.exists?.()
+            ? toTerdeteksiHistoryArray(snapshot.val())
+            : [],
+        );
+
+        if (candidates.length === 0) {
+          dataSignatureRef.current = null;
+          setQuakes([]);
+          return;
+        }
+
+        const merged = sortTerdeteksiNewestFirst(
+          candidates.filter((candidate) =>
+            effectiveMonths.some((month) =>
+              isTerdeteksiInMonth(candidate, effectiveYear, month),
+            ),
+          ),
+        );
+
+        const builtItems = merged.reduce<QuakeItem[]>((acc, item) => {
+          const built = buildQuakeItem(item);
+          if (built) acc.push(built);
+          return acc;
+        }, []);
+        const normalized = dedupeByKey(
+          builtItems,
+          (q) => q.eventId,
+          MAX_POINTS,
+        );
+
+        const signature = normalized
+          .map((q) => `${q.eventId}:${q.eventTimeMs}`)
+          .join("|");
+        if (signature === dataSignatureRef.current) return;
+        dataSignatureRef.current = signature;
+
+        const foundIndex = selectedEventIdRef.current
+          ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
+          : -1;
+
+        if (overrideQuake && foundIndex >= 0) setOverrideQuake(null);
+
+        setQuakes(normalized);
+
+        if (isFirstLoad.current && normalized[0]) {
+          isFirstLoad.current = false;
+          mapRef.current?.animateToRegion(
+            {
+              latitude: normalized[0].latitude,
+              longitude: normalized[0].longitude,
+              latitudeDelta: 2,
+              longitudeDelta: 2,
+            },
+            800,
+          );
+        }
+
+        if (!showCardRef.current) return;
+        if (foundIndex >= 0) setSelectedIndex(foundIndex);
+      } catch {
+        if (!isMountedRef.current) return;
         dataSignatureRef.current = null;
         setQuakes([]);
-        onLoadingChange?.(false);
-        return;
+      } finally {
+        if (isMountedRef.current) onLoadingChange?.(false);
       }
-
-      const candidates: any[] = snapshots.flatMap((snapshot) => {
-        if (!snapshot?.exists?.()) return [];
-        const raw = snapshot.val();
-        const itemsNode = raw?.items ?? raw;
-        return Array.isArray(itemsNode)
-          ? itemsNode
-          : itemsNode && typeof itemsNode === "object"
-            ? Object.values(itemsNode)
-            : [];
-      });
-
-      if (candidates.length === 0) {
-        setQuakes([]);
-        onLoadingChange?.(false);
-        return;
-      }
-
-      const merged = [...candidates]
-        .filter((candidate) =>
-          effectiveMonths.some((month) =>
-            matchesTerdeteksiMonth(
-              candidate?.time ??
-                candidate?.properties?.time ??
-                candidate?.tanggal,
-              effectiveYear,
-              month,
-            ),
-          ),
-        )
-        .sort((a, b) =>
-          String(b?.time ?? b?.jam ?? "").localeCompare(
-            String(a?.time ?? a?.jam ?? ""),
-          ),
-        );
-
-      const builtItems = merged.reduce<QuakeItem[]>((acc, item) => {
-        const built = buildQuakeItem(item, acc.length);
-        if (built) acc.push(built);
-        return acc;
-      }, []);
-      const normalized = dedupeByKey(builtItems, (q) => q.eventId, MAX_POINTS);
-
-      const signature = normalized.map((q) => q.eventId).join("|");
-      if (signature === dataSignatureRef.current) {
-        onLoadingChange?.(false);
-        return;
-      }
-      dataSignatureRef.current = signature;
-
-      const foundIndex = selectedEventIdRef.current
-        ? normalized.findIndex((q) => q.eventId === selectedEventIdRef.current)
-        : -1;
-
-      if (overrideQuake && foundIndex >= 0) setOverrideQuake(null);
-
-      setQuakes(normalized);
-      onLoadingChange?.(false);
-
-      if (isFirstLoad.current && normalized[0]) {
-        isFirstLoad.current = false;
-        mapRef.current?.animateToRegion(
-          {
-            latitude: normalized[0].latitude,
-            longitude: normalized[0].longitude,
-            latitudeDelta: 2,
-            longitudeDelta: 2,
-          },
-          800,
-        );
-      }
-
-      if (!showCardRef.current) return;
-      if (foundIndex >= 0) setSelectedIndex(foundIndex);
     };
 
     void runFetch();

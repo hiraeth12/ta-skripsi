@@ -24,12 +24,15 @@ import {
 } from "../utils/tsunami-history";
 import {
   buildDirasakanDateRange,
-  buildTerdeteksiTimeRange,
+  buildTerdeteksiEventTimeMsRange,
   matchesDirasakanMonth,
-  matchesTerdeteksiMonth,
   serializeFilterMonths,
 } from "../utils/filter";
 import { areSameListItems, sortTsunamiListItems } from "../utils/list-utils";
+import {
+  isTerdeteksiInMonth,
+  sortTerdeteksiNewestFirst,
+} from "../utils/terdeteksi-history";
 import type { HistoryEarthquakeTab, ListItem } from "../utils/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -88,8 +91,6 @@ export function useHistoryFetch({
       ? `${TAB_CACHE[activeTab]}_${TSUNAMI_HISTORY_CACHE_VERSION}_${effectiveYear}`
       : `${TAB_CACHE[activeTab]}_${effectiveYear}-${serializeFilterMonths(effectiveMonths)}`;
 
-    const orderField = isDir ? "date" : "time";
-
     async function fetchData() {
       // Phase 1: sajikan cache dulu agar tidak ada blank flash
       try {
@@ -143,10 +144,10 @@ export function useHistoryFetch({
           effectiveMonths.map((month) => {
             const range = isDir
               ? buildDirasakanDateRange(effectiveYear, month)
-              : buildTerdeteksiTimeRange(effectiveYear, month);
+              : buildTerdeteksiEventTimeMsRange(effectiveYear, month);
             const dataQuery = query(
               ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
-              orderByChild(orderField),
+              orderByChild(isDir ? "date" : "eventTimeMs"),
               startAt(range.start),
               endAt(range.end),
             );
@@ -181,11 +182,13 @@ export function useHistoryFetch({
           effectiveMonths.some((month) =>
             isDir
               ? matchesDirasakanMonth(item.tanggal, effectiveYear, month)
-              : matchesTerdeteksiMonth(item.tanggal, effectiveYear, month),
+              : isTerdeteksiInMonth(item, effectiveYear, month),
           ),
         );
 
-        const normalized = dedupeByKey(filtered, (item) => item.id);
+        const normalized = isDir
+          ? dedupeByKey(filtered, (item) => item.id)
+          : sortTerdeteksiNewestFirst(dedupeByKey(filtered, (item) => item.id));
         setPersistentCache(cacheKey, normalized);
 
         if (isMounted) {
