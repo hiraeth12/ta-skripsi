@@ -11,6 +11,7 @@ export type ListItem = {
   distanceKm: string;
   tanggal: string;
   jam: string;
+  eventTimeMs?: number;
   kedalaman: string;
   felt: string;
   shakemap?: string | null;

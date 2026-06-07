@@ -2,23 +2,39 @@ import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import type { MapViewType } from "@/constants/map";
+import { TERDETEKSI_API_URL_FAST } from "@/features/main-menu/home/constants";
 import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
+import {
+  getLatestTerdeteksiGempa,
+  parseTerdeteksiPayload,
+} from "@/features/main-menu/home/utils/parse-terdeteksi";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import { formatLatText, formatLonText } from "@/utils/geo";
 import { shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
+import { XMLParser } from "fast-xml-parser";
 import { useCallback, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
-const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
 const MIN_POLL_MS = 30_000;
 const MAX_POLL_MS = 120_000;
+const xmlParser = new XMLParser({ ignoreAttributes: false });
+
+function withCacheBuster(url: string): string {
+  const base = url.trim();
+  if (!base) return "";
+  if (base.endsWith("=") || base.endsWith("?") || base.endsWith("&")) {
+    return `${base}${Date.now()}`;
+  }
+  return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
 
 type LatestQuake = {
+  eventId: string;
   latitude: number;
   longitude: number;
   magnitude: string;
@@ -26,7 +42,7 @@ type LatestQuake = {
   tanggal: string;
   jam: string;
   kedalaman: string;
-  felt: string;
+  status: string;
   latText: string;
   lonText: string;
 };
@@ -75,36 +91,23 @@ export default function GempaTerdeteksi({
       if (!silent) onLoadingChange?.(true);
 
       try {
-        if (!API_URL) return { changed: false, ok: true };
+        if (!TERDETEKSI_API_URL_FAST) return { changed: false, ok: true };
 
-        const url = `${API_URL.trim()}${Date.now()}`;
-        const res = await fetch(url, { signal: abortSignal });
-        const data = await res.json();
-
-        const features = data?.features;
-        if (!Array.isArray(features) || features.length === 0)
-          return { changed: false, ok: true };
-
-        const sorted = [...features].sort((a, b) => {
-          const tA = a?.properties?.time ?? "";
-          const tB = b?.properties?.time ?? "";
-          return tB.localeCompare(tA);
+        const res = await fetch(withCacheBuster(TERDETEKSI_API_URL_FAST), {
+          signal: abortSignal,
         });
-        const latest = sorted[0];
-        if (!latest) return { changed: false, ok: true };
+        if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
-        const props = latest?.properties ?? {};
-        const coords = latest?.geometry?.coordinates;
-        const longitude = parseFloat(coords?.[0] ?? "0");
-        const latitude = parseFloat(coords?.[1] ?? "0");
-        if (isNaN(latitude) || isNaN(longitude))
-          return { changed: false, ok: true };
+        const raw = await res.text();
+        const xml = xmlParser.parse(raw) as Record<string, unknown>;
+        const latest = getLatestTerdeteksiGempa(xml);
+        const parsed = parseTerdeteksiPayload(latest);
+        if (!parsed) return { changed: false, ok: true };
 
-        const sourceEventId = String(
-          latest?.id ?? props?.id ?? props?.eventid ?? props?.identifier ?? "",
-        ).trim();
+        const { latitude, longitude } = parsed;
+        const sourceEventId = parsed.eventId.trim();
         const eventKey =
-          sourceEventId || `${props.time ?? ""}_${latitude}_${longitude}`;
+          sourceEventId || `${parsed.tanggal}_${parsed.jam}_${latitude}_${longitude}`;
         const isSameEvent = eventKey && eventKey === latestEventIdRef.current;
 
         const wasOffline = isOfflineRef.current;
@@ -123,20 +126,16 @@ export default function GempaTerdeteksi({
 
         latestEventIdRef.current = eventKey;
 
-        const [tanggal, jamRaw] = (props.time ?? "").split(" ");
-        const jam = (jamRaw ?? "").split(".")[0];
-        const absLat = Math.abs(latitude).toFixed(2);
-        const absLon = Math.abs(longitude).toFixed(2);
-
         setLatestQuake({
+          eventId: sourceEventId || eventKey,
           latitude,
           longitude,
-          magnitude: parseFloat(props.mag ?? "0").toFixed(1),
-          wilayah: props.place ?? "",
-          tanggal: tanggal ?? "",
-          jam: jam ?? "",
-          kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
-          felt: props.fase ?? "",
+          magnitude: parsed.magnitude,
+          wilayah: parsed.wilayah,
+          tanggal: parsed.tanggal,
+          jam: parsed.jam,
+          kedalaman: parsed.kedalaman,
+          status: parsed.status,
           latText: formatLatText(latitude),
           lonText: formatLonText(longitude),
         });
@@ -297,11 +296,11 @@ export default function GempaTerdeteksi({
             value={latestQuake.jam}
             styles={styles}
           />
-          {!!latestQuake.felt && (
+          {!!latestQuake.status && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Fase :"
-              value={latestQuake.felt}
+              label="Status :"
+              value={latestQuake.status}
               styles={styles}
             />
           )}

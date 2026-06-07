@@ -14,6 +14,7 @@ export function isSameListItem(a: ListItem, b: ListItem): boolean {
     a.distanceKm === b.distanceKm &&
     a.tanggal === b.tanggal &&
     a.jam === b.jam &&
+    a.eventTimeMs === b.eventTimeMs &&
     a.kedalaman === b.kedalaman &&
     a.felt === b.felt &&
     (a.shakemap ?? null) === (b.shakemap ?? null) &&

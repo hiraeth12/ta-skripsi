@@ -24,7 +24,7 @@ export type TerdeteksiQuake = {
   wilayah: string;
   tanggal: string;
   jam: string;
-  fase: string;
+  status: string;
   latitude: number;
   longitude: number;
   eventId?: string;

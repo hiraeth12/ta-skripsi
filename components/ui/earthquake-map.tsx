@@ -310,6 +310,7 @@ const DotMarker = memo(function DotMarker({
   onPress,
 }: DotMarkerProps) {
   const tapTargetSize = Math.max(40, dotSize + 20);
+
   return (
     <Mapbox.PointAnnotation
       key={markerKey}
@@ -318,26 +319,23 @@ const DotMarker = memo(function DotMarker({
       onSelected={onPress}
     >
       <View
-        collapsable={false}
-        style={[
-          styles.markerTapTarget,
-          {
-            width: tapTargetSize,
-            height: tapTargetSize,
-            borderRadius: tapTargetSize / 2,
-          },
-        ]}
+        style={{
+          width: tapTargetSize,
+          height: tapTargetSize,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         <View
-          style={[
-            styles.quakeDot,
-            {
-              width: dotSize,
-              height: dotSize,
-              borderRadius: dotSize / 2,
-              backgroundColor: dotColor,
-            },
-          ]}
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: dotColor,
+            borderWidth: 1.5,
+            borderColor: "#ffffff",
+            elevation: 5,
+          }}
         />
       </View>
     </Mapbox.PointAnnotation>
@@ -435,7 +433,7 @@ const EarthquakeMap = memo(
           const normalized = normalizeSeismicSensorsFeatureCollection(data);
           if (normalized) setSeismicSensorsGeoJson(normalized);
         })
-        .catch(() => {});
+        .catch(() => { });
     }, [showSeismicSensors, seismicSensorsGeoJson]);
 
     // Global - gunakan state & setter terpisah
@@ -452,7 +450,7 @@ const EarthquakeMap = memo(
           const normalized = normalizeSeismicSensorsFeatureCollection(data);
           if (normalized) setGlobalSeismicSensorsGeoJson(normalized);
         })
-        .catch(() => {});
+        .catch(() => { });
     }, [showGlobalSeismicSensors, globalSeismicSensorsGeoJson]);
 
     const applyCameraMove = useCallback(

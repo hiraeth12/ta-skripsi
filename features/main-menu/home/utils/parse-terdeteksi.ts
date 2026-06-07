@@ -1,4 +1,6 @@
 type TerdeteksiRawPayload = {
+  eventId: string;
+  status: string;
   longitude: number;
   latitude: number;
   tanggal: string;
@@ -6,38 +8,55 @@ type TerdeteksiRawPayload = {
   magnitude: string;
   kedalaman: string;
   wilayah: string;
-  fase: string;
 };
 
-/**
- * Sanitasi dan ekstrak field dari satu GeoJSON feature gempa terdeteksi.
- * Mengembalikan null jika data tidak valid atau koordinat tidak bisa di-parse.
- */
+function getText(source: Record<string, unknown>, key: string): string {
+  return String(source[key] ?? "").trim();
+}
+
+function splitWaktu(value: string): { tanggal: string; jam: string } {
+  const [tanggal = "", jamRaw = ""] = value.trim().split(/\s+/);
+  return {
+    tanggal,
+    jam: jamRaw.split(".")[0] ?? "",
+  };
+}
+
+export function getLatestTerdeteksiGempa(parsedXml: unknown): unknown | null {
+  if (!parsedXml || typeof parsedXml !== "object") return null;
+
+  const xml = parsedXml as Record<string, unknown>;
+  const root =
+    xml.Infogempa && typeof xml.Infogempa === "object"
+      ? (xml.Infogempa as Record<string, unknown>)
+      : xml;
+  const gempa = root.gempa;
+
+  if (Array.isArray(gempa)) return gempa[0] ?? null;
+  return gempa ?? null;
+}
+
 export function parseTerdeteksiPayload(
-  feature: unknown,
+  gempa: unknown,
 ): TerdeteksiRawPayload | null {
-  if (!feature || typeof feature !== "object") return null;
-  const f = feature as Record<string, unknown>;
-  const props = (f.properties ?? {}) as Record<string, unknown>;
-  const coords = (f.geometry as Record<string, unknown>)?.coordinates;
+  if (!gempa || typeof gempa !== "object") return null;
+  const g = gempa as Record<string, unknown>;
 
-  if (!Array.isArray(coords)) return null;
-
-  const longitude = parseFloat(String(coords[0] ?? ""));
-  const latitude = parseFloat(String(coords[1] ?? ""));
+  const longitude = parseFloat(getText(g, "bujur"));
+  const latitude = parseFloat(getText(g, "lintang"));
   if (isNaN(latitude) || isNaN(longitude)) return null;
 
-  const [tanggal, jamRaw] = String(props.time ?? "").split(" ");
-  const jam = (jamRaw ?? "").split(".")[0];
+  const { tanggal, jam } = splitWaktu(getText(g, "waktu"));
 
   return {
+    eventId: getText(g, "eventid"),
+    status: getText(g, "status"),
     longitude,
     latitude,
-    tanggal: tanggal ?? "",
-    jam: jam ?? "",
-    magnitude: parseFloat(String(props.mag ?? "0")).toFixed(1),
-    kedalaman: `${parseFloat(String(props.depth ?? "0")).toFixed(1)} km`,
-    wilayah: String(props.place ?? "-"),
-    fase: String(props.fase ?? ""),
+    tanggal,
+    jam,
+    magnitude: parseFloat(getText(g, "mag") || "0").toFixed(1),
+    kedalaman: `${parseFloat(getText(g, "dalam") || "0").toFixed(1)} km`,
+    wilayah: getText(g, "area") || "-",
   };
 }

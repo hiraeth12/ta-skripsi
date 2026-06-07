@@ -17,6 +17,7 @@
     "check:gempa-dirasakan:eventids": "node scripts/check-gempa-dirasakan-eventids.js",
     "sync:gempa-terdeteksi:history": "node scripts/db-gempa-terdeteksi-history.js",
     "sync:gempa-terdeteksi:history:watch": "node scripts/db-gempa-terdeteksi-history.js 15000",
+    "restructure:gempa-terdeteksi": "node scripts/restructure-gempa-terdeteksi.js",
     "sync:tsunami-events": "node scripts/sync-tsunami-events.js",
     "sync:scheduler": "node scripts/scheduler.js",
     "sync:verify": "node scripts/verify-sync.js",

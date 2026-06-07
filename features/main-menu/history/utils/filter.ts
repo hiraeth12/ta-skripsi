@@ -5,8 +5,9 @@ export type YearMonthFilter = {
   month: number; // 1-12
 };
 
-export const EARLIEST_YEAR = 2023;
+export const EARLIEST_YEAR = 2024;
 export const DIRASAKAN_FIRST = { year: 2026, month: 4 } as const;
+export const TERDETEKSI_FIRST = { year: 2024, month: 1 } as const;
 export const TSUNAMI_FIRST = { year: 2019, month: 1 } as const;
 
 export const MONTH_NAMES_ID = [
@@ -38,6 +39,7 @@ export function lastDayOfMonth(year: number, month: number): number {
 
 function getFirstAvailableMonth(tab: HistoryTabKey): YearMonthFilter {
   if (tab === "dirasakan") return DIRASAKAN_FIRST;
+  if (tab === "terdeteksi") return TERDETEKSI_FIRST;
   if (tab === "tsunami") return TSUNAMI_FIRST;
   return { year: EARLIEST_YEAR, month: 1 };
 }
@@ -119,6 +121,16 @@ export function buildTerdeteksiTimeRange(year: number, month: number): {
   return {
     start: `${year}-${mm}-01 00:00:00`,
     end: `${year}-${mm}-${endDay} 23:59:59`,
+  };
+}
+
+export function buildTerdeteksiEventTimeMsRange(year: number, month: number): {
+  start: number;
+  end: number;
+} {
+  return {
+    start: Date.UTC(year, month - 1, 1, 0, 0, 0, 0),
+    end: Date.UTC(year, month, 0, 23, 59, 59, 999),
   };
 }
 
