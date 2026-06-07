@@ -1,12 +1,8 @@
-/**
- * Scheduler untuk auto-sync gempa data ke Firebase
- * Run dengan: node scripts/scheduler.js
- */
-
 import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import { syncTsunamiEvents } from "./sync-tsunami-events.js";
+import { syncGempaTerdeteksi } from "./sync-gempa-terdeteksi.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,9 +74,6 @@ async function syncLatestGempaDirasakan() {
   return runScript("sync-latest-gempa-dirasakan-history.js");
 }
 
-async function syncGempaTerdeteksi() {
-  return runScript("db-gempa-terdeteksi-history.js");
-}
 
 async function syncTsunamiWarning() {
   const result = await syncTsunamiEvents();

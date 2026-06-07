@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
+    buildTerdeteksiEventTimeMsRangeFromIsoDates,
     buildTerdeteksiEventTimeMsRange,
     getNowYearMonth,
     normalizeFilterMonths,
@@ -90,6 +91,9 @@ type Props = {
   isActive?: boolean;
   filterYear?: number;
   filterMonths?: number[];
+  filterMode?: "bulan" | "range";
+  filterDateFrom?: string;
+  filterDateTo?: string;
 };
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
@@ -130,6 +134,9 @@ export function GempaTerdeteksiHistoryContent({
   isActive = true,
   filterYear,
   filterMonths,
+  filterMode = "bulan",
+  filterDateFrom,
+  filterDateTo,
 }: Props) {
   const now = useMemo(() => new Date(), []);
   const fallback = getNowYearMonth(now);
@@ -148,11 +155,19 @@ export function GempaTerdeteksiHistoryContent({
   );
   const ranges = useMemo(
     () =>
-      effectiveMonths.map((month) => ({
-        month,
-        ...buildTerdeteksiEventTimeMsRange(effectiveYear, month),
-      })),
-    [effectiveMonths, effectiveYear],
+      filterMode === "range"
+        ? [
+            buildTerdeteksiEventTimeMsRangeFromIsoDates(
+              filterDateFrom,
+              filterDateTo,
+              now,
+            ),
+          ]
+        : effectiveMonths.map((month) => ({
+            month,
+            ...buildTerdeteksiEventTimeMsRange(effectiveYear, month),
+          })),
+    [effectiveMonths, effectiveYear, filterDateFrom, filterDateTo, filterMode, now],
   );
   // ── State ──────────────────────────────────────────────────────────────────
 
@@ -459,11 +474,13 @@ export function GempaTerdeteksiHistoryContent({
         }
 
         const merged = sortTerdeteksiNewestFirst(
-          candidates.filter((candidate) =>
-            effectiveMonths.some((month) =>
-              isTerdeteksiInMonth(candidate, effectiveYear, month),
-            ),
-          ),
+          filterMode === "range"
+            ? candidates
+            : candidates.filter((candidate) =>
+                effectiveMonths.some((month) =>
+                  isTerdeteksiInMonth(candidate, effectiveYear, month),
+                ),
+              ),
         );
 
         const builtItems = merged.reduce<QuakeItem[]>((acc, item) => {
@@ -520,7 +537,14 @@ export function GempaTerdeteksiHistoryContent({
     return () => {
       isMountedRef.current = false;
     };
-  }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
+  }, [
+    effectiveMonths,
+    effectiveYear,
+    filterMode,
+    isActive,
+    onLoadingChange,
+    ranges,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

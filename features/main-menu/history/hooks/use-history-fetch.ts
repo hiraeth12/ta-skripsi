@@ -23,10 +23,14 @@ import {
   type TsunamiHistoryFilters,
 } from "../utils/tsunami-history";
 import {
+  buildDirasakanDateRangesForIsoRange,
   buildDirasakanDateRange,
   buildTerdeteksiEventTimeMsRange,
+  buildTerdeteksiEventTimeMsRangeFromIsoDates,
+  isDirasakanInDateRange,
   matchesDirasakanMonth,
   serializeFilterMonths,
+  sortDirasakanNewestFirst,
 } from "../utils/filter";
 import { areSameListItems, sortTsunamiListItems } from "../utils/list-utils";
 import {
@@ -55,6 +59,9 @@ type UseHistoryFetchParams = {
   tsunamiFilters: TsunamiHistoryFilters;
   userLat: number;
   userLon: number;
+  filterMode?: "bulan" | "range";
+  filterDateFrom?: string;
+  filterDateTo?: string;
 };
 
 type UseHistoryFetchResult = {
@@ -71,6 +78,9 @@ export function useHistoryFetch({
   tsunamiFilters,
   userLat,
   userLon,
+  filterMode = "bulan",
+  filterDateFrom,
+  filterDateTo,
 }: UseHistoryFetchParams): UseHistoryFetchResult {
   const [items, setItems] = useState<ListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -86,10 +96,13 @@ export function useHistoryFetch({
 
     const isTsunami = activeTab === "RIWAYAT TSUNAMI";
     const isDir = activeTab === "GEMPA DIRASAKAN";
+    const isRange = !isTsunami && filterMode === "range";
 
     const cacheKey = isTsunami
       ? `${TAB_CACHE[activeTab]}_${TSUNAMI_HISTORY_CACHE_VERSION}_${effectiveYear}`
-      : `${TAB_CACHE[activeTab]}_${effectiveYear}-${serializeFilterMonths(effectiveMonths)}`;
+      : isRange
+        ? `${TAB_CACHE[activeTab]}_range_${filterDateFrom ?? ""}-${filterDateTo ?? ""}`
+        : `${TAB_CACHE[activeTab]}_${effectiveYear}-${serializeFilterMonths(effectiveMonths)}`;
 
     async function fetchData() {
       // Phase 1: sajikan cache dulu agar tidak ada blank flash
@@ -139,20 +152,57 @@ export function useHistoryFetch({
           return;
         }
 
-        // Dirasakan / Terdeteksi: query per bulan lalu merge
         const snapshots = await Promise.all(
-          effectiveMonths.map((month) => {
-            const range = isDir
-              ? buildDirasakanDateRange(effectiveYear, month)
-              : buildTerdeteksiEventTimeMsRange(effectiveYear, month);
-            const dataQuery = query(
-              ref(db, isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items"),
-              orderByChild(isDir ? "date" : "eventTimeMs"),
-              startAt(range.start),
-              endAt(range.end),
-            );
-            return get(dataQuery);
-          }),
+          isRange && isDir
+            ? buildDirasakanDateRangesForIsoRange(
+                filterDateFrom,
+                filterDateTo,
+              ).map((range) =>
+                get(
+                  query(
+                    ref(db, "gempa_dirasakan/items"),
+                    orderByChild("date"),
+                    startAt(range.start),
+                    endAt(range.end),
+                  ),
+                ),
+              )
+            : isRange
+              ? [
+                  get(
+                    query(
+                      ref(db, "gempa_terdeteksi/items"),
+                      orderByChild("eventTimeMs"),
+                      startAt(
+                        buildTerdeteksiEventTimeMsRangeFromIsoDates(
+                          filterDateFrom,
+                          filterDateTo,
+                        ).start,
+                      ),
+                      endAt(
+                        buildTerdeteksiEventTimeMsRangeFromIsoDates(
+                          filterDateFrom,
+                          filterDateTo,
+                        ).end,
+                      ),
+                    ),
+                  ),
+                ]
+              : effectiveMonths.map((month) => {
+                  const range = isDir
+                    ? buildDirasakanDateRange(effectiveYear, month)
+                    : buildTerdeteksiEventTimeMsRange(effectiveYear, month);
+                  const dataQuery = query(
+                    ref(
+                      db,
+                      isDir ? "gempa_dirasakan/items" : "gempa_terdeteksi/items",
+                    ),
+                    orderByChild(isDir ? "date" : "eventTimeMs"),
+                    startAt(range.start),
+                    endAt(range.end),
+                  );
+                  return get(dataQuery);
+                }),
         );
         if (!isMounted) return;
 
@@ -178,16 +228,22 @@ export function useHistoryFetch({
           ? normalizeDirasakan(combinedRaw, userLat, userLon)
           : normalizeTerdeteksi(combinedRaw, userLat, userLon);
 
-        const filtered = mergedNormalized.filter((item) =>
-          effectiveMonths.some((month) =>
-            isDir
-              ? matchesDirasakanMonth(item.tanggal, effectiveYear, month)
-              : isTerdeteksiInMonth(item, effectiveYear, month),
-          ),
-        );
+        const filtered = isRange
+          ? mergedNormalized.filter((item) =>
+              isDir
+                ? isDirasakanInDateRange(item, filterDateFrom, filterDateTo)
+                : true,
+            )
+          : mergedNormalized.filter((item) =>
+              effectiveMonths.some((month) =>
+                isDir
+                  ? matchesDirasakanMonth(item.tanggal, effectiveYear, month)
+                  : isTerdeteksiInMonth(item, effectiveYear, month),
+              ),
+            );
 
         const normalized = isDir
-          ? dedupeByKey(filtered, (item) => item.id)
+          ? sortDirasakanNewestFirst(dedupeByKey(filtered, (item) => item.id))
           : sortTerdeteksiNewestFirst(dedupeByKey(filtered, (item) => item.id));
         setPersistentCache(cacheKey, normalized);
 
@@ -210,6 +266,9 @@ export function useHistoryFetch({
     activeTab,
     effectiveMonths,
     effectiveYear,
+    filterDateFrom,
+    filterDateTo,
+    filterMode,
     setItemsIfChanged,
     tsunamiFilters,
     userLat,

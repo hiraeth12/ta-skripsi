@@ -4,6 +4,7 @@ import {
   sortTerdeteksiNewestFirst,
   toTerdeteksiHistoryArray,
 } from "./terdeteksi-history";
+import { getDirasakanEventTimeMs, sortDirasakanNewestFirst } from "./filter";
 import type { TsunamiHistoryEvent } from "./tsunami-history";
 import type { ListItem } from "./types";
 
@@ -18,12 +19,7 @@ export function normalizeDirasakan(
       ? Object.values(rawData as object)
       : [];
 
-  return candidates
-    .sort((a, b) =>
-      String(b?.eventid ?? b?.timesent ?? "").localeCompare(
-        String(a?.eventid ?? a?.timesent ?? ""),
-      ),
-    )
+  return sortDirasakanNewestFirst(candidates)
     .reduce<ListItem[]>((acc, candidate, index) => {
       const coordStr = String(candidate?.point?.coordinates ?? "");
       const [lonStr, latStr] = coordStr.split(",");
@@ -59,6 +55,7 @@ export function normalizeDirasakan(
         distanceKm,
         tanggal: String(candidate?.date ?? candidate?.tanggal ?? ""),
         jam: String(candidate?.time ?? candidate?.jam ?? ""),
+        eventTimeMs: getDirasakanEventTimeMs(candidate),
         kedalaman: String(candidate?.depth ?? candidate?.kedalaman ?? ""),
         felt: String(candidate?.felt ?? ""),
         shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
