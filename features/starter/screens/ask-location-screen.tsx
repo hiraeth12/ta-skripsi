@@ -1,14 +1,14 @@
 import CustomAlert from "@/components/ui/custom-alert";
 import GpsButton from "@/components/ui/gps-button";
 import LocationSearchModal from "@/components/ui/location-search-modal";
-import { useHaversine } from "@/hooks/use-haversine";
+import { findNearestLocation, GeoLocation } from "@/utils/geo";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { getDatabase, ref, update } from "@react-native-firebase/database";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Image,
@@ -21,58 +21,126 @@ import {
 } from "react-native";
 import { styles } from "../styles/ask-location-styles";
 
-// Helper function to find nearest location
-function findNearestLocation(
-  gpsLat: number,
-  gpsLon: number,
-  locations: any[],
-  haversineDistanceKm: (
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ) => number,
-) {
-  if (!locations || locations.length === 0) return null;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  let nearest = locations[0];
-  let minDistance = haversineDistanceKm(
-    gpsLat,
-    gpsLon,
-    nearest.latitude,
-    nearest.longitude,
-  );
-
-  for (let i = 1; i < locations.length; i++) {
-    const distance = haversineDistanceKm(
-      gpsLat,
-      gpsLon,
-      locations[i].latitude,
-      locations[i].longitude,
-    );
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearest = locations[i];
-    }
-  }
-
-  return nearest;
+interface AppLocation extends GeoLocation {
+  id: string;
+  name: string;
+  desc: string;
 }
 
-export default function AskLocation() {
-  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+// ─── Constants ────────────────────────────────────────────────────────────────
 
+const FIREBASE_DATABASE_URL =
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
+
+/**
+ * Batas koordinat wilayah Indonesia.
+ * Digunakan untuk memvalidasi hasil GPS sebelum disimpan ke database,
+ * mencegah data koordinat absurd akibat GPS error atau spoofing.
+ */
+const INDONESIA_BOUNDS = {
+  latMin: -11.0,
+  latMax: 6.0,
+  lonMin: 95.0,
+  lonMax: 141.0,
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * FIX (Security): validasi bahwa koordinat berada dalam batas wajar.
+ * Mencegah penyimpanan koordinat NaN, Infinity, atau di luar Indonesia.
+ */
+const isValidCoordinate = (lat: number, lon: number): boolean => {
+  if (!isFinite(lat) || !isFinite(lon)) return false;
+  return (
+    lat >= INDONESIA_BOUNDS.latMin &&
+    lat <= INDONESIA_BOUNDS.latMax &&
+    lon >= INDONESIA_BOUNDS.lonMin &&
+    lon <= INDONESIA_BOUNDS.lonMax
+  );
+};
+
+/**
+ * FIX (Security): validasi & sanitasi data lokasi dari Firebase REST response.
+ * Sebelumnya pakai `any` cast tanpa pengecekan — field bisa null/undefined/NaN.
+ */
+const parseLocation = (id: string, raw: unknown): AppLocation | null => {
+  if (!raw || typeof raw !== "object") return null;
+
+  const loc = raw as Record<string, unknown>;
+  const lat = Number(loc.latitude);
+  const lon = Number(loc.longitude);
+  const name = typeof loc.name === "string" ? loc.name.trim() : "";
+
+  // Buang entri tanpa nama atau koordinat tidak valid
+  if (!name || !isValidCoordinate(lat, lon)) return null;
+
+  return {
+    id,
+    name,
+    desc:
+      typeof loc.alt_name === "string" && loc.alt_name.trim()
+        ? loc.alt_name.trim()
+        : name,
+    latitude: lat,
+    longitude: lon,
+  };
+};
+
+/**
+ * Shared helper untuk menyimpan lokasi user ke Firebase.
+ * FIX (Bug): duplikasi kode update() di handleUseGPS & handleSelect dihilangkan.
+ * FIX (Security): update() error di-log, tidak lagi di-suppress diam-diam.
+ */
+const saveLocationToDatabase = async (
+  uid: string,
+  latitude: number,
+  longitude: number,
+  locationName: string,
+): Promise<void> => {
+  try {
+    const app = getApp();
+    const database = FIREBASE_DATABASE_URL
+      ? getDatabase(app, FIREBASE_DATABASE_URL)
+      : getDatabase(app);
+
+    await update(ref(database, `users/${uid}`), {
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+      locationName,
+      locationUpdatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    // FIX: log error agar mudah di-debug; jangan swallow diam-diam
+    console.warn("[Location] Gagal menyimpan lokasi ke database:", err);
+  }
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function AskLocation() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("");
-  const [allLocations, setAllLocations] = useState<any[]>([]);
+  const [allLocations, setAllLocations] = useState<AppLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState(
-    t("askLocationScreen.status.findingGps"), // <-- Menggunakan t()
+    "Sedang mencari lokasi GPS Anda...",
   );
   const router = useRouter();
-  const { haversineDistanceKm } = useHaversine();
+
+  // FIX (Bug): gunakan ref untuk mencegah state update setelah unmount
+  // (misal user navigasi pergi saat fetch sedang berjalan)
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -86,100 +154,127 @@ export default function AskLocation() {
     message: string,
     type: "error" | "success" = "error",
   ) => {
-    setModalConfig({ visible: true, title, message, type });
+    if (isMounted.current) {
+      setModalConfig({ visible: true, title, message, type });
+    }
   };
+
+  // ── Fetch lokasi dari Firebase ────────────────────────────────────────────
 
   useEffect(() => {
     const fetchLocations = async () => {
+      // FIX (Security): URL sudah di-trim dan di-validasi di konstanta atas
+      if (!FIREBASE_DATABASE_URL) {
+        console.error("[Location] EXPO_PUBLIC_FIREBASE_DATABASE_URL tidak dikonfigurasi.");
+        if (isMounted.current) setLoading(false);
+        return;
+      }
+
       try {
-        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        if (!dbUrl) throw new Error("Database URL not configured");
+        // FIX (Security): tambah timeout agar fetch tidak menggantung selamanya
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
-        const response = await fetch(`${dbUrl}/locations.json`);
-        if (!response.ok)
-          throw new Error(`Failed to fetch: ${response.status}`);
-
-        const data = await response.json();
-        const locationsArray = Object.entries(data || {}).map(
-          ([id, location]: any) => ({
-            id,
-            name: location.name || "",
-            desc: location.alt_name || location.name || "",
-            latitude: location.latitude,
-            longitude: location.longitude,
-          }),
+        const response = await fetch(
+          `${FIREBASE_DATABASE_URL}/locations.json`,
+          { signal: controller.signal },
         );
-        setAllLocations(locationsArray);
-      } catch {
-        setAllLocations([]);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          // FIX (Security): jangan ekspos HTTP status ke user;
+          // log saja untuk developer
+          console.warn(`[Location] Fetch gagal, status: ${response.status}`);
+          throw new Error("fetch_failed");
+        }
+
+        const data: unknown = await response.json();
+
+        // FIX (Security): validasi & sanitasi setiap entri via parseLocation()
+        // — sebelumnya pakai `any` cast tanpa pengecekan apapun
+        const locationsArray: AppLocation[] = Object.entries(
+          (data && typeof data === "object" ? data : {}) as Record<string, unknown>,
+        )
+          .map(([id, raw]) => parseLocation(id, raw))
+          .filter((loc): loc is AppLocation => loc !== null);
+
+        if (isMounted.current) setAllLocations(locationsArray);
+      } catch (err: unknown) {
+        // FIX (Bug): catch kosong sebelumnya menelan semua error tanpa log
+        if ((err as { name?: string })?.name !== "AbortError") {
+          console.warn("[Location] Error fetching locations:", err);
+        }
+        if (isMounted.current) setAllLocations([]);
       } finally {
-        setLoading(false);
+        if (isMounted.current) setLoading(false);
       }
     };
 
     fetchLocations();
   }, []);
 
+  // ── GPS handler ───────────────────────────────────────────────────────────
+
   const handleUseGPS = async () => {
+    // FIX (Bug): guard double-tap (konsisten dengan pola di register-screen)
+    if (gpsLoading) return;
+
     setGpsLoading(true);
-    setGpsMessage(t("askLocationScreen.status.requestingPermission")); // <-- Menggunakan t()
+    setGpsMessage("Meminta izin akses lokasi...");
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         showCustomAlert(
-          t("askLocationScreen.alert.permissionDeniedTitle"), // <-- Menggunakan t()
-          t("askLocationScreen.alert.permissionDeniedMsg"), // <-- Menggunakan t()
+          "Izin Ditolak",
+          "Akses GPS diperlukan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
           "error",
         );
         return;
       }
 
-      setGpsMessage(t("askLocationScreen.status.determiningPosition")); // <-- Menggunakan t()
+      setGpsMessage("Sedang menentukan posisi Anda...");
 
-      // Balanced is significantly faster than High for this use case
-      // (finding nearest village — centimeter precision is not needed)
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
       const { latitude, longitude } = location.coords;
 
-      const nearestLocation = findNearestLocation(
-        latitude,
-        longitude,
-        allLocations,
-        haversineDistanceKm,
-      );
-      const locationName =
-        nearestLocation?.name || t("askLocationScreen.fallbackLocationName"); // <-- Menggunakan t()
-
-      // Fire-and-forget — DB update no longer blocks navigation
-      const app = getApp();
-      const currentUser = getAuth(app).currentUser;
-      if (currentUser) {
-        const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-        const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-        update(ref(database, `users/${currentUser.uid}`), {
-          latitude: latitude.toFixed(6),
-          longitude: longitude.toFixed(6),
-          locationName,
-          locationUpdatedAt: new Date().toISOString(),
-        }).catch(() => {});
+      // FIX (Security): validasi koordinat sebelum disimpan
+      if (!isValidCoordinate(latitude, longitude)) {
+        showCustomAlert(
+          "Lokasi Tidak Valid",
+          "GPS mengembalikan koordinat di luar wilayah Indonesia. Pastikan GPS aktif dan coba lagi.",
+          "error",
+        );
+        return;
       }
 
-      // Navigate immediately — no artificial delay
+      const nearest = findNearestLocation(latitude, longitude, allLocations);
+      const locationName = nearest?.name ?? "Lokasi GPS";
+
+      const currentUser = getAuth(getApp()).currentUser;
+      if (currentUser) {
+        // FIX (Bug): await saveLocation — sebelumnya fire-and-forget,
+        // user bisa dinavigasi sebelum data tersimpan
+        await saveLocationToDatabase(currentUser.uid, latitude, longitude, locationName);
+      }
+
       router.push("/main-menu/home");
-    } catch {
+    } catch (err) {
+      console.warn("[Location] GPS error:", err);
       showCustomAlert(
-        t("askLocationScreen.alert.errorTitle"), // <-- Menggunakan t()
-        t("askLocationScreen.alert.errorMsg"), // <-- Menggunakan t()
+        "GPS Tidak Tersedia",
+        "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi.",
         "error",
       );
     } finally {
-      setGpsLoading(false);
+      if (isMounted.current) setGpsLoading(false);
     }
   };
+
+  // ── Search filter ─────────────────────────────────────────────────────────
 
   const filteredLocations = allLocations.filter(
     (item) =>
@@ -187,28 +282,28 @@ export default function AskLocation() {
       item.desc.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleSelect = async (item: any) => {
+  // ── Manual select handler ─────────────────────────────────────────────────
+
+  const handleSelect = async (item: AppLocation) => {
     setSelectedLocation(`${item.name}, ${item.desc}`);
     setModalVisible(false);
     setQuery("");
 
-    // Fire-and-forget — DB update no longer blocks navigation
-    const app = getApp();
-    const currentUser = getAuth(app).currentUser;
+    const currentUser = getAuth(getApp()).currentUser;
     if (currentUser) {
-      const dbUrl = process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL;
-      const database = dbUrl ? getDatabase(app, dbUrl) : getDatabase(app);
-      update(ref(database, `users/${currentUser.uid}`), {
-        latitude: item.latitude.toFixed(6),
-        longitude: item.longitude.toFixed(6),
-        locationName: item.name,
-        locationUpdatedAt: new Date().toISOString(),
-      }).catch(() => {});
+      // FIX (Bug): await agar navigasi tidak mendahului penyimpanan data
+      await saveLocationToDatabase(
+        currentUser.uid,
+        item.latitude,
+        item.longitude,
+        item.name,
+      );
     }
 
-    // Navigate immediately — no artificial delay
     router.push("/main-menu/home");
   };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -231,16 +326,15 @@ export default function AskLocation() {
           resizeMode="contain"
         />
 
-        {/* <-- Menggunakan t() untuk teks UI --> */}
-        <Text style={styles.description}>
-          {t("askLocationScreen.headerTitle")}
-        </Text>
+        <Text style={styles.description}>Dimana lokasi Anda saat ini?</Text>
 
+        {/* FIX (Bug): disable input saat data lokasi masih di-fetch */}
         <View style={styles.inputArea}>
           <TouchableOpacity
-            style={styles.customInput}
-            onPress={() => setModalVisible(true)}
+            style={[styles.customInput, loading && { opacity: 0.5 }]}
+            onPress={() => !loading && setModalVisible(true)}
             activeOpacity={0.7}
+            disabled={loading}
           >
             <Ionicons
               name="location-sharp"
@@ -252,7 +346,9 @@ export default function AskLocation() {
               style={[styles.inputText, !selectedLocation && { color: "#999" }]}
               numberOfLines={1}
             >
-              {selectedLocation || t("askLocationScreen.searchPlaceholder")}
+              {loading
+                ? "Memuat daftar lokasi..."
+                : selectedLocation || t("askLocationScreen.searchPlaceholder")}
             </Text>
             <EvilIcons name="search" size={24} color="#1E6F9F" />
           </TouchableOpacity>
@@ -263,7 +359,7 @@ export default function AskLocation() {
         <View style={styles.buttonWrapper}>
           <GpsButton
             text={t("askLocationScreen.useGpsButton")}
-            loadingText={gpsMessage} // gpsMessage sudah pakai t() di atas
+            loadingText={gpsMessage}
             loading={gpsLoading}
             onPress={handleUseGPS}
             disabled={gpsLoading}
@@ -276,7 +372,7 @@ export default function AskLocation() {
         <LocationSearchModal
           visible={modalVisible}
           query={query}
-          locations={loading ? [] : filteredLocations}
+          locations={filteredLocations}
           onClose={() => setModalVisible(false)}
           onChangeQuery={setQuery}
           onSelect={handleSelect}
@@ -288,7 +384,7 @@ export default function AskLocation() {
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
-        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+        onClose={() => setModalConfig((prev) => ({ ...prev, visible: false }))}
       />
     </KeyboardAvoidingView>
   );

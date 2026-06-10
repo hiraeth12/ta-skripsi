@@ -196,7 +196,9 @@
     "titleDirasakan": "Latest Felt Earthquake",
     "descDirasakan": "Displays earthquake events whose vibrations are felt by humans and reported in the surrounding area.",
     "titleTerdeteksi": "Latest Detected Earthquake",
-    "descTerdeteksi": "Displays earthquakes recorded by seismographs, but not felt by humans."
+    "descTerdeteksi": "Displays earthquakes recorded by seismographs, but not felt by humans.",
+    "titleTsunami": "Latest Tsunami Information",
+    "descTsunami": "Displays the latest tsunami early warning information from BMKG."
   },
   "notificationsScreen": {
     "headerTitle": "Recent Notifications",
@@ -374,7 +376,10 @@
     "tabs": {
       "felt": "FELT EARTHQUAKE",
       "detected": "DETECTED EARTHQUAKE"
-    }
+    },
+    "officialNarrative": "OFFICIAL NARRATIVE",
+    "historicalProcess": "HISTORICAL PROCESS",
+    "status": "Status"
   },
   "share": {
     "title": "Share Earthquake Information",

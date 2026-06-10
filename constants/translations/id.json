@@ -196,7 +196,9 @@
     "titleDirasakan": "Gempabumi Terakhir Dirasakan",
     "descDirasakan": "Menampilkan kejadian gempa yang getarannya dirasakan oleh manusia dan dilaporkan di wilayah sekitar.",
     "titleTerdeteksi": "Gempabumi Terakhir Terdeteksi",
-    "descTerdeteksi": "Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia."
+    "descTerdeteksi": "Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia.",
+    "titleTsunami": "Informasi Tsunami Terakhir",
+    "descTsunami": "Menampilkan informasi peringatan dini tsunami terbaru dari BMKG."
   },
   "notificationsScreen": {
     "headerTitle": "Notifikasi Terbaru",
@@ -374,7 +376,10 @@
     "tabs": {
       "felt": "GEMPA DIRASAKAN",
       "detected": "GEMPA TERDETEKSI"
-    }
+    },
+    "officialNarrative": "NARASI RESMI",
+    "historicalProcess": "PROSES HISTORIS",
+    "status": "Status"
   },
   "share": {
     "title": "Bagikan Informasi Gempa",

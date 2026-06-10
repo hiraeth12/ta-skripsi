@@ -1,51 +1,46 @@
 import { useRootNavigationState, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Animated, Image, View } from "react-native";
-import { loadStartupSession } from "@/features/account/session";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect } from "react";
+import {
+  loadStartupSession,
+  type StartupRoute,
+} from "@/features/main-menu/account/session";
 
-export default function Loading() {
+function hideSplashAfterNavigation() {
+  requestAnimationFrame(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  });
+}
+
+export default function StartupRedirect() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
-  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!rootNavigationState?.key) return;
     let cancelled = false;
 
-    loadStartupSession().then((session) => {
+    async function redirectToStartupRoute() {
+      let route: StartupRoute = "/starter/sign-in";
+
+      try {
+        const session = await loadStartupSession();
+        route = session.route;
+      } catch {
+        route = "/starter/sign-in";
+      }
+
       if (cancelled) return;
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 280,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (cancelled || !finished) return;
-        router.replace(session.route);
-      });
-    });
+      router.replace(route);
+      hideSplashAfterNavigation();
+    }
+
+    redirectToStartupRoute();
 
     return () => {
       cancelled = true;
-      opacity.stopAnimation();
     };
-  }, [opacity, router, rootNavigationState?.key]);
+  }, [router, rootNavigationState?.key]);
 
-  return (
-    <Animated.View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity,
-      }}
-    >
-      <View>
-        <Image
-          source={require("../assets/images/SeismoTrack_2-removebg-preview.png")}
-          style={{ width: 253, height: 83 }}
-          resizeMode="contain"
-        />
-      </View>
-    </Animated.View>
-  );
+  return null;
 }

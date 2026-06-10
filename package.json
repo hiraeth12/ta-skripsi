@@ -5,57 +5,50 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "password-reset:api": "node server/password-reset/api.js",
     "test:password-reset": "node --test test/password-reset-core.test.js",
-    "sync:locations": "node scripts/sync-locations.js",
-    "sync:gempa-dirasakan:full": "node scripts/db-gempa-dirasakan-history-cli.js",
     "sync:gempa-dirasakan:latest": "node scripts/sync-latest-gempa-dirasakan-history.js",
     "sync:gempa-dirasakan:latest:watch": "node scripts/sync-latest-gempa-dirasakan-history.js 60000",
-    "check:gempa-dirasakan:eventids": "node scripts/check-gempa-dirasakan-eventids.js",
-    "sync:gempa-terdeteksi:history": "node scripts/db-gempa-terdeteksi-history.js",
-    "sync:gempa-terdeteksi:history:watch": "node scripts/db-gempa-terdeteksi-history.js 15000",
+    "sync:gempa-terdeteksi:history": "node scripts/sync-gempa-terdeteksi.js",
+    "sync:gempa-terdeteksi:history:watch": "node scripts/sync-gempa-terdeteksi.js 15000",
+    "restructure:gempa-terdeteksi": "node scripts/restructure-gempa-terdeteksi.js",
+    "sync:tsunami-events": "node scripts/sync-tsunami-events.js",
     "sync:scheduler": "node scripts/scheduler.js",
-    "sync:verify": "node scripts/verify-sync.js",
-    "sync:check-order": "node scripts/check-order.js",
     "monitor:notifications": "node scripts/monitor-gempa-notifications.js",
+    "monitor:tsunami-notifications": "node scripts/monitor-tsunami-notifications.js",
     "test:notification": "node scripts/test-notification.js",
-    "sort:gempa-dirasakan": "node scripts/sort-gempa-dirasakan.js"
+    "test:tsunami-notification": "node scripts/test-tsunami-notification.js",
+    "test:tsunami-notification:send": "node scripts/test-tsunami-notification.js --send"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "11.4.1",
     "@react-native-firebase/app": "^24.0.0",
     "@react-native-firebase/auth": "^24.0.0",
     "@react-native-firebase/database": "^24.0.0",
     "@react-native-firebase/messaging": "^24.0.0",
     "@react-native-firebase/storage": "^24.0.0",
-    "@react-navigation/bottom-tabs": "^7.4.0",
-    "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@rnmapbox/maps": "^10.3.0",
     "@turf/turf": "^7.3.4",
     "expo": "~54.0.33",
+    "expo-asset": "~12.0.13",
     "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.11",
-    "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.11",
     "expo-localization": "~17.0.8",
     "expo-location": "^19.0.8",
     "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
-    "expo-status-bar": "~3.0.9",
-    "expo-symbols": "~1.0.8",
-    "expo-system-ui": "~6.0.9",
-    "expo-web-browser": "~15.0.10",
     "fast-xml-parser": "^5.4.2",
     "firebase-admin": "^12.0.0",
     "i18next": "^26.2.0",
@@ -67,6 +60,7 @@
     "react-native-gesture-handler": "~2.28.0",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
     "react-native-reanimated": "~4.1.1",
+    "react-native-render-html": "^6.3.4",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
@@ -78,5 +72,14 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "@notifee/react-native"
+        ]
+      }
+    }
+  }
 }

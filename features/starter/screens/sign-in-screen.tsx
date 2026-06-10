@@ -1,4 +1,4 @@
-import AuthButton from "@/components/auth-button";
+import AuthButton from "@/components/ui/auth-button";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { Image, View } from "react-native";

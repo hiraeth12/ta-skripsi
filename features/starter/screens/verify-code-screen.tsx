@@ -1,29 +1,40 @@
-import AuthButton from "@/components/auth-button";
-import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
-import { useLocalSearchParams, useRouter } from "expo-router";
+import AuthButton from "@/components/ui/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next"; // <-- Import i18n
-import {
-  Image,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native"; // 2. Hapus import 'Alert' dan 'Platform' (karena Platform tidak terpakai)
+import { useTranslation } from "react-i18next";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import {
-  PasswordResetApiError,
-  sendResetOtp,
-  verifyOtpCode,
+    PasswordResetApiError,
+    sendResetOtp,
+    verifyOtpCode,
 } from "../services/auth-service";
 import { styles } from "../styles/verify-code-styles";
 
 const OTP_LENGTH = 6;
 
+function getOtpErrorMessage(error: unknown): string {
+  if (!(error instanceof PasswordResetApiError)) {
+    return "Kode OTP salah atau kedaluwarsa.";
+  }
+  const messages: Record<string, string> = {
+    otp_already_used:
+      "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode.",
+    otp_attempts_exceeded:
+      "Terlalu banyak percobaan. Silakan kirim ulang kode.",
+    otp_expired: "Kode OTP sudah kedaluwarsa. Silakan kirim ulang kode.",
+  };
+  return (
+    (error.code ? messages[error.code] : undefined) ??
+    "Kode OTP salah atau kedaluwarsa."
+  );
+}
+
 export default function VerifyCode() {
-  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+  const { t } = useTranslation();
   const router = useRouter();
+  const navigation = useNavigation();
   const { email } = useLocalSearchParams<{ email: string }>();
   const [code, setCode] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [timer, setTimer] = useState(30);
@@ -31,24 +42,41 @@ export default function VerifyCode() {
   const [isResending, setIsResending] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
 
-  // 3. Tambahkan State untuk mengontrol Modal Custom
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
     message: "",
     type: "error" as "error" | "success",
+    onConfirm: undefined as (() => void) | undefined,
   });
 
-  // 4. Tambahkan fungsi helper
   const showCustomAlert = (
     title: string,
     message: string,
     type: "error" | "success" = "error",
+    onConfirm?: () => void,
   ) => {
-    setModalConfig({ visible: true, title, message, type });
+    setModalConfig({ visible: true, title, message, type, onConfirm });
   };
 
-  // Timer Countdown Logic
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
+      if (e.data.action.type !== "GO_BACK" && e.data.action.type !== "POP")
+        return;
+
+      e.preventDefault();
+
+      showCustomAlert(
+        "Keluar Verifikasi?",
+        "Kode OTP yang telah dikirim akan menjadi tidak valid jika Anda kembali. Yakin ingin keluar?",
+        "error",
+        () => navigation.dispatch(e.data.action),
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   useEffect(() => {
     if (timer === 0) return;
     const interval = setInterval(() => {
@@ -57,25 +85,21 @@ export default function VerifyCode() {
     return () => clearInterval(interval);
   }, [timer]);
 
-  const formatTime = (seconds: number) => {
-    return `00:${seconds < 10 ? `0${seconds}` : seconds}`;
-  };
+  const formatTime = (seconds: number) =>
+    `00:${seconds < 10 ? `0${seconds}` : seconds}`;
 
   const handleInput = (text: string, index: number) => {
     const newCode = [...code];
-    // Hanya ambil karakter terakhir jika user mengetik cepat
     const cleanText = text.replace(/[^0-9]/g, "");
     newCode[index] = cleanText.slice(-1);
     setCode(newCode);
 
-    // Otomatis pindah ke kanan jika diisi
     if (cleanText.length === 1 && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1].focus();
     }
   };
 
   const handleKeyPress = (e: any, index: number) => {
-    // Otomatis pindah ke kiri jika dihapus saat kotak kosong
     if (e.nativeEvent.key === "Backspace" && code[index] === "" && index > 0) {
       inputRefs.current[index - 1].focus();
     }
@@ -84,10 +108,18 @@ export default function VerifyCode() {
   const handleVerify = async () => {
     const combinedCode = code.join("");
     if (combinedCode.length < OTP_LENGTH) {
-      // 5. Ganti Alert bawaan dengan i18n
       showCustomAlert(
-        t("verifyCodeScreen.alert.invalidInputTitle"),
-        t("verifyCodeScreen.alert.invalidInputMsg"),
+        "Input Tidak Valid",
+        "Silakan masukkan kode 6 digit.",
+        "error",
+      );
+      return;
+    }
+
+    if (!email) {
+      showCustomAlert(
+        "Error",
+        "Email tidak ditemukan. Silakan ulangi dari awal.",
         "error",
       );
       return;
@@ -95,31 +127,14 @@ export default function VerifyCode() {
 
     setIsLoading(true);
     try {
-      const resetToken = await verifyOtpCode(email || "", combinedCode);
+      const resetToken = await verifyOtpCode(email, combinedCode);
+      setIsLoading(false);
       router.push({
         pathname: "/starter/new-password",
         params: { email, resetToken },
       });
     } catch (error) {
-      // 5. Ganti Alert bawaan dengan logika i18n
-      const message =
-        error instanceof PasswordResetApiError &&
-        error.code === "otp_already_used"
-          ? t("verifyCodeScreen.alert.otpUsed")
-          : error instanceof PasswordResetApiError &&
-              error.code === "otp_attempts_exceeded"
-            ? t("verifyCodeScreen.alert.otpTooManyAttempts")
-            : error instanceof PasswordResetApiError &&
-                error.code === "otp_expired"
-              ? t("verifyCodeScreen.alert.otpExpired")
-              : t("verifyCodeScreen.alert.otpInvalid");
-
-      showCustomAlert(
-        t("verifyCodeScreen.alert.verifyFailedTitle"),
-        message,
-        "error",
-      );
-    } finally {
+      showCustomAlert("Verifikasi Gagal", getOtpErrorMessage(error), "error");
       setIsLoading(false);
     }
   };
@@ -133,14 +148,14 @@ export default function VerifyCode() {
       setCode(Array(OTP_LENGTH).fill(""));
       setTimer(30);
       showCustomAlert(
-        t("verifyCodeScreen.alert.resendSuccessTitle"),
-        t("verifyCodeScreen.alert.resendSuccessMsg"),
+        "Kode Dikirim",
+        "Kode verifikasi baru telah dikirim ke email Anda.",
         "success",
       );
-    } catch (error) {
+    } catch {
       showCustomAlert(
-        t("verifyCodeScreen.alert.resendFailedTitle"),
-        t("verifyCodeScreen.alert.resendFailedMsg"),
+        "Gagal",
+        "Gagal mengirim ulang OTP. Silakan coba lagi.",
         "error",
       );
     } finally {
@@ -157,97 +172,88 @@ export default function VerifyCode() {
       extraScrollHeight={24}
       keyboardShouldPersistTaps="handled"
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
+      <Image
+        style={styles.logo}
+        source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
+        resizeMode="contain"
+      />
+
+      <Image
+        style={styles.image}
+        source={require("@/assets/images/Forgot password-bro 2.png")}
+        resizeMode="contain"
+      />
+
+      <Text style={styles.title}>{t("verifyCodeScreen.title")}</Text>
+      <Text style={styles.subtitle}>
+        Kode verifikasi telah dikirim ke:{"\n"}
+        <Text style={styles.emailText}>{email || "email@gmail.com"}</Text>
+      </Text>
+
+      <View style={styles.otpContainer}>
+        {code.map((digit, index) => (
+          <View key={index} style={styles.inputWrapper}>
+            <TextInput
+              ref={(ref) => {
+                inputRefs.current[index] = ref as TextInput;
+              }}
+              style={styles.input}
+              maxLength={1}
+              keyboardType="number-pad"
+              selectionColor="#1E6F9F"
+              onChangeText={(text) => handleInput(text, index)}
+              onKeyPress={(e) => handleKeyPress(e, index)}
+              value={digit}
+              placeholder=""
+            />
+            <View
+              style={[
+                styles.underline,
+                digit ? styles.underlineActive : styles.underlineInactive,
+              ]}
+            />
+          </View>
+        ))}
+      </View>
+
+      <AuthButton
+        title={isLoading ? t("verifyCodeScreen.buttonVerifying") : t("verifyCodeScreen.buttonVerify")}
+        onPress={handleVerify}
+        disabled={isLoading}
+      />
+
+      <TouchableOpacity
+        disabled={timer !== 0 || isResending}
+        onPress={handleResend}
+        style={{ marginTop: 25 }}
       >
-        <Image
-          style={styles.logo}
-          source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
-          resizeMode="contain"
-        />
-
-        <Image
-          style={styles.image}
-          source={require("@/assets/images/Forgot password-bro 2.png")}
-          resizeMode="contain"
-        />
-
-        <Text style={styles.title}>{t("verifyCodeScreen.title")}</Text>
-        <Text style={styles.subtitle}>
-          {t("verifyCodeScreen.subtitlePrefix")}
-          {"\n"}
-          <Text style={styles.emailText}>
-            {email || t("verifyCodeScreen.fallbackEmail")}
-          </Text>
+        <Text style={styles.resendText}>
+          {timer > 0 ? (
+            <>
+              Kirim ulang kode dalam{" "}
+              <Text style={{ fontWeight: "bold" }}>{formatTime(timer)}</Text>
+            </>
+          ) : (
+            <Text style={{ color: "#1E6F9F", fontWeight: "bold" }}>
+              {isResending ? "Mengirim ulang..." : "Kirim Ulang Kode"}
+            </Text>
+          )}
         </Text>
+      </TouchableOpacity>
 
-        <View style={styles.otpContainer}>
-          {code.map((digit, index) => (
-            <View key={index} style={styles.inputWrapper}>
-              <TextInput
-                ref={(ref) => {
-                  inputRefs.current[index] = ref as TextInput;
-                }}
-                style={styles.input}
-                maxLength={1}
-                keyboardType="number-pad"
-                selectionColor="#1E6F9F" // Warna kursor | di tengah
-                onChangeText={(text) => handleInput(text, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                value={digit}
-                placeholder="" // Placeholder kosong agar tidak menimpa garis bawah
-              />
-              {/* Garis bawah kustom yang tidak hilang saat ada angka */}
-              <View
-                style={[
-                  styles.underline,
-                  digit ? styles.underlineActive : styles.underlineInactive,
-                ]}
-              />
-            </View>
-          ))}
-        </View>
-
-        <AuthButton
-          title={
-            isLoading
-              ? t("verifyCodeScreen.buttonVerifying")
-              : t("verifyCodeScreen.buttonVerify")
-          }
-          onPress={handleVerify}
-          disabled={isLoading}
-        />
-
-        <TouchableOpacity
-          disabled={timer !== 0 || isResending}
-          onPress={handleResend}
-          style={{ marginTop: 25 }}
-        >
-          <Text style={styles.resendText}>
-            {timer > 0 ? (
-              <>
-                {t("verifyCodeScreen.resendCountdown")}
-                <Text style={{ fontWeight: "bold" }}>{formatTime(timer)}</Text>
-              </>
-            ) : (
-              <Text style={{ color: "#1E6F9F", fontWeight: "bold" }}>
-                {isResending
-                  ? t("verifyCodeScreen.resendSending")
-                  : t("verifyCodeScreen.resendButton")}
-              </Text>
-            )}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      {/* 6. Panggil Komponen CustomAlert di sini */}
       <CustomAlert
         visible={modalConfig.visible}
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
-        onClose={() => setModalConfig({ ...modalConfig, visible: false })}
+        onClose={() =>
+          setModalConfig({
+            ...modalConfig,
+            visible: false,
+            onConfirm: undefined,
+          })
+        }
+        onConfirm={modalConfig.onConfirm}
       />
     </KeyboardAwareScrollView>
   );

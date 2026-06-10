@@ -16,27 +16,27 @@ export type LocationSearchItem = {
   id: string;
   name: string;
   desc: string;
-  latitude?: number;
-  longitude?: number;
+  latitude: number;
+  longitude: number;
 };
 
-type LocationSearchModalProps = {
+type LocationSearchModalProps<T extends LocationSearchItem> = {
   visible: boolean;
   query: string;
-  locations: LocationSearchItem[];
+  locations: T[];
   onClose: () => void;
   onChangeQuery: (query: string) => void;
-  onSelect: (item: LocationSearchItem) => void;
+  onSelect: (item: T) => void;
 };
 
-export default function LocationSearchModal({
+export default function LocationSearchModal<T extends LocationSearchItem>({
   visible,
   query,
   locations,
   onClose,
   onChangeQuery,
   onSelect,
-}: LocationSearchModalProps) {
+}: LocationSearchModalProps<T>) {
   const translateY = useRef(new Animated.Value(0)).current;
 
   const closeWithAnimation = useCallback(() => {

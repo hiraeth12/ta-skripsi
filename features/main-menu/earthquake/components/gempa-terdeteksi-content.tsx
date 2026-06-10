@@ -1,22 +1,40 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import type { MapViewType } from "@/constants/map";
-import { useEarthquakeShare } from "@/hooks/use-earthquake-share";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { TERDETEKSI_API_URL_FAST } from "@/features/main-menu/home/constants";
+import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
 import {
-  Animated,
-  PanResponder,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  getLatestTerdeteksiGempa,
+  parseTerdeteksiPayload,
+} from "@/features/main-menu/home/utils/parse-terdeteksi";
+import { useCardAnimation } from "@/hooks/use-card-animation";
+import { useNetworkError } from "@/hooks/use-network-error";
+import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
+import { formatLatText, formatLonText } from "@/utils/geo";
+import { shareQuake } from "@/utils/share";
+import { Feather } from "@expo/vector-icons";
+import { XMLParser } from "fast-xml-parser";
+import { useCallback, useRef, useState } from "react";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
+import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
 
-const API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL!;
+const MIN_POLL_MS = 30_000;
+const MAX_POLL_MS = 120_000;
+const xmlParser = new XMLParser({ ignoreAttributes: false });
+
+function withCacheBuster(url: string): string {
+  const base = url.trim();
+  if (!base) return "";
+  if (base.endsWith("=") || base.endsWith("?") || base.endsWith("&")) {
+    return `${base}${Date.now()}`;
+  }
+  return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
 
 type LatestQuake = {
+  eventId: string;
   latitude: number;
   longitude: number;
   magnitude: string;
@@ -24,7 +42,7 @@ type LatestQuake = {
   tanggal: string;
   jam: string;
   kedalaman: string;
-  felt: string;
+  status: string;
   latText: string;
   lonText: string;
 };
@@ -32,214 +50,143 @@ type LatestQuake = {
 type Props = {
   tabBar: React.ReactNode;
   onLoadingChange?: (loading: boolean) => void;
+  onOpenHistory?: (url: string) => void;
   isActive?: boolean;
 };
 
 export default function GempaTerdeteksi({
   tabBar,
   onLoadingChange,
+  onOpenHistory,
   isActive = true,
 }: Props) {
-  const { t } = useTranslation();
-  const { shareQuake } = useEarthquakeShare();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
-  const [showCard, setShowCard] = useState(false);
-  const showCardRef = useRef(false);
-  const networkErrorShownRef = useRef(false);
+  const [historyUrl, setHistoryUrl] = useState<string | null>(null);
   const mapRef = useRef<MapViewType | null>(null);
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const btnOpacity = useRef(new Animated.Value(0)).current;
-  const [networkErrorModalVisible, setNetworkErrorModalVisible] =
-    useState(false);
+  const { networkErrorVisible, showNetworkError, dismissNetworkError } =
+    useNetworkError();
 
-  const showNetworkError = useCallback(() => {
-    if (networkErrorShownRef.current) return;
-    networkErrorShownRef.current = true;
-    setNetworkErrorModalVisible(true);
-  }, []);
+  const {
+    showCard,
+    translateY,
+    opacity,
+    btnOpacity,
+    panResponder,
+    openCard,
+    dismissCard,
+  } = useCardAnimation();
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: 600,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 180,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-          });
-        } else {
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-            Animated.timing(btnOpacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
+  const latestEventIdRef = useRef<string | null>(null);
+  const isFirstLoadRef = useRef(true);
+  const isFetchingRef = useRef(false);
+  const isOfflineRef = useRef(false);
 
-  function openCard() {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    btnOpacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(btnOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
+  const fetchLatestQuake = useCallback(
+    async (
+      silent = true,
+      abortSignal: AbortSignal,
+    ): Promise<{ changed: boolean; ok: boolean }> => {
+      if (isFetchingRef.current) return { changed: false, ok: true };
+      isFetchingRef.current = true;
+      if (!silent) onLoadingChange?.(true);
 
-  function dismissCard(callback?: () => void) {
-    if (showCardRef.current) {
-      showCardRef.current = false;
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(btnOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowCard(false);
-        callback?.();
-      });
-    } else {
-      callback?.();
-    }
-  }
-
-  const hasFetchedRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (!isActive) return;
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-
-    abortRef.current = new AbortController();
-
-    async function fetchLatestQuake() {
-      onLoadingChange?.(true);
       try {
-        if (!API_URL) {
-          return;
-        }
-        const url = `${API_URL.trim()}${Date.now()}`;
-        const res = await fetch(url, { signal: abortRef.current?.signal });
-        const data = await res.json();
+        if (!TERDETEKSI_API_URL_FAST) return { changed: false, ok: true };
 
-        const features = data?.features;
-        if (!Array.isArray(features) || features.length === 0) return;
-        const sorted = [...features].sort((a, b) => {
-          const tA = a?.properties?.time ?? "";
-          const tB = b?.properties?.time ?? "";
-          return tB.localeCompare(tA);
+        const res = await fetch(withCacheBuster(TERDETEKSI_API_URL_FAST), {
+          signal: abortSignal,
         });
-        const latest = sorted[0];
-        if (!latest) return;
+        if (!res.ok) throw new Error(`terdeteksi fetch failed: ${res.status}`);
 
-        const props = latest?.properties ?? {};
-        const coords = latest?.geometry?.coordinates;
-        const longitude = parseFloat(coords?.[0] ?? "0");
-        const latitude = parseFloat(coords?.[1] ?? "0");
-        if (isNaN(latitude) || isNaN(longitude)) return;
+        const raw = await res.text();
+        const xml = xmlParser.parse(raw) as Record<string, unknown>;
+        const latest = getLatestTerdeteksiGempa(xml);
+        const parsed = parseTerdeteksiPayload(latest);
+        if (!parsed) return { changed: false, ok: true };
 
-        const [tanggal, jamRaw] = (props.time ?? "").split(" ");
-        const jam = (jamRaw ?? "").split(".")[0];
-        const absLat = Math.abs(latitude).toFixed(2);
-        const absLon = Math.abs(longitude).toFixed(2);
+        const { latitude, longitude } = parsed;
+        const sourceEventId = parsed.eventId.trim();
+        const eventKey =
+          sourceEventId || `${parsed.tanggal}_${parsed.jam}_${latitude}_${longitude}`;
+        const isSameEvent = eventKey && eventKey === latestEventIdRef.current;
+
+        const wasOffline = isOfflineRef.current;
+        if (wasOffline) {
+          isOfflineRef.current = false;
+          dismissNetworkError();
+          setTimeout(() => {
+            mapRef.current?.animateToRegion(
+              { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
+              800,
+            );
+          }, 350);
+        }
+
+        if (isSameEvent) return { changed: false, ok: true };
+
+        latestEventIdRef.current = eventKey;
 
         setLatestQuake({
+          eventId: sourceEventId || eventKey,
           latitude,
           longitude,
-          magnitude: parseFloat(props.mag ?? "0").toFixed(1),
-          wilayah: props.place ?? "",
-          tanggal: tanggal ?? "",
-          jam: jam ?? "",
-          kedalaman: `${parseFloat(props.depth ?? "0").toFixed(1)} km`,
-          felt: props.fase ?? "",
-          latText: `${absLat}°${latitude < 0 ? "LS" : "LU"}`,
-          lonText: `${absLon}°${longitude >= 0 ? "BT" : "BB"}`,
+          magnitude: parsed.magnitude,
+          wilayah: parsed.wilayah,
+          tanggal: parsed.tanggal,
+          jam: parsed.jam,
+          kedalaman: parsed.kedalaman,
+          status: parsed.status,
+          latText: formatLatText(latitude),
+          lonText: formatLonText(longitude),
         });
+        setHistoryUrl(null);
 
-        mapRef.current?.animateToRegion(
-          { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
-          800,
-        );
+        if (!wasOffline) {
+          mapRef.current?.animateToRegion(
+            { latitude, longitude, latitudeDelta: 2, longitudeDelta: 2 },
+            isFirstLoadRef.current ? 800 : 600,
+          );
+        }
+        isFirstLoadRef.current = false;
+
+        const candidateHistoryUrl = sourceEventId
+          ? buildHistoryUrl(sourceEventId)
+          : null;
+        if (candidateHistoryUrl) {
+          const available = await checkTextAssetAvailable(
+            candidateHistoryUrl,
+            abortSignal,
+          );
+          if (!abortSignal?.aborted && latestEventIdRef.current === eventKey) {
+            setHistoryUrl(available);
+          }
+        }
+
+        return { changed: true, ok: true };
       } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-
-        // Perbaikan: Hanya panggil satu metode untuk menampilkan error
+        if ((e as Error).name === "AbortError")
+          return { changed: false, ok: false };
+        isOfflineRef.current = true;
         if (
-          !networkErrorShownRef.current &&
           e instanceof TypeError &&
           (e as Error).message.includes("Network")
         ) {
-          // Cukup panggil fungsi ini, karena di dalamnya sudah mengeset ref dan state
           showNetworkError();
         }
+        return { changed: false, ok: false };
       } finally {
-        onLoadingChange?.(false);
+        if (!silent) onLoadingChange?.(false);
+        isFetchingRef.current = false;
       }
-    }
+    },
+    [dismissNetworkError, onLoadingChange, showNetworkError],
+  );
 
-    fetchLatestQuake();
-    return () => abortRef.current?.abort();
-  }, [isActive, onLoadingChange, showNetworkError]);
+  usePollingWithBackoff(fetchLatestQuake, {
+    isActive,
+    minMs: MIN_POLL_MS,
+    maxMs: MAX_POLL_MS,
+  });
 
   return (
     <View style={styles.container}>
@@ -257,7 +204,20 @@ export default function GempaTerdeteksi({
             : null
         }
         onMapPress={() => dismissCard()}
-        onMarkerPress={() => openCard()}
+        onMarkerPress={() => {
+          if (latestQuake) {
+            mapRef.current?.animateToRegion(
+              {
+                latitude: latestQuake.latitude,
+                longitude: latestQuake.longitude,
+                latitudeDelta: 2,
+                longitudeDelta: 2,
+              },
+              600,
+            );
+          }
+          openCard();
+        }}
       />
 
       <View style={styles.topControls}>
@@ -269,7 +229,7 @@ export default function GempaTerdeteksi({
               onPress={() => shareQuake(latestQuake, "terdeteksi")}
             >
               <Feather name="share" size={12} color="white" />
-              <Text style={styles.mapButtonText}>{t("common.share")}</Text>
+              <Text style={styles.mapButtonText}>BAGIKAN</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -287,119 +247,78 @@ export default function GempaTerdeteksi({
           </View>
 
           <View style={styles.statsTopRow}>
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="triangle-wave"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.magnitude}</Text>
-              <Text style={styles.statTopLabel}>
-                {t("earthquake.magnitude")}
-              </Text>
-            </View>
-
+            <StatItem
+              icon="triangle-wave"
+              value={latestQuake.magnitude}
+              label="Magnitudo"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons name="rss" size={20} color="#0369A1" />
-              <Text style={styles.statTopValue}>{latestQuake.kedalaman}</Text>
-              <Text style={styles.statTopLabel}>{t("earthquake.depth")}</Text>
-            </View>
-
+            <StatItem
+              icon="rss"
+              value={latestQuake.kedalaman}
+              label="Kedalaman"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.latText}</Text>
-              <Text style={styles.statTopLabel}>
-                {t("earthquake.latitude")}
-              </Text>
-            </View>
-
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.latText}
+              label="LS"
+              styles={styles}
+            />
             <View style={styles.statTopDivider} />
-
-            <View style={styles.statTopItem}>
-              <MaterialCommunityIcons
-                name="compass-outline"
-                size={20}
-                color="#0369A1"
-              />
-              <Text style={styles.statTopValue}>{latestQuake.lonText}</Text>
-              <Text style={styles.statTopLabel}>
-                {t("earthquake.longitude")}
-              </Text>
-            </View>
+            <StatItem
+              icon="compass-outline"
+              value={latestQuake.lonText}
+              label="BT"
+              styles={styles}
+            />
           </View>
 
           <View style={styles.separator} />
 
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="location"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
+          <DetailItem
+            icon="location"
+            label="Lokasi Gempa :"
+            value={latestQuake.wilayah}
+            styles={styles}
+          />
+          <DetailItem
+            icon="calendar-outline"
+            label="Tanggal :"
+            value={latestQuake.tanggal}
+            styles={styles}
+          />
+          <DetailItem
+            icon="time-outline"
+            label="Jam :"
+            value={latestQuake.jam}
+            styles={styles}
+          />
+          {!!latestQuake.status && (
+            <DetailItem
+              icon="alert-circle-outline"
+              label="Status :"
+              value={latestQuake.status}
+              styles={styles}
             />
-            <View>
-              <Text style={styles.infoLabel}>{t("earthquake.location")}</Text>
-              <Text style={styles.infoValue}>{latestQuake.wilayah}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="calendar-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>{t("earthquake.date")}</Text>
-              <Text style={styles.infoValue}>{latestQuake.tanggal}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color="#1E6F9F"
-              style={styles.infoIcon}
-            />
-            <View>
-              <Text style={styles.infoLabel}>{t("earthquake.time")}</Text>
-              <Text style={styles.infoValue}>{latestQuake.jam}</Text>
-            </View>
-          </View>
-
-          {!!latestQuake.felt && (
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={18}
-                color="#1E6F9F"
-                style={styles.infoIcon}
-              />
-              <View style={styles.infoTextFlex}>
-                <Text style={styles.infoLabel}>{t("earthquake.phase")}</Text>
-                <Text style={styles.infoValue}>{latestQuake.felt}</Text>
-              </View>
-            </View>
+          )}
+          {historyUrl && onOpenHistory && (
+            <TouchableOpacity
+              style={styles.simulasiBtn}
+              activeOpacity={0.8}
+              onPress={() => historyUrl && onOpenHistory(historyUrl)}
+            >
+              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+            </TouchableOpacity>
           )}
         </Animated.View>
       )}
 
       <NetworkErrorModal
-        visible={networkErrorModalVisible}
-        onClose={() => {
-          setNetworkErrorModalVisible(false);
-          networkErrorShownRef.current = false;
-        }}
+        visible={networkErrorVisible}
+        onClose={dismissNetworkError}
       />
     </View>
   );

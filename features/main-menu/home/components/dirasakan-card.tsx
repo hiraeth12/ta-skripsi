@@ -1,4 +1,4 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
@@ -26,12 +26,18 @@ export const DirasakanCard = ({
   data,
   onShakeMap,
   hasShakeMap,
+  onNarasi,
+  hasNarasi,
   onCardPress,
   onShare,
 }: {
   data: DirasakanQuake | null;
   onShakeMap: () => void;
   hasShakeMap: boolean;
+  /** Callback untuk membuka modal narasi resmi BMKG */
+  onNarasi: () => void;
+  /** true = narasi tersedia dan button ditampilkan */
+  hasNarasi: boolean;
   onCardPress: () => void;
   onShare: () => void;
 }) => {
@@ -68,23 +74,38 @@ export const DirasakanCard = ({
           </View>
         ) : (
           <Image
-            source={require("../../../../assets/images/navigation-map.png")}
+            source={require("@/assets/images/navigation-map.png")}
             style={styles.mapImage}
           />
         )}
-
         <View style={styles.mapButtons}>
-          <TouchableOpacity
-            style={[styles.mapButton, !hasShakeMap && styles.mapButtonDisabled]}
-            onPress={(e) => {
-              e.stopPropagation();
-              onShakeMap();
-            }}
-            disabled={!hasShakeMap}
-          >
-            <Feather name="map" size={12} color="white" />
-            <Text style={styles.mapButtonText}>{t("shakeMap")}</Text>
-          </TouchableOpacity>
+          {/* Button NARASI RESMI: hanya tampil jika hasNarasi = true */}
+          {hasNarasi && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onNarasi();
+              }}
+            >
+              <Feather name="file-text" size={12} color="white" />
+              <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Button PETA GUNCANGAN: hanya tampil jika hasShakeMap = true */}
+          {hasShakeMap && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onShakeMap();
+              }}
+            >
+              <Feather name="map" size={12} color="white" />
+              <Text style={styles.mapButtonText}>{t("earthquake.shakeMap")}</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.mapButton}
@@ -105,25 +126,15 @@ export const DirasakanCard = ({
           value={data?.magnitude ?? "-"}
           label={t("earthquake.magnitude")}
         />
-
         <View style={styles.statTopDivider} />
-
-        <StatItem
-          icon="rss"
-          value={data?.kedalaman ?? "-"}
-          label={t("earthquake.depth")}
-        />
-
+        <StatItem icon="rss" value={data?.kedalaman ?? "-"} label={t("earthquake.depth")} />
         <View style={styles.statTopDivider} />
-
         <StatItem
           icon="compass-outline"
           value={data?.latText ?? "-"}
           label={t("earthquake.latitude")}
         />
-
         <View style={styles.statTopDivider} />
-
         <StatItem
           icon="compass-outline"
           value={data?.lonText ?? "-"}
@@ -136,28 +147,19 @@ export const DirasakanCard = ({
       <View style={styles.infoContent}>
         <DetailItem
           icon="location"
-          label={t("earthquake.location")}
+          label={t("gempaDirasakanScreen.labelLocation")}
           value={data?.wilayah ?? "-"}
         />
-
         <DetailItem
           icon="time-outline"
-          label={t("earthquake.eventTime")}
+          label={t("gempaDirasakanScreen.labelTime")}
           value={data ? `${data.tanggal}, ${data.jam}` : "-"}
         />
-
         <DetailItem
           icon="walk-outline"
-          label={t("earthquake.distance")}
-          value={
-            data
-              ? t("earthquake.distanceFromYourLocation", {
-                  distance: data.distanceKm,
-                })
-              : "-"
-          }
+          label={t("gempaDirasakanScreen.labelDistance")}
+          value={data ? t("earthquake.distanceFromYourLocation", { distance: data.distanceKm }) : "-"}
         />
-
         {!!data?.felt && (
           <DetailItem
             icon="alert-circle-outline"

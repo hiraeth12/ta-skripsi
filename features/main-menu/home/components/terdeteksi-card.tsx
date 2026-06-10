@@ -1,4 +1,4 @@
-import EarthquakeMap from "@/components/earthquake-map";
+import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
@@ -17,19 +17,24 @@ type TerdeteksiQuake = {
   wilayah: string;
   tanggal: string;
   jam: string;
-  fase: string;
+  status: string;
   latitude?: number;
   longitude?: number;
+  eventId?: string;
 };
 
 export const TerdeteksiCard = ({
   data,
   onCardPress,
   onShare,
+  onHistory,
+  hasHistory,
 }: {
   data: TerdeteksiQuake | null;
   onCardPress: () => void;
   onShare: () => void;
+  onHistory: () => void;
+  hasHistory: boolean;
 }) => {
   const mapRef = useRef<MapViewType | null>(null);
   const { t } = useTranslation();
@@ -64,12 +69,24 @@ export const TerdeteksiCard = ({
           </View>
         ) : (
           <Image
-            source={require("../../../../assets/images/navigation-map.png")}
+            source={require("@/assets/images/navigation-map.png")}
             style={styles.mapImage}
           />
         )}
-
         <View style={styles.mapButtons}>
+          {hasHistory && (
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onHistory();
+              }}
+            >
+              <Feather name="activity" size={12} color="white" />
+              <Text style={styles.mapButtonText}>{t("earthquake.historicalProcess")}</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.mapButton}
             onPress={(e) => {
@@ -89,25 +106,15 @@ export const TerdeteksiCard = ({
           value={data?.magnitude ?? "-"}
           label={t("earthquake.magnitude")}
         />
-
         <View style={styles.statTopDivider} />
-
-        <StatItem
-          icon="rss"
-          value={data?.kedalaman ?? "-"}
-          label={t("earthquake.depth")}
-        />
-
+        <StatItem icon="rss" value={data?.kedalaman ?? "-"} label={t("earthquake.depth")} />
         <View style={styles.statTopDivider} />
-
         <StatItem
           icon="compass-outline"
           value={data?.latText ?? "-"}
           label={t("earthquake.latitude")}
         />
-
         <View style={styles.statTopDivider} />
-
         <StatItem
           icon="compass-outline"
           value={data?.lonText ?? "-"}
@@ -120,27 +127,24 @@ export const TerdeteksiCard = ({
       <View style={styles.infoContent}>
         <DetailItem
           icon="location"
-          label={t("earthquake.location")}
+          label={t("gempaDirasakanScreen.labelLocation")}
           value={data?.wilayah ?? "-"}
         />
-
         <DetailItem
-          icon="time-outline"
+          icon="calendar-outline"
           label={t("earthquake.date")}
           value={data?.tanggal ?? "-"}
         />
-
         <DetailItem
           icon="time-outline"
           label={t("earthquake.time")}
           value={data?.jam ?? "-"}
         />
-
-        {!!data?.fase && (
+        {!!data?.status && (
           <DetailItem
             icon="alert-circle-outline"
-            label={t("earthquake.phase")}
-            value={data.fase}
+            label={t("earthquake.status")}
+            value={data.status}
           />
         )}
       </View>

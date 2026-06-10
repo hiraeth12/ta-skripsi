@@ -1,32 +1,40 @@
-import EarthquakeMap from "@/components/earthquake-map";
-import { ModalShakeMap } from "@/components/modal-shakemap";
+import EarthquakeMap from "@/components/ui/earthquake-map";
+import { ModalShakeMap } from "@/components/ui/modal-shakemap";
+import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
-import { useHaversine } from "@/hooks/use-haversine";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
+import { useCardAnimation } from "@/hooks/use-card-animation";
 import {
-  endAt,
-  get,
-  getDatabase,
-  orderByChild,
-  query,
-  ref,
-  startAt,
+    formatLatText,
+    formatLonText,
+    haversineDistanceKm,
+    parseCoordinateText,
+} from "@/utils/geo";
+import {
+    endAt,
+    get,
+    getDatabase,
+    orderByChild,
+    query,
+    ref,
+    startAt,
 } from "@react-native-firebase/database";
+import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next"; // <-- Import i18n
+import { useTranslation } from "react-i18next";
+import { Animated, Text, TouchableOpacity, View } from "react-native";
+import { dedupeByKey } from "../utils/dedupe";
 import {
-  Animated,
-  PanResponder,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import {
-  buildDirasakanDateRange,
-  getNowYearMonth,
-  matchesDirasakanMonth,
-  normalizeFilterMonths,
+    buildDirasakanDateRangesForIsoRange,
+    buildDirasakanDateRange,
+    getDirasakanEventTimeMs,
+    getNowYearMonth,
+    isDirasakanInDateRange,
+    matchesDirasakanMonth,
+    normalizeFilterMonths,
+    sortDirasakanNewestFirst,
 } from "../utils/filter";
 import styles from "./styles/gempa-dirasakan-history-content";
 
@@ -36,11 +44,13 @@ const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DB_PATH = "gempa_dirasakan/items";
 const MAX_POINTS = 20;
 const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
+const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type QuakeItem = {
   eventId: string;
+  eventTimeMs: number;
   latitude: number;
   longitude: number;
   distanceKm: string;
@@ -85,30 +95,19 @@ type Props = {
   onListSelectionHandled?: () => void;
   onCardClose?: () => void;
   onCardOpen?: () => void;
+  onOpenNarasi?: (url: string) => void;
   externalSelection?: ExternalSelection | null;
   isActive?: boolean;
   filterYear?: number;
   filterMonths?: number[];
+  filterMode?: "bulan" | "range";
+  filterDateFrom?: string;
+  filterDateTo?: string;
   /** Called by parent when this tab is switched TO — triggers fly-in to newest quake */
   onTabActivate?: (flyToNewest: () => void) => void;
 };
 
 // ─── Module-level helpers ─────────────────────────────────────────────────────
-
-function parseWithHemisphere(
-  value: unknown,
-  negToken: string,
-  posToken: string,
-): number {
-  const raw = String(value ?? "").trim();
-  if (!raw) return NaN;
-  const numeric = parseFloat(raw.replace(",", "."));
-  if (isNaN(numeric)) return NaN;
-  const upper = raw.toUpperCase();
-  if (upper.includes(negToken)) return -Math.abs(numeric);
-  if (upper.includes(posToken)) return Math.abs(numeric);
-  return numeric;
-}
 
 function parseQuakeCoords(
   candidate: any,
@@ -116,35 +115,19 @@ function parseQuakeCoords(
   const coordStr = String(candidate?.point?.coordinates ?? "");
   const [lonStr, latStr] = coordStr.split(",");
 
-  let latitude = parseWithHemisphere(latStr, "LS", "LU");
-  if (isNaN(latitude))
-    latitude = parseWithHemisphere(
-      candidate?.latitude ?? candidate?.lat,
-      "LS",
-      "LU",
-    );
-  if (isNaN(latitude))
-    latitude = parseWithHemisphere(
-      candidate?.coordinates?.latitude,
-      "LS",
-      "LU",
-    );
+  let latitude = parseCoordinateText(latStr);
+  if (latitude === null)
+    latitude = parseCoordinateText(candidate?.latitude ?? candidate?.lat);
+  if (latitude === null)
+    latitude = parseCoordinateText(candidate?.coordinates?.latitude);
 
-  let longitude = parseWithHemisphere(lonStr, "BB", "BT");
-  if (isNaN(longitude))
-    longitude = parseWithHemisphere(
-      candidate?.longitude ?? candidate?.lon,
-      "BB",
-      "BT",
-    );
-  if (isNaN(longitude))
-    longitude = parseWithHemisphere(
-      candidate?.coordinates?.longitude,
-      "BB",
-      "BT",
-    );
+  let longitude = parseCoordinateText(lonStr);
+  if (longitude === null)
+    longitude = parseCoordinateText(candidate?.longitude ?? candidate?.lon);
+  if (longitude === null)
+    longitude = parseCoordinateText(candidate?.coordinates?.longitude);
 
-  if (isNaN(latitude) || isNaN(longitude)) return null;
+  if (latitude === null || longitude === null) return null;
   return { latitude, longitude };
 }
 
@@ -171,6 +154,7 @@ function buildQuakeItem(
         candidate?.eventid ??
         `${candidate?.tanggal ?? candidate?.date ?? ""}-${candidate?.jam ?? candidate?.time ?? ""}-${index}`,
     ),
+    eventTimeMs: getDirasakanEventTimeMs(candidate),
     latitude,
     longitude,
     distanceKm,
@@ -186,52 +170,11 @@ function buildQuakeItem(
     jam: String(candidate?.jam ?? candidate?.time ?? ""),
     kedalaman: String(candidate?.kedalaman ?? candidate?.depth ?? ""),
     felt: String(candidate?.felt ?? ""),
-    latText: `${Math.abs(latitude).toFixed(2)}°${latitude < 0 ? "LS" : "LU"}`,
-    lonText: `${Math.abs(longitude).toFixed(2)}°${longitude >= 0 ? "BT" : "BB"}`,
+    latText: formatLatText(latitude),
+    lonText: formatLonText(longitude),
     shakemap: candidate?.shakemap ? String(candidate.shakemap) : null,
   };
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const StatItem = ({
-  icon,
-  value,
-  label,
-}: {
-  icon: string;
-  value: string;
-  label: string;
-}) => (
-  <View style={styles.statTopItem}>
-    <MaterialCommunityIcons name={icon as any} size={20} color="#0369A1" />
-    <Text style={styles.statTopValue}>{value}</Text>
-    <Text style={styles.statTopLabel}>{label}</Text>
-  </View>
-);
-
-const DetailItem = ({
-  icon,
-  label,
-  value,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-}) => (
-  <View style={styles.infoRow}>
-    <Ionicons
-      name={icon as any}
-      size={18}
-      color="#1E6F9F"
-      style={styles.infoIcon}
-    />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -243,14 +186,17 @@ export function GempaDirasakanHistoryContent({
   onListSelectionHandled,
   onCardClose,
   onCardOpen,
+  onOpenNarasi,
   externalSelection,
   isActive = true,
   filterYear,
   filterMonths,
+  filterMode = "bulan",
+  filterDateFrom,
+  filterDateTo,
   onTabActivate,
 }: Props) {
-  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
-  const { haversineDistanceKm } = useHaversine();
+  const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
@@ -268,34 +214,64 @@ export function GempaDirasakanHistoryContent({
   );
   const ranges = useMemo(
     () =>
-      effectiveMonths.map((month) => ({
-        month,
-        ...buildDirasakanDateRange(effectiveYear, month),
-      })),
-    [effectiveMonths, effectiveYear],
+      filterMode === "range"
+        ? buildDirasakanDateRangesForIsoRange(filterDateFrom, filterDateTo, now)
+        : effectiveMonths.map((month) => ({
+            month,
+            ...buildDirasakanDateRange(effectiveYear, month),
+          })),
+    [
+      effectiveMonths,
+      effectiveYear,
+      filterDateFrom,
+      filterDateTo,
+      filterMode,
+      now,
+    ],
   );
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [quakes, setQuakes] = useState<QuakeItem[]>([]);
-  const [showCard, setShowCard] = useState(false);
   const [shakeMapVisible, setShakeMapVisible] = useState(false);
+  const [narasiUrl, setNarasiUrl] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [overrideQuake, setOverrideQuake] = useState<QuakeItem | null>(null);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
 
   const mapRef = useRef<MapViewType | null>(null);
-  const showCardRef = useRef(false);
   const selectedEventIdRef = useRef<string | null>(null);
   const lastExternalIdRef = useRef<string | null>(null);
   const dataSignatureRef = useRef<string | null>(null);
   const isFirstLoad = useRef(true);
   const isMountedRef = useRef(true);
+  const openCardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Animation values
-  const translateY = useRef(new Animated.Value(600)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const clearCardSelection = useCallback(() => {
+    setSelectedIndex(null);
+    setOverrideQuake(null);
+    selectedEventIdRef.current = null;
+    lastExternalIdRef.current = null;
+  }, []);
+
+  const handleSwipeDismiss = useCallback(() => {
+    clearCardSelection();
+    onCardClose?.();
+  }, [clearCardSelection, onCardClose]);
+
+  const {
+    showCard,
+    showCardRef,
+    translateY,
+    opacity,
+    btnOpacity,
+    panResponder,
+    openCard: openCardAnimation,
+    dismissCard: dismissCardAnimation,
+    closeCardForReplacement,
+    hideCardImmediately,
+  } = useCardAnimation({ onSwipeDismiss: handleSwipeDismiss });
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -307,6 +283,27 @@ export function GempaDirasakanHistoryContent({
   const shakeMapUrl = activeQuake?.shakemap
     ? `${SHAKEMAP_BASE}/${activeQuake.shakemap}`
     : null;
+
+  useEffect(() => {
+    const candidateNarasiUrl = activeQuake?.shakemap
+      ? buildNarasiUrl(activeQuake.shakemap)
+      : null;
+
+    setNarasiUrl(null);
+    if (!candidateNarasiUrl) return;
+
+    const controller = new AbortController();
+
+    void checkTextAssetAvailable(candidateNarasiUrl, controller.signal).then(
+      (availableUrl) => {
+        if (!controller.signal.aborted) {
+          setNarasiUrl(availableUrl);
+        }
+      },
+    );
+
+    return () => controller.abort();
+  }, [activeQuake?.eventId, activeQuake?.shakemap]);
 
   const markerCoordinates = useMemo(
     () =>
@@ -327,44 +324,27 @@ export function GempaDirasakanHistoryContent({
         magnitude: q.magnitude,
         lokasi: q.wilayah,
         waktu: `${q.jam} • ${q.tanggal}`,
-        // <-- Menerapkan translasi untuk suffix jarak
         jarak: `${q.distanceKm}${t("gempaDirasakanScreen.distanceSuffix")}`,
       })),
-    [quakes, t], // <-- Menambahkan 't' sebagai dependency
+    [quakes],
   );
 
   // ── Card animation ─────────────────────────────────────────────────────────
 
-  const openCard = useCallback(() => {
-    translateY.setValue(600);
-    opacity.setValue(0);
-    showCardRef.current = true;
-    setShowCard(true);
-    onCardOpen?.();
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [translateY, opacity, onCardOpen]);
+  const openCard = useCallback(
+    (notifyParent = true) => {
+      if (notifyParent) {
+        onCardOpen?.();
+      }
+      openCardAnimation();
+    },
+    [onCardOpen, openCardAnimation],
+  );
 
   const dismissCard = useCallback(
     (callback?: () => void) => {
-      if (!showCardRef.current) {
-        onCardClose?.();
-        callback?.();
-        return;
-      }
-
       // Re-centre map without offset when card closes
-      if (activeQuake) {
+      if (showCardRef.current && activeQuake) {
         mapRef.current?.animateToRegion(
           {
             latitude: activeQuake.latitude,
@@ -376,35 +356,29 @@ export function GempaDirasakanHistoryContent({
         );
       }
 
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 600,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        showCardRef.current = false;
-        setShowCard(false);
-        setSelectedIndex(null); // FIX: clear so polling can't reopen card
-        setOverrideQuake(null);
-        selectedEventIdRef.current = null; // FIX: clear so polling has nothing to track
-        lastExternalIdRef.current = null; // FIX: allow same item to reopen card after dismiss
+      dismissCardAnimation(() => {
+        clearCardSelection();
         onCardClose?.();
         callback?.();
       });
     },
-    [translateY, opacity, onCardClose, activeQuake],
+    [
+      activeQuake,
+      clearCardSelection,
+      dismissCardAnimation,
+      onCardClose,
+      showCardRef,
+    ],
   );
 
   // ── Fly-to-marker with offset ──────────────────────────────────────────────
 
   const flyToAndOpen = useCallback(
-    (quake: QuakeItem, delay = 0) => {
+    (quake: QuakeItem, delay = 300, notifyParent = true) => {
+      if (openCardTimeoutRef.current) {
+        clearTimeout(openCardTimeoutRef.current);
+      }
+
       mapRef.current?.animateToRegion(
         {
           latitude: quake.latitude - 0.15,
@@ -414,59 +388,23 @@ export function GempaDirasakanHistoryContent({
         },
         400,
       );
-      setTimeout(openCard, delay || 300);
+      openCardTimeoutRef.current = setTimeout(() => {
+        openCardTimeoutRef.current = null;
+        openCard(notifyParent);
+      }, delay);
     },
     [openCard],
   );
 
-  // ── PanResponder ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (openCardTimeoutRef.current) {
+        clearTimeout(openCardTimeoutRef.current);
+      }
+    };
+  }, []);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          translateY.setValue(gs.dy);
-          opacity.setValue(Math.max(0, 1 - gs.dy / 300));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80) {
-          // Dragged far enough — dismiss
-          Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: 600,
-              duration: 220,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: 180,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            showCardRef.current = false;
-            setShowCard(false);
-            setSelectedIndex(null); // FIX
-            setOverrideQuake(null);
-            selectedEventIdRef.current = null; // FIX
-            lastExternalIdRef.current = null; // FIX: allow same item to reopen card after swipe-dismiss
-            onCardClose?.();
-          });
-        } else {
-          // Snap back
-          Animated.parallel([
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(opacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
+  // ── PanResponder ───────────────────────────────────────────────────────────
 
   // ── Marker press ──────────────────────────────────────────────────────────
 
@@ -475,11 +413,14 @@ export function GempaDirasakanHistoryContent({
       const quake = quakes[index];
       if (!quake) return;
       selectedEventIdRef.current = quake.eventId;
-      setOverrideQuake(null);
-      setSelectedIndex(index);
-      flyToAndOpen(quake);
+      onCardOpen?.();
+      closeCardForReplacement(() => {
+        setOverrideQuake(null);
+        setSelectedIndex(index);
+        flyToAndOpen(quake, LIST_HIDE_TO_CARD_DELAY_MS, false);
+      });
     },
-    [quakes, flyToAndOpen],
+    [closeCardForReplacement, flyToAndOpen, onCardOpen, quakes],
   );
 
   const handleMapPress = useCallback(() => dismissCard(), [dismissCard]);
@@ -492,17 +433,11 @@ export function GempaDirasakanHistoryContent({
 
   useEffect(() => {
     if (!isActive) {
-      translateY.setValue(600);
-      opacity.setValue(0);
-      showCardRef.current = false;
-      setShowCard(false);
-      setSelectedIndex(null); // FIX
-      setOverrideQuake(null);
-      selectedEventIdRef.current = null; // FIX
-      lastExternalIdRef.current = null; // FIX: so re-activating tab doesn't block same-item re-open
+      hideCardImmediately();
+      clearCardSelection();
       isFirstLoad.current = true; // Re-arm fly-in for next activation
     }
-  }, [isActive, translateY, opacity]);
+  }, [clearCardSelection, hideCardImmediately, isActive]);
 
   // ── Fly to newest quake when tab becomes active ────────────────────────────
 
@@ -542,6 +477,10 @@ export function GempaDirasakanHistoryContent({
         ? quakes[targetIndex]
         : {
             eventId: externalSelection.eventId,
+            eventTimeMs: getDirasakanEventTimeMs({
+              tanggal: externalSelection.tanggal,
+              jam: externalSelection.jam,
+            }),
             latitude: externalSelection.latitude,
             longitude: externalSelection.longitude,
             distanceKm: externalSelection.distanceKm,
@@ -551,8 +490,8 @@ export function GempaDirasakanHistoryContent({
             jam: externalSelection.jam,
             kedalaman: externalSelection.kedalaman,
             felt: externalSelection.felt,
-            latText: `${Math.abs(externalSelection.latitude).toFixed(2)}°${externalSelection.latitude < 0 ? "LS" : "LU"}`,
-            lonText: `${Math.abs(externalSelection.longitude).toFixed(2)}°${externalSelection.longitude >= 0 ? "BT" : "BB"}`,
+            latText: formatLatText(externalSelection.latitude),
+            lonText: formatLonText(externalSelection.longitude),
             shakemap: externalSelection.shakemap,
           };
 
@@ -614,6 +553,7 @@ export function GempaDirasakanHistoryContent({
     const runFetch = async () => {
       onLoadingChange?.(true);
 
+      try {
       const snapshots = await Promise.all(
         ranges.map(async (rangeItem) =>
           get(
@@ -651,31 +591,26 @@ export function GempaDirasakanHistoryContent({
         return;
       }
 
-      const merged = candidates
-        .sort((a, b) => {
-          const keyA = String(
-            a?.eventid ??
-              a?.eventId ??
-              a?.timesent ??
-              `${a?.tanggal ?? a?.date ?? ""} ${a?.jam ?? a?.time ?? ""}`,
-          );
-          const keyB = String(
-            b?.eventid ??
-              b?.eventId ??
-              b?.timesent ??
-              `${b?.tanggal ?? b?.date ?? ""} ${b?.jam ?? b?.time ?? ""}`,
-          );
-          return keyB.localeCompare(keyA);
-        })
-        .filter((candidate) =>
-          effectiveMonths.some((month) =>
-            matchesDirasakanMonth(
-              candidate?.tanggal ?? candidate?.date,
-              effectiveYear,
-              month,
+      const filtered = candidates.filter((candidate) =>
+        filterMode === "range"
+          ? isDirasakanInDateRange(candidate, filterDateFrom, filterDateTo, now)
+          : effectiveMonths.some((month) =>
+              matchesDirasakanMonth(
+                candidate?.tanggal ?? candidate?.date,
+                effectiveYear,
+                month,
+              ),
             ),
-          ),
-        )
+      );
+
+      if (filtered.length === 0) {
+        dataSignatureRef.current = null;
+        setQuakes([]);
+        onLoadingChange?.(false);
+        return;
+      }
+
+      const merged = sortDirasakanNewestFirst(filtered)
         .reduce<QuakeItem[]>((acc, candidate, index) => {
           const item = buildQuakeItem(candidate, index, haversineDistanceKm);
           if (item) acc.push(item);
@@ -683,19 +618,11 @@ export function GempaDirasakanHistoryContent({
         }, [])
         .slice(0, MAX_POINTS);
 
-      // Deduplicate by eventId preserving order
-      const seen = new Set<string>();
-      const normalized: QuakeItem[] = [];
-      for (const q of merged) {
-        const k = String(q.eventId ?? "");
-        if (!k) continue;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        normalized.push(q);
-        if (normalized.length >= MAX_POINTS) break;
-      }
+      const normalized = dedupeByKey(merged, (q) => q.eventId, MAX_POINTS);
 
-      const signature = normalized.map((q) => q.eventId).join("|");
+      const signature = normalized
+        .map((q) => `${q.eventId}:${q.eventTimeMs}`)
+        .join("|");
       if (signature === dataSignatureRef.current) {
         onLoadingChange?.(false);
         return;
@@ -727,6 +654,13 @@ export function GempaDirasakanHistoryContent({
       // Only touch selection when card is open — prevents reopening after dismiss
       if (!showCardRef.current) return;
       if (foundIndex >= 0) setSelectedIndex(foundIndex);
+      } catch {
+        if (!isMountedRef.current) return;
+        dataSignatureRef.current = null;
+        setQuakes([]);
+      } finally {
+        if (isMountedRef.current) onLoadingChange?.(false);
+      }
     };
 
     void runFetch();
@@ -734,7 +668,17 @@ export function GempaDirasakanHistoryContent({
     return () => {
       isMountedRef.current = false;
     };
-  }, [effectiveMonths, effectiveYear, isActive, onLoadingChange, ranges]);
+  }, [
+    effectiveMonths,
+    effectiveYear,
+    filterDateFrom,
+    filterDateTo,
+    filterMode,
+    isActive,
+    now,
+    onLoadingChange,
+    ranges,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -758,7 +702,20 @@ export function GempaDirasakanHistoryContent({
         isCardOpen={showCard}
       />
 
-      <View style={styles.topControls}>{tabBar}</View>
+      <View style={styles.topControls}>
+        {tabBar}
+        {showCard && narasiUrl && onOpenNarasi && (
+          <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
+            <TouchableOpacity
+              style={styles.mapButton}
+              onPress={() => onOpenNarasi(narasiUrl)}
+            >
+              <Feather name="file-text" size={12} color="white" />
+              <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </View>
 
       {showCard && activeQuake && (
         <Animated.View
@@ -774,55 +731,61 @@ export function GempaDirasakanHistoryContent({
 
           {/* Stats row */}
           <View style={styles.statsTopRow}>
-            {/* <-- Menggunakan t() untuk label stat --> */}
             <StatItem
               icon="triangle-wave"
               value={activeQuake.magnitude}
               label={t("gempaDirasakanScreen.statMagnitude")}
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={activeQuake.kedalaman}
               label={t("gempaDirasakanScreen.statDepth")}
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.latText}
               label={t("gempaDirasakanScreen.latLabel")}
+              styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.lonText}
               label={t("gempaDirasakanScreen.lonLabel")}
+              styles={styles}
             />
           </View>
 
           <View style={styles.separator} />
 
-          {/* <-- Menggunakan t() untuk label info detail --> */}
           <DetailItem
             icon="location"
             label={t("gempaDirasakanScreen.labelLocation")}
             value={activeQuake.wilayah}
+            styles={styles}
           />
           <DetailItem
             icon="time-outline"
             label={t("gempaDirasakanScreen.labelTime")}
             value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
+            styles={styles}
           />
           <DetailItem
             icon="walk-outline"
             label={t("gempaDirasakanScreen.labelDistance")}
             value={`${activeQuake.distanceKm} km`}
+            styles={styles}
           />
           {!!activeQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
               label={t("gempaDirasakanScreen.labelFelt")}
               value={activeQuake.felt}
+              styles={styles}
             />
           )}
 
@@ -835,10 +798,7 @@ export function GempaDirasakanHistoryContent({
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}
           >
-            {/* <-- Menggunakan t() untuk teks tombol --> */}
-            <Text style={styles.simulasiBtnText}>
-              {t("gempaDirasakanScreen.btnShakeMap")}
-            </Text>
+            <Text style={styles.simulasiBtnText}>{t("gempaDirasakanScreen.btnShakeMap")}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}

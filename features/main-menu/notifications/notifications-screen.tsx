@@ -1,78 +1,52 @@
-import {
-  useQuakeNotifications,
-  type QuakeNotification,
-} from "@/hooks/use-quake-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
-import { useTranslation } from "react-i18next"; // <-- Import i18n
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
+
+import type { QuakeNotification } from "@/hooks/use-quake-notifications";
+import { NotifCard } from "@/features/main-menu/notifications/components/notif-card";
+import { useVisibleNotifications } from "../notifications/hooks/use-visible-notifications";
+import {
+  getEarthquakeTab,
+  getHistoryTab,
+  getLatestNotificationForType,
+  isKnownNotifType,
+} from "../notifications/utils/notification-routing";
 import { styles } from "./styles/notifications-screen.styles";
 
-// ─── NotifCard ────────────────────────────────────────────────────────────────
-
-// FIX #5: typed with QuakeNotification instead of any
-type NotifCardProps = {
-  item: QuakeNotification;
-  onPress: () => void;
-  t: any; // <-- Tambahkan parameter t
-};
-
-const NotifCard = ({ item, onPress, t }: NotifCardProps) => {
-  const isDirasakan = item.type === "Dirasakan";
-
-  return (
-    <TouchableOpacity
-      style={styles.notifCard}
-      activeOpacity={0.7}
-      onPress={onPress}
-    >
-      <View style={styles.notifContent}>
-        <View style={styles.textWrapper}>
-          <Text style={styles.notifTitle}>
-            {/* <-- Menggunakan t() untuk judul card --> */}
-            {isDirasakan
-              ? t("notificationsScreen.cardTitleDirasakan")
-              : t("notificationsScreen.cardTitleTerdeteksi")}
-          </Text>
-          <Text style={styles.notifSubTitle}>
-            M {item.magnitude} – {item.location}
-          </Text>
-          <Text style={styles.notifTime}>
-            {item.date} • {item.time}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.badge,
-            isDirasakan ? styles.badgeRed : styles.badgeGreen,
-          ]}
-        >
-          <Text style={styles.badgeText}>
-            {/* <-- Menggunakan t() untuk teks badge --> */}
-            {isDirasakan
-              ? t("notificationsScreen.badgeDirasakan")
-              : t("notificationsScreen.badgeTidakDirasakan")}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
-
 export default function Notifikasi() {
-  const { t } = useTranslation(); // <-- Hook i18n dipanggil di komponen utama
+  const { t } = useTranslation();
   const router = useRouter();
-  const { notifications, unreadCount, error, markAllAsRead } =
-    useQuakeNotifications();
+  const { visibleNotifications, error } = useVisibleNotifications();
 
-  // FIX #4: guard against calling markAllAsRead when nothing is unread,
-  //         preventing a needless setState + re-render on every screen open
-  useEffect(() => {
-    if (unreadCount > 0) markAllAsRead();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentionally run once on mount
+  const handleNotificationPress = useCallback(
+    (item: QuakeNotification) => {
+      if (!isKnownNotifType(item.type)) {
+        router.push({ pathname: "/main-menu/history" });
+        return;
+      }
+
+      const latestForType = getLatestNotificationForType(
+        visibleNotifications,
+        item.type,
+      );
+
+      if (latestForType?.id === item.id) {
+        router.push({
+          pathname: "/main-menu/earthquake",
+          params: { tab: getEarthquakeTab(item.type) },
+        });
+        return;
+      }
+
+      router.push({
+        pathname: "/main-menu/history",
+        params: { tab: getHistoryTab(item.type) },
+      });
+    },
+    [router, visibleNotifications],
+  );
 
   return (
     <View style={styles.container}>
@@ -85,38 +59,22 @@ export default function Notifikasi() {
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            {/* <-- Menggunakan t() untuk header --> */}
-            <Text style={styles.sectionTitle}>
-              {t("notificationsScreen.headerTitle")}
-            </Text>
+            <Text style={styles.sectionTitle}>{t("notificationsScreen.headerTitle")}</Text>
           </View>
 
           <FlatList
-            data={notifications}
+            data={visibleNotifications}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
             renderItem={({ item }) => (
               <NotifCard
                 item={item}
-                t={t} // <-- Teruskan t() ke NotifCard
-                onPress={() =>
-                  router.push({
-                    pathname: "/main-menu/earthquake",
-                    params: {
-                      tab:
-                        item.type === "Dirasakan"
-                          ? "GEMPA DIRASAKAN"
-                          : "GEMPA TERDETEKSI",
-                    },
-                  })
-                }
+                onPress={() => handleNotificationPress(item)}
               />
             )}
-            // FIX #3: show the actual error message instead of the generic empty text
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>
-                {/* <-- Menggunakan t() untuk fallback jika tidak ada notifikasi --> */}
                 {error ?? t("notificationsScreen.emptyFallback")}
               </Text>
             )}

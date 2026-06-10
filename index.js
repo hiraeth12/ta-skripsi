@@ -1,9 +1,14 @@
-// Initialize Firebase FIRST - before anything else
+import * as SplashScreen from "expo-splash-screen";
 import { initializeFirebase } from "./config/firebase-init";
-initializeFirebase();
+import { configureMapbox } from "./config/mapbox";
+import { registerFcmBackgroundHandler } from "./services/fcm-background";
 
-import { registerFcmBackgroundHandler } from "./hooks/fcm-background-handler";
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Initialize native services before Expo Router mounts the app tree.
+initializeFirebase();
+configureMapbox();
 registerFcmBackgroundHandler();
 
-import "expo-router/entry";
+require("expo-router/entry");
 

@@ -1,10 +1,25 @@
 import { XMLParser } from "fast-xml-parser";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getApp } from "@react-native-firebase/app";
+import { getAuth } from "@react-native-firebase/auth";
+import { get, getDatabase, ref } from "@react-native-firebase/database";
 import { useEffect, useState } from "react";
+import {
+  isUserInsideShakeRadius,
+  parseCoordinate,
+  parseDepthKm,
+} from "@/utils/earthquake-impact";
+import {
+  EMPTY_WARNING,
+  fetchTsunamiGroups,
+} from "@/features/main-menu/earthquake/utils/tsunami-content-utils";
+import {
+  getLatestTerdeteksiGempa,
+  parseTerdeteksiPayload,
+} from "@/features/main-menu/home/utils/parse-terdeteksi";
+import { notificationEmitter } from "@/services/fcm-event-emitter";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type QuakeNotifType = "Dirasakan" | "Terdeteksi";
-
+export type QuakeNotifType = "Dirasakan" | "Terdeteksi" | "Tsunami";
 export type QuakeNotification = {
   id: string;
   type: QuakeNotifType;
@@ -15,22 +30,39 @@ export type QuakeNotification = {
   level: "Rendah" | "Sedang" | "Kuat";
   timestamp: number;
   isRead: boolean;
+  title?: string;
+  headline?: string;
+  message?: string;
 };
 
 type NotificationState = {
   notifications: QuakeNotification[];
   unreadCount: number;
-  error: string | null; // FIX #3: expose fetch errors to UI
+  error: string | null;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+type PersistedLatestSeen = {
+  dirasakan: string;
+  terdeteksi: string;
+  tsunami: string;
+};
+
+type PushNotificationOptions = {
+  silent?: boolean;
+};
 
 const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
-const TERDETEKSI_API_URL = process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL;
+const TERDETEKSI_API_URL_FAST =
+  process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL_FAST;
+const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL;
+const FIREBASE_DATABASE_URL =
+  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 const POLL_INTERVAL_MS = 15_000;
-const MAX_NOTIFICATIONS = 100; // FIX #6: named constant instead of magic number
+const MAX_NOTIFICATIONS = 100;
 
-// ─── Module-level shared state ────────────────────────────────────────────────
+const STORAGE_KEY_NOTIFICATIONS = "quake_notifications_v1";
+const STORAGE_KEY_LATEST_SEEN = "quake_latest_seen_v1";
+const STORAGE_KEY_DIRASAKAN_PREFIX = "quake_notification_delivered:dirasakan:";
 
 let state: NotificationState = {
   notifications: [],
@@ -38,23 +70,32 @@ let state: NotificationState = {
   error: null,
 };
 
-// FIX #2: use pollTimer as the single source of truth for "is polling active"
-//         instead of a separate isStarted boolean that can desync on hot reload
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dailyResetTimer: ReturnType<typeof setTimeout> | null = null;
+let storageInitialized = false;
+let storageInitPromise: Promise<void> | null = null;
+
 const listeners = new Set<() => void>();
 let currentDayKey = getLocalDayKey();
+let latestEmittedTsunamiNotificationId = "";
+let tsunamiPollingStartedAt = 0;
+let hasTsunamiBaselineSnapshot = false;
 
-const latestSeen = {
+const latestSeen: PersistedLatestSeen = {
   dirasakan: "",
   terdeteksi: "",
+  tsunami: "",
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function notifyListeners() {
   listeners.forEach((fn) => fn());
 }
+
+function setState(next: Partial<NotificationState>) {
+  state = { ...state, ...next };
+  notifyListeners();
+}
+
 
 function getLocalDayKey() {
   const now = new Date();
@@ -64,13 +105,30 @@ function getLocalDayKey() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function setState(next: Partial<NotificationState>) {
-  state = { ...state, ...next };
-  notifyListeners();
-}
-
 function recomputeUnreadCount(notifications: QuakeNotification[]) {
   return notifications.reduce((total, item) => total + (item.isRead ? 0 : 1), 0);
+}
+
+function getTsunamiEventId(notificationId: string) {
+  return notificationId.replace(/^tsunami:/, "");
+}
+
+function getLatestTsunamiNotification(notifications: QuakeNotification[]) {
+  return notifications
+    .filter((item) => item.type === "Tsunami")
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
+}
+
+function resetTsunamiPollingBaseline() {
+  tsunamiPollingStartedAt = Date.now();
+  hasTsunamiBaselineSnapshot = false;
+}
+
+function shouldSilenceTsunamiBaseline(timestamp: number) {
+  if (hasTsunamiBaselineSnapshot) return false;
+
+  hasTsunamiBaselineSnapshot = true;
+  return tsunamiPollingStartedAt > 0 && timestamp <= tsunamiPollingStartedAt;
 }
 
 function getLevel(magnitude: number): "Rendah" | "Sedang" | "Kuat" {
@@ -79,10 +137,27 @@ function getLevel(magnitude: number): "Rendah" | "Sedang" | "Kuat" {
   return "Rendah";
 }
 
+function withCacheBuster(url: string): string {
+  const base = url.trim();
+  if (!base) return "";
+  if (base.endsWith("=") || base.endsWith("?") || base.endsWith("&")) {
+    return `${base}${Date.now()}`;
+  }
+  return `${base}${base.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
 function parseTimestamp(date: string, time: string) {
   const cleanTime = (time ?? "").replace(/ WIB| WITA| WIT/gi, "").trim();
   const rawDate = (date ?? "").trim();
   if (!rawDate || !cleanTime) return Date.now();
+
+  const slashDateMatch = rawDate.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (slashDateMatch) {
+    const [, year, month, day] = slashDateMatch;
+    const normalizedDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    const parsed = new Date(`${normalizedDate}T${cleanTime}+07:00`).getTime();
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
 
   const monthMap: Record<string, string> = {
     Jan: "Jan", Feb: "Feb", Mar: "Mar", Apr: "Apr",
@@ -102,7 +177,164 @@ function parseTimestamp(date: string, time: string) {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
-function pushNotification(notification: QuakeNotification) {
+function getTsunamiTimestamp(timesentMs: number, date: string, time: string) {
+  if (Number.isFinite(timesentMs)) return timesentMs;
+  return parseTimestamp(date, time);
+}
+
+function parsePointCoordinates(pointCoordinates: unknown) {
+  const [lonRaw, latRaw] = String(pointCoordinates ?? "").split(",");
+  const longitude = parseCoordinate(lonRaw);
+  const latitude = parseCoordinate(latRaw);
+
+  if (latitude === null || longitude === null) return null;
+  return { latitude, longitude };
+}
+
+async function loadPersistedData(): Promise<void> {
+  try {
+    const [rawNotifications, rawLatestSeen] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY_NOTIFICATIONS),
+      AsyncStorage.getItem(STORAGE_KEY_LATEST_SEEN),
+    ]);
+    let latestTsunamiInStorage: QuakeNotification | undefined;
+
+    if (rawNotifications) {
+      const saved: QuakeNotification[] = JSON.parse(rawNotifications);
+      const today = getLocalDayKey();
+
+      const todayNotifications = saved.filter((item) => {
+        return item.date ? item.date.includes(today.split("-")[2]) : true;
+      });
+
+      if (todayNotifications.length > 0) {
+        state = {
+          ...state,
+          notifications: todayNotifications,
+          unreadCount: recomputeUnreadCount(todayNotifications),
+        };
+
+        latestTsunamiInStorage = getLatestTsunamiNotification(todayNotifications);
+        if (latestTsunamiInStorage) {
+          latestEmittedTsunamiNotificationId = latestTsunamiInStorage.id;
+        }
+      }
+    }
+
+    if (rawLatestSeen) {
+      const saved: PersistedLatestSeen = JSON.parse(rawLatestSeen);
+      latestSeen.dirasakan = saved.dirasakan ?? "";
+      latestSeen.terdeteksi = saved.terdeteksi ?? "";
+      latestSeen.tsunami = saved.tsunami ?? "";
+    }
+
+    if (!latestSeen.tsunami && latestTsunamiInStorage) {
+      latestSeen.tsunami = getTsunamiEventId(latestTsunamiInStorage.id);
+      await persistLatestSeen();
+    }
+  } catch {
+  }
+}
+
+async function persistNotifications(notifications: QuakeNotification[]) {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEY_NOTIFICATIONS,
+      JSON.stringify(notifications),
+    );
+  } catch {
+  }
+}
+
+async function persistLatestSeen() {
+  try {
+    await AsyncStorage.setItem(
+      STORAGE_KEY_LATEST_SEEN,
+      JSON.stringify(latestSeen),
+    );
+  } catch {
+  }
+}
+
+
+function getDirasakanDeliveryKey(userId: string, eventId: string) {
+  return `${STORAGE_KEY_DIRASAKAN_PREFIX}${userId}:${eventId}`;
+}
+
+async function hasLocalDelivery(userId: string, eventId: string) {
+  const value = await AsyncStorage.getItem(
+    getDirasakanDeliveryKey(userId, eventId),
+  );
+  return value === "true";
+}
+
+async function markLocalDelivery(userId: string, eventId: string) {
+  await AsyncStorage.setItem(
+    getDirasakanDeliveryKey(userId, eventId),
+    "true",
+  );
+}
+
+async function getCurrentUserLocation() {
+  const app = getApp();
+  const auth = getAuth(app);
+  const user = auth.currentUser;
+  if (!user) return null;
+
+  const database = FIREBASE_DATABASE_URL
+    ? getDatabase(app, FIREBASE_DATABASE_URL)
+    : getDatabase(app);
+  const snapshot = await get(ref(database, `users/${user.uid}`));
+  const data = snapshot.val();
+  const latitude = parseCoordinate(data?.latitude);
+  const longitude = parseCoordinate(data?.longitude);
+
+  if (latitude === null || longitude === null) return null;
+  return { userId: user.uid, latitude, longitude };
+}
+
+
+function emitTsunamiNotification(notification: QuakeNotification) {
+  if (notification.type !== "Tsunami") return;
+  if (notification.id === latestEmittedTsunamiNotificationId) return;
+
+  latestEmittedTsunamiNotificationId = notification.id;
+
+  const title = notification.title || "Peringatan Tsunami";
+  const message =
+    notification.message || notification.headline || notification.location || "";
+  const eventId = notification.id.replace(/^tsunami:/, "");
+
+  notificationEmitter.emit({
+    kind: "tsunami_alert",
+    title,
+    body: message || title,
+    level: title,
+    message,
+    subject: notification.title,
+    headline: notification.headline,
+    description: notification.message,
+    data: {
+      type: "tsunami_alert",
+      event_id: eventId,
+      title,
+      body: message || title,
+      level: title,
+      message,
+      subject: notification.title,
+      headline: notification.headline,
+      description: notification.message,
+      magnitude: notification.magnitude,
+      location: notification.location,
+      timestamp: `${notification.date} ${notification.time}`.trim(),
+    },
+  });
+}
+
+function pushNotification(
+  notification: QuakeNotification,
+  { silent = false }: PushNotificationOptions = {},
+) {
   if (state.notifications.some((item) => item.id === notification.id)) return;
 
   const notifications = [notification, ...state.notifications]
@@ -110,12 +342,18 @@ function pushNotification(notification: QuakeNotification) {
     .slice(0, MAX_NOTIFICATIONS);
 
   setState({ notifications, unreadCount: recomputeUnreadCount(notifications) });
-}
+  if (silent && notification.type === "Tsunami") {
+    latestEmittedTsunamiNotificationId = notification.id;
+  } else if (!silent) {
+    emitTsunamiNotification(notification);
+  }
 
-// ─── Daily reset ──────────────────────────────────────────────────────────────
+  void persistNotifications(notifications);
+}
 
 function clearAllNotifications() {
   setState({ notifications: [], unreadCount: 0, error: null });
+  void AsyncStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
 }
 
 function scheduleDailyReset() {
@@ -127,6 +365,11 @@ function scheduleDailyReset() {
   dailyResetTimer = setTimeout(() => {
     currentDayKey = getLocalDayKey();
     clearAllNotifications();
+
+    latestSeen.dirasakan = "";
+    latestSeen.terdeteksi = "";
+    void persistLatestSeen();
+
     scheduleDailyReset();
   }, delay);
 }
@@ -136,9 +379,11 @@ function resetIfDayChanged() {
   if (dayKey === currentDayKey) return;
   currentDayKey = dayKey;
   clearAllNotifications();
-}
 
-// ─── Fetchers ─────────────────────────────────────────────────────────────────
+  latestSeen.dirasakan = "";
+  latestSeen.terdeteksi = "";
+  void persistLatestSeen();
+}
 
 async function fetchDirasakanNotification() {
   if (!DIRASAKAN_API_URL) return;
@@ -170,9 +415,49 @@ async function fetchDirasakanNotification() {
   );
 
   if (!eventId || eventId === latestSeen.dirasakan) return;
-  latestSeen.dirasakan = eventId;
 
   const magnitude = Number.parseFloat(String(latest.magnitude ?? "0")) || 0;
+  const depthKm = parseDepthKm(latest.depth) ?? 0;
+  const coordinates =
+    parsePointCoordinates(latest?.point?.coordinates) ??
+    (() => {
+      const latitude = parseCoordinate(latest?.latitude);
+      const longitude = parseCoordinate(latest?.longitude);
+      return latitude === null || longitude === null
+        ? null
+        : { latitude, longitude };
+    })();
+
+  if (!coordinates || magnitude <= 0) {
+    latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
+    return;
+  }
+
+  const userLocation = await getCurrentUserLocation();
+  if (!userLocation) return;
+
+  if (await hasLocalDelivery(userLocation.userId, eventId)) {
+    latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
+    return;
+  }
+
+  const impact = isUserInsideShakeRadius({
+    quakeLat: coordinates.latitude,
+    quakeLon: coordinates.longitude,
+    userLat: userLocation.latitude,
+    userLon: userLocation.longitude,
+    magnitude,
+    depthKm,
+  });
+
+  if (!impact.inside) {
+    latestSeen.dirasakan = eventId;
+    void persistLatestSeen();
+    return;
+  }
+
   const date = String(latest.date ?? "");
   const time = String(latest.time ?? "");
 
@@ -187,44 +472,46 @@ async function fetchDirasakanNotification() {
     timestamp: parseTimestamp(date, time),
     isRead: false,
   });
+
+  await markLocalDelivery(userLocation.userId, eventId);
+  latestSeen.dirasakan = eventId;
+  void persistLatestSeen();
 }
 
 async function fetchTerdeteksiNotification() {
-  if (!TERDETEKSI_API_URL) return;
+  if (!TERDETEKSI_API_URL_FAST) return;
 
-  const response = await fetch(`${TERDETEKSI_API_URL.trim()}${Date.now()}`);
-  const data = await response.json();
+  const response = await fetch(withCacheBuster(TERDETEKSI_API_URL_FAST));
+  const raw = await response.text();
+  const parser = new XMLParser({ ignoreAttributes: false });
+  const parsedXml = parser.parse(raw);
+  const latest = getLatestTerdeteksiGempa(parsedXml);
+  const parsed = parseTerdeteksiPayload(latest);
 
-  const features = data?.features;
-  if (!Array.isArray(features) || features.length === 0) return;
+  if (!parsed) return;
 
-  const sorted = [...features].sort((a, b) => {
-    const tA = String(a?.properties?.time ?? "");
-    const tB = String(b?.properties?.time ?? "");
-    return tB.localeCompare(tA);
-  });
-
-  const latest = sorted[0];
-  if (!latest) return;
-
-  const props = latest?.properties ?? {};
-  const eventId = String(
-    props.ids ?? props.id ??
-    `${props.time}-${props.mag}-${props.place}-${latest?.geometry?.coordinates?.[0]}`,
-  );
+  const eventId = parsed.eventId.trim();
 
   if (!eventId || eventId === latestSeen.terdeteksi) return;
-  latestSeen.terdeteksi = eventId;
 
-  const magnitude = Number.parseFloat(String(props.mag ?? "0")) || 0;
-  const [date = "", timeRaw = ""] = String(props.time ?? "").split(" ");
-  const time = timeRaw.split(".")[0] ?? "";
+  const alreadyExists = state.notifications.some(
+    (item) => item.id === `terdeteksi:${eventId}`,
+  );
+
+  latestSeen.terdeteksi = eventId;
+  void persistLatestSeen();
+
+  if (alreadyExists) return;
+
+  const magnitude = Number.parseFloat(parsed.magnitude) || 0;
+  const date = parsed.tanggal;
+  const time = parsed.jam;
 
   pushNotification({
     id: `terdeteksi:${eventId}`,
     type: "Terdeteksi",
-    magnitude: magnitude.toFixed(1),
-    location: String(props.place ?? "Lokasi tidak tersedia"),
+    magnitude: parsed.magnitude,
+    location: parsed.wilayah || "Lokasi tidak tersedia",
     date,
     time,
     level: getLevel(magnitude),
@@ -233,39 +520,112 @@ async function fetchTerdeteksiNotification() {
   });
 }
 
-// ─── Poll ─────────────────────────────────────────────────────────────────────
+async function fetchTsunamiNotification() {
+  if (!TSUNAMI_API_URL) return;
+
+  const abortController = new AbortController();
+  const groups = await fetchTsunamiGroups(
+    TSUNAMI_API_URL.trim(),
+    abortController.signal,
+  );
+  const latestGroup = groups[0];
+  if (!latestGroup) return;
+
+  const latestWarning =
+    latestGroup.warnings[latestGroup.latestWarningIndex] ?? EMPTY_WARNING;
+  const warningId = latestWarning.id === EMPTY_WARNING.id ? "" : latestWarning.id;
+  const eventId = String(
+    warningId || latestGroup.id || `${latestGroup.tanggal}-${latestGroup.jam}`,
+  );
+
+  if (!eventId) return;
+
+  const notificationId = `tsunami:${eventId}`;
+
+  if (eventId === latestSeen.tsunami) {
+    hasTsunamiBaselineSnapshot = true;
+    return;
+  }
+
+  // Cek apakah notifikasi ini sudah ada (dari persistent storage)
+  const existingNotification = state.notifications.find(
+    (item) => item.id === notificationId,
+  );
+
+  latestSeen.tsunami = eventId;
+  void persistLatestSeen();
+
+  if (existingNotification) {
+    latestEmittedTsunamiNotificationId = existingNotification.id;
+    hasTsunamiBaselineSnapshot = true;
+    return;
+  }
+
+  const date = String(latestGroup.tanggal ?? "");
+  const time = String(latestGroup.jam ?? "");
+  const headline = String(latestWarning.headline ?? "").trim();
+  const description = String(latestWarning.description ?? "").trim();
+  const subject = String(latestWarning.subject ?? "").trim();
+  const location = String(latestGroup.wilayah ?? "").trim();
+  const magnitude = String(latestGroup.magnitude ?? "").trim();
+  const magnitudeValue = Number.parseFloat(magnitude) || 0;
+  const timestamp = getTsunamiTimestamp(latestWarning.timesentMs, date, time);
+  const shouldSilentBaseline = shouldSilenceTsunamiBaseline(timestamp);
+
+  pushNotification(
+    {
+      id: notificationId,
+      type: "Tsunami",
+      magnitude,
+      location: location || "Lokasi tidak tersedia",
+      date,
+      time,
+      level: getLevel(magnitudeValue),
+      timestamp,
+      isRead: false,
+      title: subject || "Peringatan Tsunami",
+      headline,
+      message: description || headline || location,
+    },
+    { silent: shouldSilentBaseline },
+  );
+}
 
 async function pollLatestQuakes() {
   resetIfDayChanged();
 
-  // FIX #3: collect settled results and surface any failures to the UI
   const results = await Promise.allSettled([
     fetchDirasakanNotification(),
     fetchTerdeteksiNotification(),
+    fetchTsunamiNotification(),
   ]);
 
   const anyFailed = results.some((r) => r.status === "rejected");
 
-  // Only show error when ALL fetches failed and there are no notifications yet.
-  // If we already have data, a transient network hiccup shouldn't wipe the UI.
   if (anyFailed && state.notifications.length === 0) {
     setState({ error: "Gagal memuat notifikasi. Periksa koneksi Anda." });
   } else if (!anyFailed && state.error) {
-    setState({ error: null }); // clear stale error once fetch recovers
+    setState({ error: null });
   }
 }
 
-// ─── Polling lifecycle ────────────────────────────────────────────────────────
+async function initAndStartPolling() {
+  if (!storageInitialized) {
+    storageInitPromise = loadPersistedData();
+    await storageInitPromise;
+    storageInitialized = true;
+    notifyListeners(); 
+  }
 
-function startPolling() {
-  // FIX #2: guard on pollTimer, not a separate isStarted flag.
-  // pollTimer is null both on first run AND after stopPolling, so this
-  // correctly handles hot reload without risking double-interval.
-  if (pollTimer) return;
-
-  scheduleDailyReset();
   void pollLatestQuakes();
   pollTimer = setInterval(() => void pollLatestQuakes(), POLL_INTERVAL_MS);
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  scheduleDailyReset();
+  resetTsunamiPollingBaseline();
+  void initAndStartPolling();
 }
 
 function stopPollingIfUnused() {
@@ -278,6 +638,11 @@ function stopPollingIfUnused() {
     clearTimeout(dailyResetTimer);
     dailyResetTimer = null;
   }
+
+  storageInitialized = false;
+  storageInitPromise = null;
+  tsunamiPollingStartedAt = 0;
+  hasTsunamiBaselineSnapshot = false;
 }
 
 function subscribe(listener: () => void) {
@@ -289,15 +654,16 @@ function subscribe(listener: () => void) {
   };
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
 export function markAllNotificationsAsRead() {
-  // FIX #4: bail early if nothing to mark — avoids a pointless setState +
-  //         notifyListeners() call every time the notifications screen opens
   if (state.unreadCount === 0) return;
 
-  const notifications = state.notifications.map((item) => ({ ...item, isRead: true }));
+  const notifications = state.notifications.map((item) => ({
+    ...item,
+    isRead: true,
+  }));
+
   setState({ notifications, unreadCount: 0 });
+  void persistNotifications(notifications);
 }
 
 export function useQuakeNotifications() {
@@ -311,7 +677,7 @@ export function useQuakeNotifications() {
   return {
     notifications: snapshot.notifications,
     unreadCount: snapshot.unreadCount,
-    error: snapshot.error, // FIX #3: exposed so the screen can render it
+    error: snapshot.error,
     markAllAsRead: markAllNotificationsAsRead,
   };
 }

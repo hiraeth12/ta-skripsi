@@ -1,21 +1,20 @@
-import AuthButton from "@/components/auth-button";
-import CustomAlert from "@/components/ui/custom-alert"; // 1. Import CustomAlert
+import AuthButton from "@/components/ui/auth-button";
+import CustomAlert from "@/components/ui/custom-alert";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
-import { useTranslation } from "react-i18next"; // <-- Import i18n
-import { Image, Text, TextInput, View } from "react-native"; // 2. Hapus import 'Alert' dari sini
+import { useTranslation } from "react-i18next";
+import { Image, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { sendResetOtp } from "../services/auth-service";
 import { styles } from "../styles/forgot-password-styles";
 
 export default function ForgotPassword() {
-  const { t } = useTranslation(); // <-- Panggil hook i18n
-
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const isSubmittingRef = useRef(false);
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  // 3. Tambahkan State untuk mengontrol Modal Custom
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
@@ -23,7 +22,6 @@ export default function ForgotPassword() {
     type: "error" as "error" | "success",
   });
 
-  // 4. Tambahkan fungsi helper
   const showCustomAlert = (
     title: string,
     message: string,
@@ -37,11 +35,19 @@ export default function ForgotPassword() {
 
     const trimmedEmail = email.trim().toLowerCase();
 
-    if (!trimmedEmail.includes("@")) {
-      // 5. Ganti Alert bawaan dengan showCustomAlert dan i18n
+    if (!trimmedEmail) {
       showCustomAlert(
-        t("forgotPasswordScreen.alert.invalidInputTitle"),
-        t("forgotPasswordScreen.alert.invalidInputMsg"),
+        "Input Kosong",
+        "Silakan masukkan alamat email Anda.",
+        "error",
+      );
+      return;
+    }
+
+    if (!emailRegex.test(trimmedEmail)) {
+      showCustomAlert(
+        "Input Tidak Valid",
+        "Silakan masukkan alamat email yang valid.",
         "error",
       );
       return;
@@ -49,25 +55,21 @@ export default function ForgotPassword() {
 
     isSubmittingRef.current = true;
     setIsLoading(true);
+
     try {
       await sendResetOtp(trimmedEmail);
+      isSubmittingRef.current = false;
+      setIsLoading(false);
       router.push({
         pathname: "/starter/verify-code",
         params: { email: trimmedEmail },
       });
     } catch (error) {
-      // Ganti Alert bawaan dengan showCustomAlert dan i18n
       const message =
         error instanceof Error
           ? error.message
-          : t("forgotPasswordScreen.alert.failMsg");
-
-      showCustomAlert(
-        t("forgotPasswordScreen.alert.failTitle"),
-        message,
-        "error",
-      );
-    } finally {
+          : "Gagal mengirim OTP. Silakan coba lagi.";
+      showCustomAlert("Gagal", message, "error");
       isSubmittingRef.current = false;
       setIsLoading(false);
     }
@@ -82,25 +84,23 @@ export default function ForgotPassword() {
       extraScrollHeight={24}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Logo SeismoTrack */}
       <Image
         style={styles.logo}
         source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")}
         resizeMode="contain"
       />
 
-      {/* Ilustrasi - Ukuran diselaraskan (sedikit diperkecil agar tidak sesak) */}
       <Image
         style={styles.image}
         source={require("@/assets/images/Forgot password-bro 2.png")}
         resizeMode="contain"
       />
 
-      {/* <-- Menggunakan t() untuk semua teks --> */}
       <Text style={styles.title}>{t("forgotPasswordScreen.title")}</Text>
 
       <Text style={styles.description}>
-        {t("forgotPasswordScreen.description")}
+        Silakan masukkan alamat email Anda untuk menerima kode verifikasi untuk
+        mengatur ulang kata sandi.
       </Text>
 
       <View style={styles.inputArea}>
@@ -110,7 +110,7 @@ export default function ForgotPassword() {
           placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
-          selectionColor="#1E6F9F" // Diselaraskan dengan kursor biru di VerifyCode
+          selectionColor="#1E6F9F"
           style={styles.input}
           value={email}
           onChangeText={setEmail}
@@ -119,17 +119,12 @@ export default function ForgotPassword() {
 
       <View style={styles.buttonWrapper}>
         <AuthButton
-          title={
-            isLoading
-              ? t("forgotPasswordScreen.buttonSending")
-              : t("forgotPasswordScreen.buttonSend")
-          }
+          title={isLoading ? t("forgotPasswordScreen.buttonSending") : t("forgotPasswordScreen.buttonSend")}
           onPress={handleSendOtp}
           disabled={isLoading}
         />
       </View>
 
-      {/* 6. Panggil Komponen CustomAlert di bagian terbawah render */}
       <CustomAlert
         visible={modalConfig.visible}
         title={modalConfig.title}

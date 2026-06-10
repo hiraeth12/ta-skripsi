@@ -56,6 +56,21 @@ const styles = StyleSheet.create({
   infoTextFlex: { flex: 1 },
   infoLabel: { fontSize: 12, color: "#666", marginBottom: 2 },
   infoValue: { fontSize: 13, fontWeight: "700", color: "#1E3A5F" },
+  simulasiBtn: {
+    marginTop: 11,
+    marginBottom: -11,
+    backgroundColor: "#1E6F9F",
+    borderRadius: 30,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  simulasiBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+    letterSpacing: 1,
+  },
+  simulasiBtnDisabled: { backgroundColor: "#94a3b8" },
 
   latestQuakePill: {
     position: "absolute",
