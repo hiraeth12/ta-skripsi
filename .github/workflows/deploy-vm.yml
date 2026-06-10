@@ -1,0 +1,41 @@
+name: Deploy VM
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -e
+            cd /opt/myapp
+
+            echo "[DEPLOY] Pull latest main"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "[DEPLOY] Install production dependencies"
+            npm ci --omit=dev
+
+            echo "[DEPLOY] Restart services"
+            sudo systemctl restart myapp-scheduler myapp-monitor-notifications myapp-monitor-tsunami
+
+            echo "[DEPLOY] Check services"
+            sleep 3
+            for svc in myapp-scheduler myapp-monitor-notifications myapp-monitor-tsunami; do
+              sudo systemctl is-active --quiet "$svc" \
+                && echo "$svc: OK" \
+                || { echo "$svc: FAILED"; exit 1; }
+            done
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::Deploy gagal! Cek logs di atas."
