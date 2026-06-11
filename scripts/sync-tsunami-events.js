@@ -7,21 +7,22 @@ import { getDatabase } from "./firebase-admin-config.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+
 const TSUNAMI_EVENTS_PATH = "tsunamiEvents";
 const FETCH_TIMEOUT_MS = 30_000;
 
+const CACHE_BUST_INTERVAL_MS = 5 * 60 * 1_000;
+
 function readEnvFileIfExists(envPath) {
   if (!fs.existsSync(envPath)) return {};
-  const raw = fs.readFileSync(envPath, "utf8");
+
   const env = {};
-  for (const line of raw.split(/\r?\n/)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const sep = trimmed.indexOf("=");
     if (sep < 0) continue;
-    const key = trimmed.slice(0, sep).trim();
-    const value = trimmed.slice(sep + 1).trim();
-    env[key] = value;
+    env[trimmed.slice(0, sep).trim()] = trimmed.slice(sep + 1).trim();
   }
   return env;
 }
@@ -42,23 +43,13 @@ function loadEnv() {
   return merged;
 }
 
-function withCacheBuster(url, intervalMs = CACHE_BUST_INTERVAL_MS) {
-  const base = String(url ?? "").trim();
-  const bucket = Math.floor(Date.now() / intervalMs);
-  const sep =
-    base.includes("?")
-      ? base.endsWith("?") || base.endsWith("&") ? "" : "&"
-      : "?";
-  return `${base}${sep}t=${bucket}`;
+function text(value) {
+  return String(value ?? "").trim();
 }
 
 function normalizeArray(value) {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
-}
-
-function text(value) {
-  return String(value ?? "").trim();
 }
 
 function cleanFirebaseValue(value) {
@@ -85,17 +76,9 @@ function sanitizeFirebaseKey(value) {
   return s || "unknown";
 }
 
-function parsePointCoordinates(coordStr) {
-  const [lonStr, latStr] = text(coordStr).split(",").map((p) => p.trim());
-  const longitude = Number.parseFloat(lonStr);
-  const latitude = Number.parseFloat(latStr);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  return { latitude, longitude };
-}
-
 function formatKeyNumber(value) {
   if (!Number.isFinite(value)) return "";
-  return String(Math.round(value * 10000) / 10000);
+  return String(Math.round(value * 10_000) / 10_000);
 }
 
 function expandTwoDigitYear(rawYear) {
@@ -113,13 +96,11 @@ function parseDateTimeKey(dateValue, timeValue) {
   if (!dateMatch || !timeMatch) {
     return sanitizeFirebaseKey(`${dateText}_${timeText}`);
   }
-  const day = dateMatch[1].padStart(2, "0");
+  const day   = dateMatch[1].padStart(2, "0");
   const month = dateMatch[2].padStart(2, "0");
-  const year = expandTwoDigitYear(dateMatch[3]);
-  const hour = timeMatch[1].padStart(2, "0");
-  const minute = timeMatch[2];
-  const second = timeMatch[3];
-  return `${year}${month}${day}${hour}${minute}${second}`;
+  const year  = expandTwoDigitYear(dateMatch[3]);
+  const hour  = timeMatch[1].padStart(2, "0");
+  return `${year}${month}${day}${hour}${timeMatch[2]}${timeMatch[3]}`;
 }
 
 function parseTimesent(value) {
@@ -129,37 +110,59 @@ function parseTimesent(value) {
   );
   if (!match) return Number.NEGATIVE_INFINITY;
 
-  const dd = match[1].padStart(2, "0");
-  const mm = match[2].padStart(2, "0");
-  const yyyy = match[3];
-  const HH = match[4].padStart(2, "0");
-  const MM = match[5];
-  const SS = match[6];
+  const ts = new Date(
+    `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}` +
+    `T${match[4].padStart(2, "0")}:${match[5]}:${match[6]}+07:00`,
+  ).getTime();
 
-  const ts = new Date(`${yyyy}-${mm}-${dd}T${HH}:${MM}:${SS}+07:00`).getTime();
   return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
 }
 
 function extractWarningId(subject, identifier, timesent, index) {
   const match = text(subject).match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
   if (match) return sanitizeFirebaseKey(`PD-${match[1].replace(/\./g, "-")}`);
-  const fallback = text(identifier) || text(timesent) || `warning_${index}`;
-  return sanitizeFirebaseKey(fallback);
+
+  // Always include index in the fallback to prevent collisions.
+  const base = text(identifier) || text(timesent) || `warning`;
+  return sanitizeFirebaseKey(`${base}_${index}`);
 }
 
-function getAlertRoot(parsed) {
-  if (parsed?.alert && typeof parsed.alert === "object") return parsed.alert;
-  return parsed ?? {};
+function withCacheBuster(url, intervalMs = CACHE_BUST_INTERVAL_MS) {
+  const base = String(url ?? "").trim();
+  const bucket = Math.floor(Date.now() / intervalMs);
+  const sep =
+    base.includes("?")
+      ? base.endsWith("?") || base.endsWith("&") ? "" : "&"
+      : "?";
+  return `${base}${sep}t=${bucket}`;
+}
+
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(withCacheBuster(url), { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function parsePointCoordinates(coordStr) {
+  const [lonStr, latStr] = text(coordStr).split(",").map((p) => p.trim());
+  const longitude = Number.parseFloat(lonStr);
+  const latitude  = Number.parseFloat(latStr);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
 }
 
 function normalizeInfoCandidate(info, index, alertMeta) {
-  const coordStr = text(info?.point?.coordinates);
+  const coordStr    = text(info?.point?.coordinates);
   const coordinates = parsePointCoordinates(coordStr);
   if (!coordinates) return null;
 
   const warningIdentifier = text(info?.identifier) || alertMeta.identifier;
-  const timesent = text(info?.timesent);
-  const warningId = extractWarningId(
+  const timesent          = text(info?.timesent);
+  const warningId         = extractWarningId(
     info?.subject,
     warningIdentifier,
     timesent,
@@ -175,38 +178,41 @@ function normalizeInfoCandidate(info, index, alertMeta) {
     .map((p) => p.toLowerCase())
     .join("|");
 
+  const raw = cleanFirebaseValue(info ?? {});
+
   const warning = {
     warningId,
-    identifier: warningIdentifier,
-    subject: text(info?.subject),
-    headline: text(info?.headline),
+    identifier:  warningIdentifier,
+    subject:     text(info?.subject),
+    headline:    text(info?.headline),
     description: text(info?.description),
     instruction: text(info?.instruction),
-    potential: text(info?.potential),
+    potential:   text(info?.potential),
     timesent,
-    shakemap: text(info?.shakemap),
-    wzmap: text(info?.wzmap),
-    ttmap: text(info?.ttmap),
-    sshmap: text(info?.sshmap),
-    wzarea: normalizeNestedList(info?.wzarea),
-    obsarea: normalizeNestedList(info?.obsarea),
-    rawIndex: index,
-    timesentMs: parseTimesent(timesent),
-    eventid: text(info?.eventid),
+    shakemap:    text(info?.shakemap),
+    wzmap:       text(info?.wzmap),
+    ttmap:       text(info?.ttmap),
+    sshmap:      text(info?.sshmap),
+    wzarea:      normalizeNestedList(info?.wzarea),
+    obsarea:     normalizeNestedList(info?.obsarea),
+    raw,
+    rawIndex:    index,
+    timesentMs:  parseTimesent(timesent),
+    eventid:     text(info?.eventid),
   };
 
   return {
     eventSignature,
-    eventid: text(info?.eventid),
-    event: text(info?.event),
-    date: text(info?.date),
-    time: text(info?.time),
+    eventid:     text(info?.eventid),
+    event:       text(info?.event),
+    date:        text(info?.date),
+    time:        text(info?.time),
     coordinates: coordStr,
-    latitude: coordinates.latitude,
-    longitude: coordinates.longitude,
-    magnitude: text(info?.magnitude),
-    depth: text(info?.depth),
-    area: text(info?.area),
+    latitude:    coordinates.latitude,
+    longitude:   coordinates.longitude,
+    magnitude:   text(info?.magnitude),
+    depth:       text(info?.depth),
+    area:        text(info?.area),
     warning,
   };
 }
@@ -229,31 +235,33 @@ function latestWarningFrom(warnings) {
   );
   if (!hasValid) return warnings[warnings.length - 1] ?? null;
   return (
-    [...warnings].sort((a, b) => {
-      if (b.timesentMs !== a.timesentMs) return b.timesentMs - a.timesentMs;
-      return b.rawIndex - a.rawIndex;
-    })[0] ?? null
+    [...warnings].sort((a, b) =>
+      b.timesentMs !== a.timesentMs
+        ? b.timesentMs - a.timesentMs
+        : b.rawIndex - a.rawIndex,
+    )[0] ?? null
   );
 }
 
 function groupCandidates(candidates, alertMeta) {
   const grouped = new Map();
+
   for (const candidate of candidates) {
     const group = grouped.get(candidate.eventSignature);
     if (group) {
       group.candidates.push(candidate);
       group.warnings.push(candidate.warning);
-      continue;
+    } else {
+      grouped.set(candidate.eventSignature, {
+        candidates: [candidate],
+        warnings:   [candidate.warning],
+        alertMeta,
+      });
     }
-    grouped.set(candidate.eventSignature, {
-      candidates: [candidate],
-      warnings: [candidate.warning],
-      alertMeta,
-    });
   }
 
   return Array.from(grouped.values()).map((group) => {
-    const base = group.candidates[0];
+    const base     = group.candidates[0];
     const eventIds = new Set(
       group.candidates.map((c) => c.eventid).filter(Boolean),
     );
@@ -275,20 +283,21 @@ function groupCandidates(candidates, alertMeta) {
 
 function buildWarningPayload(warning) {
   return {
-    warningId: warning.warningId,
-    identifier: warning.identifier,
-    subject: warning.subject,
-    headline: warning.headline,
+    warningId:   warning.warningId,
+    identifier:  warning.identifier,
+    subject:     warning.subject,
+    headline:    warning.headline,
     description: warning.description,
     instruction: warning.instruction,
-    potential: warning.potential,
-    timesent: warning.timesent,
-    shakemap: warning.shakemap,
-    wzmap: warning.wzmap,
-    ttmap: warning.ttmap,
-    sshmap: warning.sshmap,
-    wzarea: warning.wzarea,
-    obsarea: warning.obsarea,
+    potential:   warning.potential,
+    timesent:    warning.timesent,
+    shakemap:    warning.shakemap,
+    wzmap:       warning.wzmap,
+    ttmap:       warning.ttmap,
+    sshmap:      warning.sshmap,
+    wzarea:      warning.wzarea,
+    obsarea:     warning.obsarea,
+    raw:         warning.raw,
   };
 }
 
@@ -299,12 +308,6 @@ async function syncGroup(db, group, nowIso) {
   if (!latest) return result;
 
   const eventPath = `${TSUNAMI_EVENTS_PATH}/${group.eventKey}`;
-  const latestIdSnap = await db.ref(`${eventPath}/latestWarningId`).get();
-  const storedLatestWarningId = latestIdSnap.exists() ? latestIdSnap.val() : null;
-
-  if (storedLatestWarningId === latest.warningId) {
-    return result;
-  }
 
   const newWarnings = [];
   for (const warning of group.warnings) {
@@ -316,11 +319,16 @@ async function syncGroup(db, group, nowIso) {
     }
   }
 
-  if (newWarnings.length === 0) {
-  }
+  const latestIdSnap = await db.ref(`${eventPath}/latestWarningId`).get();
+  const storedLatestWarningId = latestIdSnap.exists()
+    ? latestIdSnap.val()
+    : null;
 
-  const createdAtSnap = await db.ref(`${eventPath}/createdAt`).get();
-  const createdAt = createdAtSnap.exists() ? createdAtSnap.val() : nowIso;
+  const latestPointerUpToDate = storedLatestWarningId === latest.warningId;
+
+  if (newWarnings.length === 0 && latestPointerUpToDate) {
+    return result;
+  }
 
   for (const warning of newWarnings) {
     await db
@@ -330,31 +338,34 @@ async function syncGroup(db, group, nowIso) {
     result.newWarnings += 1;
   }
 
+  const createdAtSnap = await db.ref(`${eventPath}/createdAt`).get();
+  const createdAt = createdAtSnap.exists() ? createdAtSnap.val() : nowIso;
+
   await db.ref(eventPath).update({
-    eventKey: group.eventKey,
-    identifier: group.alertMeta.identifier,
-    sender: group.alertMeta.sender,
-    sent: group.alertMeta.sent,
-    status: group.alertMeta.status,
-    msgType: group.alertMeta.msgType,
-    scope: group.alertMeta.scope,
-    code: group.alertMeta.code,
-    event: group.base.event,
-    eventid: latest.eventid || group.base.eventid,
-    latitude: group.base.latitude,
-    longitude: group.base.longitude,
-    coordinates: group.base.coordinates,
-    magnitude: group.base.magnitude,
-    depth: group.base.depth,
-    area: group.base.area,
-    date: group.base.date,
-    time: group.base.time,
+    eventKey:        group.eventKey,
+    identifier:      group.alertMeta.identifier,
+    sender:          group.alertMeta.sender,
+    sent:            group.alertMeta.sent,
+    status:          group.alertMeta.status,
+    msgType:         group.alertMeta.msgType,
+    scope:           group.alertMeta.scope,
+    code:            group.alertMeta.code,
+    event:           group.base.event,
+    eventid:         latest.eventid || group.base.eventid,
+    latitude:        group.base.latitude,
+    longitude:       group.base.longitude,
+    coordinates:     group.base.coordinates,
+    magnitude:       group.base.magnitude,
+    depth:           group.base.depth,
+    area:            group.base.area,
+    date:            group.base.date,
+    time:            group.base.time,
     latestWarningId: latest.warningId,
-    latestSubject: latest.subject,
-    latestHeadline: latest.headline,
-    latestTimesent: latest.timesent,
+    latestSubject:   latest.subject,
+    latestHeadline:  latest.headline,
+    latestTimesent:  latest.timesent,
     createdAt,
-    updatedAt: nowIso,
+    updatedAt:       nowIso,
   });
 
   console.log(`Tsunami event synced: ${group.eventKey}`);
@@ -362,18 +373,13 @@ async function syncGroup(db, group, nowIso) {
   return result;
 }
 
-async function fetchWithTimeout(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(withCacheBuster(url), { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
+function getAlertRoot(parsed) {
+  if (parsed?.alert && typeof parsed.alert === "object") return parsed.alert;
+  return parsed ?? {};
 }
 
 export async function syncTsunamiEvents(options = {}) {
-  const env = loadEnv();
+  const env    = loadEnv();
   const apiUrl =
     options.apiUrl ||
     env.PERINGATAN_TSUNAMI_API_URL ||
@@ -381,7 +387,7 @@ export async function syncTsunamiEvents(options = {}) {
 
   if (!text(apiUrl)) {
     return {
-      ok: false,
+      ok:      false,
       skipped: true,
       reason:
         "PERINGATAN_TSUNAMI_API_URL or EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL is not set",
@@ -396,50 +402,47 @@ export async function syncTsunamiEvents(options = {}) {
       throw new Error(`Failed to fetch tsunami API: ${response.status}`);
     }
 
-    const raw = await response.text();
+    const raw    = await response.text();
     const parser = new XMLParser({ ignoreAttributes: false });
-    const parsed = parser.parse(raw);
-    const alert = getAlertRoot(parsed);
+    const alert  = getAlertRoot(parser.parse(raw));
 
     const alertMeta = {
       identifier: text(alert.identifier),
-      sender: text(alert.sender),
-      sent: text(alert.sent),
-      status: text(alert.status),
-      msgType: text(alert.msgType),
-      scope: text(alert.scope),
-      code: text(alert.code),
+      sender:     text(alert.sender),
+      sent:       text(alert.sent),
+      status:     text(alert.status),
+      msgType:    text(alert.msgType),
+      scope:      text(alert.scope),
+      code:       text(alert.code),
     };
 
-    const infoItems = normalizeArray(alert.info);
-    const candidates = infoItems
+    const candidates = normalizeArray(alert.info)
       .map((info, index) => normalizeInfoCandidate(info, index, alertMeta))
       .filter(Boolean);
 
     if (candidates.length === 0) {
       return {
-        ok: true,
-        skipped: true,
-        reason: "No valid tsunami warning info found",
-        eventCount: 0,
+        ok:           true,
+        skipped:      true,
+        reason:       "No valid tsunami warning info found",
+        eventCount:   0,
         warningCount: 0,
       };
     }
 
-    const groups = groupCandidates(candidates, alertMeta);
-    const db = options.db || getDatabase();
-    const nowIso = new Date().toISOString();
+    const groups  = groupCandidates(candidates, alertMeta);
+    const db      = options.db || getDatabase();
+    const nowIso  = new Date().toISOString();
 
     const results = [];
     for (const group of groups) {
-      const result = await syncGroup(db, group, nowIso);
-      results.push(result);
+      results.push(await syncGroup(db, group, nowIso));
     }
 
     const stats = results.reduce(
       (acc, r) => ({
         syncedEvents: acc.syncedEvents + r.syncedEvents,
-        newWarnings: acc.newWarnings + r.newWarnings,
+        newWarnings:  acc.newWarnings  + r.newWarnings,
       }),
       { syncedEvents: 0, newWarnings: 0 },
     );
@@ -449,20 +452,20 @@ export async function syncTsunamiEvents(options = {}) {
     }
 
     return {
-      ok: true,
-      skipped: stats.syncedEvents === 0,
-      writePath: `/${TSUNAMI_EVENTS_PATH}`,
-      eventCount: groups.length,
+      ok:           true,
+      skipped:      stats.syncedEvents === 0,
+      writePath:    `/${TSUNAMI_EVENTS_PATH}`,
+      eventCount:   groups.length,
       warningCount: candidates.length,
       syncedEvents: stats.syncedEvents,
-      newWarnings: stats.newWarnings,
+      newWarnings:  stats.newWarnings,
     };
   } catch (error) {
     console.error(`Failed to sync tsunami warning: ${error.message}`);
     return {
-      ok: false,
+      ok:      false,
       skipped: true,
-      reason: error.message,
+      reason:  error.message,
     };
   }
 }
@@ -474,7 +477,5 @@ async function runCli() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  runCli().finally(() => {
-    process.exit();
-  });
+  runCli().finally(() => process.exit());
 }
