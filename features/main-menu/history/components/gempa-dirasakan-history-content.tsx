@@ -198,6 +198,22 @@ export function GempaDirasakanHistoryContent({
 }: Props) {
   const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
+  const shakeMapModalTexts = useMemo(
+    () => ({
+      title: t("shakeMapModal.title"),
+      subtitle: t("shakeMapModal.subtitle"),
+      footerNote: t("shakeMapModal.footerNote"),
+    }),
+    [t],
+  );
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
     ? filterYear!
@@ -314,7 +330,7 @@ export function GempaDirasakanHistoryContent({
         depth: q.kedalaman,
         eventId: q.eventId,
       })),
-    [quakes],
+    [quakes, t],
   );
 
   const listItems = useMemo(
@@ -324,9 +340,9 @@ export function GempaDirasakanHistoryContent({
         magnitude: q.magnitude,
         lokasi: q.wilayah,
         waktu: `${q.jam} • ${q.tanggal}`,
-        jarak: `${q.distanceKm}${t("gempaDirasakanScreen.distanceSuffix")}`,
+        jarak: `${q.distanceKm}${t("historyScreen.distanceSuffix")}`,
       })),
-    [quakes],
+    [quakes, t],
   );
 
   // ── Card animation ─────────────────────────────────────────────────────────
@@ -677,7 +693,9 @@ export function GempaDirasakanHistoryContent({
     isActive,
     now,
     onLoadingChange,
+    overrideQuake,
     ranges,
+    showCardRef,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -700,6 +718,7 @@ export function GempaDirasakanHistoryContent({
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
       />
 
       <View style={styles.topControls}>
@@ -806,6 +825,7 @@ export function GempaDirasakanHistoryContent({
       <ModalShakeMap
         visible={shakeMapVisible}
         imageUrl={shakeMapUrl}
+        texts={shakeMapModalTexts}
         onClose={() => setShakeMapVisible(false)}
       />
     </View>

@@ -85,6 +85,11 @@ type Props = {
   showMapChrome?: boolean;
   showUserMarker?: boolean;
   wzAreas?: WzArea[];
+  chromeLabels?: {
+    showFaultLines?: string;
+    showBmkgSeismicSensors?: string;
+    showGlobalSeismicSensors?: string;
+  };
 };
 
 type DotMarkerProps = {
@@ -362,6 +367,7 @@ const EarthquakeMap = memo(
     showMapChrome = true,
     showUserMarker = true,
     wzAreas = [],
+    chromeLabels,
   }: Props) {
     const session = useUserSession();
     const mapViewRef = React.useRef<Mapbox.MapView | null>(null);
@@ -394,6 +400,13 @@ const EarthquakeMap = memo(
       initials: string;
       photoUrl?: string;
     } | null>(null);
+    const resolvedChromeLabels = {
+      showFaultLines: chromeLabels?.showFaultLines ?? "Tampilkan patahan",
+      showBmkgSeismicSensors:
+        chromeLabels?.showBmkgSeismicSensors ?? "Sensor Seismik BMKG",
+      showGlobalSeismicSensors:
+        chromeLabels?.showGlobalSeismicSensors ?? "Sensor Seismik Global",
+    };
 
     useEffect(() => {
       if (!session.location) {
@@ -822,7 +835,9 @@ const EarthquakeMap = memo(
               {isMenuOpen && (
                 <View style={styles.menuPanel}>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Tampilkan patahan</Text>
+                    <Text style={styles.menuLabel}>
+                      {resolvedChromeLabels.showFaultLines}
+                    </Text>
                     <Switch
                       value={faultLinesVisible}
                       onValueChange={setFaultLinesVisible}
@@ -830,7 +845,9 @@ const EarthquakeMap = memo(
                     />
                   </View>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Sensor Seismik BMKG</Text>
+                    <Text style={styles.menuLabel}>
+                      {resolvedChromeLabels.showBmkgSeismicSensors}
+                    </Text>
                     <Switch
                       value={showSeismicSensors}
                       onValueChange={setShowSeismicSensors}
@@ -838,7 +855,9 @@ const EarthquakeMap = memo(
                     />
                   </View>
                   <View style={styles.menuRow}>
-                    <Text style={styles.menuLabel}>Sensor Seismik Global</Text>
+                    <Text style={styles.menuLabel}>
+                      {resolvedChromeLabels.showGlobalSeismicSensors}
+                    </Text>
                     <Switch
                       value={showGlobalSeismicSensors}
                       onValueChange={setShowGlobalSeismicSensors}
@@ -868,6 +887,7 @@ const EarthquakeMap = memo(
     if (prev.showFaultLines !== next.showFaultLines) return false;
     if (prev.showMapChrome !== next.showMapChrome) return false;
     if (prev.showUserMarker !== next.showUserMarker) return false;
+    if (prev.chromeLabels !== next.chromeLabels) return false;
     // Peta perlu render ulang kalau ukuran card berubah agar bisa adjust posisi tombolnya
     if (prev.cardHeight !== next.cardHeight) return false;
     if (prev.markerCoordinate !== next.markerCoordinate) return false;

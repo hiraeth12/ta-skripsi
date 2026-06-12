@@ -59,7 +59,9 @@ export default function Notifikasi() {
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.sectionTitle}>{t("notificationsScreen.headerTitle")}</Text>
+            <Text style={styles.sectionTitle}>
+              {t("notificationsScreen.headerTitle")}
+            </Text>
           </View>
 
           <FlatList
@@ -75,7 +77,9 @@ export default function Notifikasi() {
             )}
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>
-                {error ?? t("notificationsScreen.emptyFallback")}
+                {error
+                  ? t("notificationsScreen.loadError")
+                  : t("notificationsScreen.emptyFallback")}
               </Text>
             )}
           />

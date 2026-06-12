@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Animated,
   Easing,
@@ -34,7 +35,6 @@ import { useHistoryFetch } from "./hooks/use-history-fetch";
 import { useHistoryFilter } from "./hooks/use-history-filter";
 import styles from "./styles/history-screen";
 import {
-  MONTH_NAMES_ID,
   parseIsoDate,
   resolveIsoDateRange,
   serializeFilterMonths,
@@ -265,6 +265,12 @@ const EarthquakeListItem = memo(function EarthquakeListItem({
     magValue >= 5 ? listStyles.magBadgeHigh : listStyles.magBadgeNormal;
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
   const isTsunami = item.eventType === "tsunami";
+  const { t } = useTranslation();
+  const description = isTsunami
+    ? `${t("historyScreen.depthPrefix")}${item.kedalaman} • ${item.status || "-"}`
+    : `${t("historyScreen.depthPrefix")}${item.kedalaman} • ${item.distanceKm}${t(
+        "historyScreen.distanceSuffix",
+      )}`;
 
   return (
     <TouchableOpacity
@@ -274,7 +280,7 @@ const EarthquakeListItem = memo(function EarthquakeListItem({
     >
       <View style={magBadgeStyle}>
         <Text style={listStyles.magValue}>{item.magnitude}</Text>
-        <Text style={listStyles.magLabel}>Mag</Text>
+        <Text style={listStyles.magLabel}>{t("historyScreen.magLabel")}</Text>
       </View>
       <View style={listStyles.itemBody}>
         <Text
@@ -287,9 +293,7 @@ const EarthquakeListItem = memo(function EarthquakeListItem({
           {item.tanggal} • {item.jam}
         </Text>
         <Text style={listStyles.itemDescription} numberOfLines={1}>
-          {isTsunami
-            ? `Kedalaman: ${item.kedalaman} • ${item.status || "-"}`
-            : `Kedalaman: ${item.kedalaman} • ${item.distanceKm} km dari Anda`}
+          {description}
         </Text>
       </View>
     </TouchableOpacity>
@@ -378,6 +382,7 @@ export default function History() {
   const pathname = usePathname();
   const isFocused = useIsFocused();
   const session = useUserSession();
+  const { t, i18n } = useTranslation();
   const searchParams = useLocalSearchParams<{
     tab?: string;
     filterYear?: string;
@@ -390,6 +395,7 @@ export default function History() {
     restoreListPanelToken?: string;
     selectedEventId?: string;
   }>();
+  const dateLocale = i18n.language === "en" ? "en-US" : "id-ID";
 
   // ── Tab ──────────────────────────────────────────────────────────────────
 
@@ -717,18 +723,22 @@ export default function History() {
     () => (
       <Text style={listStyles.emptyText}>
         {activeTab === "RIWAYAT TSUNAMI"
-          ? "Data tsunami belum tersedia."
-          : "Data gempa belum tersedia."}
+          ? t("historyScreen.emptyTsunamiText")
+          : t("historyScreen.emptyDataText")}
       </Text>
     ),
-    [activeTab],
+    [activeTab, t],
   );
 
   const listTitle = useMemo(() => {
-    if (activeTab === "RIWAYAT TSUNAMI") return "Riwayat Tsunami";
-    if (activeTab === "GEMPA DIRASAKAN") return "Gempa Dirasakan Terbaru";
-    return "Gempa Terdeteksi Terbaru";
-  }, [activeTab]);
+    if (activeTab === "RIWAYAT TSUNAMI") {
+      return t("historyScreen.listTitleTsunami");
+    }
+    if (activeTab === "GEMPA DIRASAKAN") {
+      return t("historyScreen.listTitleDirasakan");
+    }
+    return t("historyScreen.listTitleTerdeteksi");
+  }, [activeTab, t]);
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
@@ -738,7 +748,7 @@ export default function History() {
         const formatRangeDate = (value: string) => {
           const parsed = parseIsoDate(value);
           if (!parsed) return value;
-          return parsed.toLocaleDateString("id-ID", {
+          return parsed.toLocaleDateString(dateLocale, {
             day: "2-digit",
             month: "short",
             year: "numeric",
@@ -750,9 +760,10 @@ export default function History() {
         )}`;
       }
 
-      const first = MONTH_NAMES_ID[(effectiveMonths[0] ?? 1) - 1];
-      const last =
-        MONTH_NAMES_ID[(effectiveMonths[effectiveMonths.length - 1] ?? 1) - 1];
+      const first = t(`months.${effectiveMonths[0] ?? 1}`);
+      const last = t(
+        `months.${effectiveMonths[effectiveMonths.length - 1] ?? 1}`,
+      );
 
       const monthLabel =
         first === last
@@ -764,11 +775,13 @@ export default function History() {
     return String(effectiveFilter.year);
   }, [
     activeTab,
+    dateLocale,
     effectiveFilter.year,
     effectiveFilterMode,
     effectiveMonths,
     filterDateFrom,
     filterDateTo,
+    t,
   ]);
 
   const tabBar = useMemo(
@@ -799,7 +812,7 @@ export default function History() {
               >
                 <Ionicons name="options" size={17} color="#FFFFFF" />
                 <Text style={[styles.sidePillText, styles.sidePillTextLeft]}>
-                  FILTER
+                  {t("historyScreen.filterBtnText")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -815,6 +828,7 @@ export default function History() {
       isOpeningFilter,
       loading,
       periodLabel,
+      t,
     ],
   );
 
@@ -866,6 +880,36 @@ export default function History() {
     setHistoryVisible(false);
     setHistoryRawContent(null);
   }, []);
+
+  const narasiModalTexts = useMemo(
+    () => ({
+      title: t("narasiModal.title"),
+      subtitle: t("narasiModal.subtitle"),
+      loading: t("narasiModal.loading"),
+      empty: t("narasiModal.empty"),
+      footerNote: t("narasiModal.footerNote"),
+    }),
+    [t],
+  );
+  const historicalProcessModalTexts = useMemo(
+    () => ({
+      title: t("historicalProcessModal.title"),
+      subtitle: t("historicalProcessModal.subtitle"),
+      loading: t("historicalProcessModal.loading"),
+      empty: t("historicalProcessModal.empty"),
+      legendIntro: t("historicalProcessModal.legendIntro"),
+      legendUpdate: t("historicalProcessModal.legendUpdate"),
+      otLabel: t("historicalProcessModal.otLabel"),
+      phaseLabel: t("historicalProcessModal.phaseLabel"),
+      latitudeLabel: t("historicalProcessModal.latitudeLabel"),
+      longitudeLabel: t("historicalProcessModal.longitudeLabel"),
+      depthLabel: t("historicalProcessModal.depthLabel"),
+      magnitudeLabel: t("historicalProcessModal.magnitudeLabel"),
+      minuteSuffix: t("historicalProcessModal.minuteSuffix"),
+      footerNote: t("historicalProcessModal.footerNote"),
+    }),
+    [t],
+  );
 
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
@@ -975,12 +1019,14 @@ export default function History() {
         visible={narasiVisible}
         htmlContent={narasiHtmlContent}
         loading={narasiLoading}
+        texts={narasiModalTexts}
         onClose={closeNarasi}
       />
       <ModalHistoricalProcess
         visible={historyVisible}
         rawContent={historyRawContent}
         loading={historyLoading}
+        texts={historicalProcessModalTexts}
         onClose={closeHistory}
       />
     </View>

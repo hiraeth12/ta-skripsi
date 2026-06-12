@@ -142,12 +142,19 @@
     "lonLabel": "BT",
     "labelLocation": "Lokasi Gempa :",
     "labelTime": "Waktu :",
-    "labelFase": "Fase :"
+    "labelFase": "Fase :",
+    "labelDate": "Tanggal :",
+    "labelHour": "Jam :",
+    "labelStatus": "Status :"
   },
   "filterScreen": {
     "title": "Filter",
+    "modeRange": "7 Hari / Range",
+    "modeMonth": "Tahun / Bulan",
     "selectYear": "Pilih Tahun",
     "selectMonth": "Pilih Bulan",
+    "dateFrom": "Dari tanggal",
+    "dateTo": "Sampai tanggal",
     "btnReset": "Reset",
     "btnSave": "Simpan"
   },
@@ -156,8 +163,10 @@
     "magLabel": "Mag",
     "depthPrefix": "Kedalaman: ",
     "emptyDataText": "Data gempa belum tersedia.",
+    "emptyTsunamiText": "Data tsunami belum tersedia.",
     "listTitleDirasakan": "Gempa Dirasakan Terbaru",
     "listTitleTerdeteksi": "Gempa Terdeteksi Terbaru",
+    "listTitleTsunami": "Riwayat Tsunami",
     "filterBtnText": "FILTER"
   },
   "months": {
@@ -202,10 +211,18 @@
   },
   "notificationsScreen": {
     "headerTitle": "Notifikasi Terbaru",
+    "fallbackTitle": "Notifikasi",
     "cardTitleDirasakan": "Gempa Dirasakan",
     "cardTitleTerdeteksi": "Gempa Terdeteksi",
+    "defaultTsunamiTitle": "Peringatan Tsunami",
     "badgeDirasakan": "Dirasakan",
     "badgeTidakDirasakan": "Tidak dirasakan",
+    "badgeTsunami": "Tsunami",
+    "badgeInfo": "Info",
+    "unavailableEarthquakeInfo": "Informasi gempa tidak tersedia",
+    "unavailableTsunamiInfo": "Informasi tsunami tidak tersedia",
+    "unavailableLocation": "Lokasi tidak tersedia",
+    "loadError": "Gagal memuat notifikasi. Periksa koneksi Anda.",
     "emptyFallback": "Belum ada notifikasi."
   },
   "inAppNotificationModal": {
@@ -226,9 +243,73 @@
     "subtitle": "Sumber data: BMKG ShakeMap",
     "footerNote": "* Data diperbarui secara otomatis dari BMKG ShakeMap"
   },
+  "narasiModal": {
+    "title": "NARASI RESMI BMKG",
+    "subtitle": "Sumber data: BMKG InfoGempa",
+    "loading": "Memuat narasi...",
+    "empty": "Narasi resmi belum tersedia.",
+    "footerNote": "* Narasi resmi diterbitkan oleh Direktur Gempabumi dan Tsunami BMKG"
+  },
+  "historicalProcessModal": {
+    "title": "PROSES HISTORIS",
+    "subtitle": "Riwayat pembaruan parameter gempa oleh BMKG",
+    "loading": "Memuat data historis...",
+    "empty": "Data historis belum tersedia.",
+    "legendIntro": "Berikut ini merupakan historical proses perhitungan parameter gempabumi sejalan dengan datang atau bertambahnya data waveform seismik dari stasiun remote",
+    "legendUpdate": "Setiap baris = satu pembaruan parameter sejak gempa terdeteksi",
+    "otLabel": "+OT",
+    "phaseLabel": "Fase",
+    "latitudeLabel": "Lintang",
+    "longitudeLabel": "Bujur",
+    "depthLabel": "Kedalaman",
+    "magnitudeLabel": "Magnitudo",
+    "minuteSuffix": "mnt",
+    "footerNote": "* Data pembaruan parameter real-time dari sistem BMKG"
+  },
   "earthquakeTabs": {
     "felt": "GEMPA DIRASAKAN",
-    "detected": "GEMPA TERDETEKSI"
+    "detected": "GEMPA TERDETEKSI",
+    "tsunami": "TSUNAMI"
+  },
+  "historyTabs": {
+    "tsunami": "RIWAYAT TSUNAMI"
+  },
+  "historyErrors": {
+    "tsunamiHistoryLabel": "riwayat tsunami",
+    "firebasePermission": "Akses Firebase untuk {{label}} ditolak. Periksa rules read /tsunamiEvents.",
+    "firebaseTimeout": "Koneksi Firebase untuk {{label}} terlalu lama. Coba lagi nanti.",
+    "loadFailed": "Gagal memuat data."
+  },
+  "tsunamiScreen": {
+    "defaultWarningSubject": "Peringatan Tsunami",
+    "labelStatus": "Status :",
+    "labelTsunamiInfo": "Informasi Tsunami :",
+    "btnFullInfo": "INFORMASI LENGKAP"
+  },
+  "tsunamiInfoModal": {
+    "title": "INFORMASI TSUNAMI",
+    "subtitle": "Sumber data: BMKG InaTEWS",
+    "labelTsunamiInfo": "Informasi Tsunami :",
+    "visualInfoTitle": "Informasi Visual",
+    "warningAreaTitle": "Wilayah Peringatan Tsunami",
+    "provinceLabel": "Provinsi",
+    "regionLabel": "Wilayah",
+    "levelLabel": "Level",
+    "timeLabel": "Waktu",
+    "observationTitle": "Observasi Tsunami",
+    "locationLabel": "Lokasi",
+    "coordinateLabel": "Koordinat",
+    "heightLabel": "Tinggi",
+    "empty": "Informasi lengkap tsunami belum tersedia."
+  },
+  "tsunamiMapSlides": {
+    "shakemap": "Shakemap / Peta Guncangan",
+    "wzmap": "WZMap / Peta Zona Peringatan",
+    "ttmap": "TTMap / Peta Waktu Tiba Tsunami",
+    "sshmap": "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height"
+  },
+  "warningTabs": {
+    "update": "Update {{number}}"
   },
   "gpsButton": {
     "useGps": "Gunakan GPS",
@@ -351,7 +432,8 @@
   },
   "notificationModal": {
     "magnitude": "MAGNITUDO",
-    "depth": "KEDALAMAN"
+    "depth": "KEDALAMAN",
+    "tsunamiPotential": "POTENSI TSUNAMI"
   },
   "common": {
     "share": "BAGIKAN",
@@ -393,8 +475,28 @@
     "coordinate": "Koordinat",
     "distanceFromMyLocation": "{{distance}} km dari lokasi saya"
   },
+  "shareQuake": {
+    "event": {
+      "felt": "Gempa Dirasakan",
+      "detected": "Gempa Terdeteksi",
+      "tsunami": "Tsunami"
+    },
+    "title": {
+      "felt": "Bagikan Informasi Gempa Dirasakan",
+      "detected": "Bagikan Informasi Gempa Terdeteksi",
+      "tsunami": "Bagikan Informasi Tsunami"
+    },
+    "magnitude": "Magnitudo",
+    "depth": "Kedalaman",
+    "location": "Lokasi",
+    "time": "Waktu",
+    "coordinates": "Koordinat",
+    "moreInfo": "Informasi selengkapnya lihat di https://bmkg.go.id"
+  },
   "map": {
     "showFaultLines": "Tampilkan patahan",
-    "showSeismicSensors": "Tampilkan sensor seismik"
+    "showSeismicSensors": "Tampilkan sensor seismik",
+    "showBmkgSeismicSensors": "Sensor Seismik BMKG",
+    "showGlobalSeismicSensors": "Sensor Seismik Global"
   }
 }

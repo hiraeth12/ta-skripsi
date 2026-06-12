@@ -13,14 +13,25 @@ type NotificationMeta = {
   iconContainerStyle: object;
 };
 
+export type NotificationMetaLabels = {
+  feltTitle: string;
+  detectedTitle: string;
+  fallbackTitle: string;
+  feltBadge: string;
+  notFeltBadge: string;
+  tsunamiBadge: string;
+  infoBadge: string;
+};
+
 export function getNotificationMeta(
   type: QuakeNotification["type"] | string | null | undefined,
+  labels: NotificationMetaLabels,
 ): NotificationMeta {
   switch (type) {
     case "Dirasakan":
       return {
-        title: "Gempa Dirasakan",
-        badgeLabel: "Dirasakan",
+        title: labels.feltTitle,
+        badgeLabel: labels.feltBadge,
         badgeStyle: styles.badgeRed,
         iconName: "alert-circle-outline",
         iconColor: "#EF4444",
@@ -28,8 +39,8 @@ export function getNotificationMeta(
       };
     case "Terdeteksi":
       return {
-        title: "Gempa Terdeteksi",
-        badgeLabel: "Tidak dirasakan",
+        title: labels.detectedTitle,
+        badgeLabel: labels.notFeltBadge,
         badgeStyle: styles.badgeGreen,
         iconName: "radio-outline",
         iconColor: "#22C55E",
@@ -38,7 +49,7 @@ export function getNotificationMeta(
     case "Tsunami":
       return {
         title: null,
-        badgeLabel: "Tsunami",
+        badgeLabel: labels.tsunamiBadge,
         badgeStyle: styles.badgeAmber,
         iconName: "warning-outline",
         iconColor: "#D97706",
@@ -46,8 +57,8 @@ export function getNotificationMeta(
       };
     default:
       return {
-        title: "Notifikasi",
-        badgeLabel: "Info",
+        title: labels.fallbackTitle,
+        badgeLabel: labels.infoBadge,
         badgeStyle: styles.badgeNeutral,
         iconName: "alert-circle-outline",
         iconColor: "#64748B",

@@ -14,6 +14,13 @@ export type TsunamiWarningMapFields = {
   sshmap: string;
 };
 
+export type TsunamiMapSlideTitles = {
+  shakemap: string;
+  wzmap: string;
+  ttmap: string;
+  sshmap: string;
+};
+
 export function rawText(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -50,15 +57,21 @@ export function buildAssetUrl(path: unknown): string {
 
 export function buildTsunamiMapSlides(
   warning?: TsunamiWarningMapFields | null,
+  titles: TsunamiMapSlideTitles = {
+    shakemap: "Shakemap / Peta Guncangan",
+    wzmap: "WZMap / Peta Zona Peringatan",
+    ttmap: "TTMap / Peta Waktu Tiba Tsunami",
+    sshmap: "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height",
+  },
 ): TsunamiMapSlide[] {
   if (!warning) return [];
 
   return [
-    { title: "Shakemap / Peta Guncangan", imageUrl: warning.shakemap },
-    { title: "WZMap / Peta Zona Peringatan", imageUrl: warning.wzmap },
-    { title: "TTMap / Peta Waktu Tiba Tsunami", imageUrl: warning.ttmap },
+    { title: titles.shakemap, imageUrl: warning.shakemap },
+    { title: titles.wzmap, imageUrl: warning.wzmap },
+    { title: titles.ttmap, imageUrl: warning.ttmap },
     {
-      title: "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height",
+      title: titles.sshmap,
       imageUrl: warning.sshmap,
     },
   ].filter((slide) => rawText(slide.imageUrl));

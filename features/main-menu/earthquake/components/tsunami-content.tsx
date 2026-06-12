@@ -7,11 +7,12 @@ import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
-import { shareQuake } from "@/utils/share";
+import { getShareQuakeLabels, shareQuake } from "@/utils/share";
 import type { WzArea, WzLevel } from "@/utils/wzarea-highlights";
 import { Feather } from "@expo/vector-icons";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Animated,
   Dimensions,
@@ -64,9 +65,9 @@ function toMapWzAreas(wzAreas: SourceWzArea[]): WzArea[] {
   }));
 }
 
-function getWarningSubject(subject: string): string {
+function getWarningSubject(subject: string, fallback: string): string {
   const text = String(subject ?? "").trim();
-  return text && text !== "-" ? text : "Peringatan Tsunami";
+  return text && text !== "-" ? text : fallback;
 }
 
 type Props = {
@@ -82,6 +83,7 @@ export default function TsunamiContent({
   onOpenNarasi,
   isActive = true,
 }: Props) {
+  const { t } = useTranslation();
   const [eventGroups, setEventGroups] = useState<TsunamiEventGroup[]>([]);
   const [selectedEventIndex, setSelectedEventIndex] = useState(0);
   const [selectedWarningIndex, setSelectedWarningIndex] = useState(0);
@@ -108,16 +110,69 @@ export default function TsunamiContent({
     dismissCard,
   } = useCardAnimation();
 
+  const shareLabels = useMemo(() => getShareQuakeLabels(t), [t]);
+  const networkErrorTexts = useMemo(
+    () => ({
+      title: t("networkErrorModal.title"),
+      description: t("networkErrorModal.description"),
+      button: t("networkErrorModal.button"),
+    }),
+    [t],
+  );
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
+  const tsunamiMapSlideTitles = useMemo(
+    () => ({
+      shakemap: t("tsunamiMapSlides.shakemap"),
+      wzmap: t("tsunamiMapSlides.wzmap"),
+      ttmap: t("tsunamiMapSlides.ttmap"),
+      sshmap: t("tsunamiMapSlides.sshmap"),
+    }),
+    [t],
+  );
+  const tsunamiInfoModalTexts = useMemo(
+    () => ({
+      title: t("tsunamiInfoModal.title"),
+      subtitle: t("tsunamiInfoModal.subtitle"),
+      tsunamiInfoLabel: t("tsunamiInfoModal.labelTsunamiInfo"),
+      visualInfoTitle: t("tsunamiInfoModal.visualInfoTitle"),
+      warningAreaTitle: t("tsunamiInfoModal.warningAreaTitle"),
+      provinceLabel: t("tsunamiInfoModal.provinceLabel"),
+      regionLabel: t("tsunamiInfoModal.regionLabel"),
+      levelLabel: t("tsunamiInfoModal.levelLabel"),
+      timeLabel: t("tsunamiInfoModal.timeLabel"),
+      observationTitle: t("tsunamiInfoModal.observationTitle"),
+      locationLabel: t("tsunamiInfoModal.locationLabel"),
+      coordinateLabel: t("tsunamiInfoModal.coordinateLabel"),
+      heightLabel: t("tsunamiInfoModal.heightLabel"),
+      empty: t("tsunamiInfoModal.empty"),
+    }),
+    [t],
+  );
+  const getWarningUpdateLabel = useCallback(
+    (index: number) => t("warningTabs.update", { number: index + 1 }),
+    [t],
+  );
+
   const selectedGroup = eventGroups[selectedEventIndex] ?? null;
   const selectedWarning =
     selectedGroup?.warnings[selectedWarningIndex] ??
     selectedGroup?.warnings[selectedGroup.latestWarningIndex] ??
     EMPTY_WARNING;
   const tsunamiMapSlides = useMemo(
-    () => buildTsunamiMapSlides(selectedWarning),
-    [selectedWarning],
+    () => buildTsunamiMapSlides(selectedWarning, tsunamiMapSlideTitles),
+    [selectedWarning, tsunamiMapSlideTitles],
   );
-  const selectedWarningSubject = getWarningSubject(selectedWarning.subject);
+  const selectedWarningSubject = getWarningSubject(
+    selectedWarning.subject,
+    t("tsunamiScreen.defaultWarningSubject"),
+  );
   const selectedNarasiUrl =
     narasiAvailability?.warningId === selectedWarning.id
       ? narasiAvailability.url
@@ -180,8 +235,9 @@ export default function TsunamiContent({
         description: selectedWarning.description,
       },
       "tsunami",
+      shareLabels,
     );
-  }, [selectedGroup, selectedWarning, selectedWarningSubject]);
+  }, [selectedGroup, selectedWarning, selectedWarningSubject, shareLabels]);
 
   useEffect(() => {
     const candidateNarasiUrl = buildNarasiUrl(selectedWarning.shakemap);
@@ -274,6 +330,7 @@ export default function TsunamiContent({
         isCardOpen={showCard}
         markerCoordinates={markerCoordinates}
         wzAreas={selectedMapWzAreas}
+        chromeLabels={mapChromeLabels}
         onMapPress={() => dismissCard()}
         onMarkerPressIndex={openGroupCard}
       />
@@ -288,7 +345,7 @@ export default function TsunamiContent({
                 onPress={() => onOpenNarasi(selectedNarasiUrl)}
               >
                 <Feather name="file-text" size={12} color="white" />
-                <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+                <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
               </TouchableOpacity>
             )}
 
@@ -297,7 +354,7 @@ export default function TsunamiContent({
               onPress={shareSelectedWarning}
             >
               <Feather name="share" size={12} color="white" />
-              <Text style={styles.mapButtonText}>BAGIKAN</Text>
+              <Text style={styles.mapButtonText}>{t("common.share")}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -318,28 +375,28 @@ export default function TsunamiContent({
             <StatItem
               icon="triangle-wave"
               value={selectedGroup.magnitude}
-              label="Magnitudo"
+              label={t("earthquake.magnitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={selectedGroup.kedalaman}
-              label="Kedalaman"
+              label={t("earthquake.depth")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={selectedGroup.latText}
-              label="LS"
+              label={t("earthquake.latitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={selectedGroup.lonText}
-              label="BT"
+              label={t("earthquake.longitude")}
               styles={styles}
             />
           </View>
@@ -350,6 +407,7 @@ export default function TsunamiContent({
             warnings={selectedGroup.warnings}
             selectedIndex={selectedWarningIndex}
             onSelect={setSelectedWarningIndex}
+            updateLabel={getWarningUpdateLabel}
           />
 
           <ScrollView
@@ -360,25 +418,25 @@ export default function TsunamiContent({
           >
             <DetailItem
               icon="location"
-              label="Lokasi Gempa :"
+              label={t("gempaDirasakanScreen.labelLocation")}
               value={safeText(selectedGroup.wilayah)}
               styles={styles}
             />
             <DetailItem
               icon="alert-circle-outline"
-              label="Status :"
+              label={t("tsunamiScreen.labelStatus")}
               value={selectedWarningSubject}
               styles={styles}
             />
             <DetailItem
               icon="time-outline"
-              label="Waktu :"
+              label={t("gempaDirasakanScreen.labelTime")}
               value={`${safeText(selectedGroup.tanggal)}, ${safeText(selectedGroup.jam)}`}
               styles={styles}
             />
             <DetailItem
               icon="megaphone-outline"
-              label="Informasi Tsunami :"
+              label={t("tsunamiScreen.labelTsunamiInfo")}
               value={safeText(selectedWarning.headline)}
               valueNumberOfLines={3}
               styles={styles}
@@ -390,7 +448,7 @@ export default function TsunamiContent({
             activeOpacity={0.8}
             onPress={() => setTsunamiInfoVisible(true)}
           >
-            <Text style={styles.simulasiBtnText}>INFORMASI LENGKAP</Text>
+            <Text style={styles.simulasiBtnText}>{t("tsunamiScreen.btnFullInfo")}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -401,11 +459,13 @@ export default function TsunamiContent({
         wzAreas={selectedWarning.wzAreas}
         obsAreas={selectedWarning.obsAreas}
         headline={selectedWarning.headline}
+        texts={tsunamiInfoModalTexts}
         onClose={() => setTsunamiInfoVisible(false)}
       />
 
       <NetworkErrorModal
         visible={networkErrorVisible}
+        texts={networkErrorTexts}
         onClose={dismissNetworkError}
       />
     </View>

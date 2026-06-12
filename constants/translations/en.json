@@ -142,12 +142,19 @@
     "lonLabel": "Lon",
     "labelLocation": "Earthquake Location :",
     "labelTime": "Time :",
-    "labelFase": "Phase :"
+    "labelFase": "Phase :",
+    "labelDate": "Date :",
+    "labelHour": "Time :",
+    "labelStatus": "Status :"
   },
   "filterScreen": {
     "title": "Filter",
+    "modeRange": "7 Days / Range",
+    "modeMonth": "Year / Month",
     "selectYear": "Select Year",
     "selectMonth": "Select Month",
+    "dateFrom": "From date",
+    "dateTo": "To date",
     "btnReset": "Reset",
     "btnSave": "Save"
   },
@@ -156,8 +163,10 @@
     "magLabel": "Mag",
     "depthPrefix": "Depth: ",
     "emptyDataText": "Earthquake data is not available.",
+    "emptyTsunamiText": "Tsunami data is not available.",
     "listTitleDirasakan": "Recent Felt Earthquakes",
     "listTitleTerdeteksi": "Recent Detected Earthquakes",
+    "listTitleTsunami": "Tsunami History",
     "filterBtnText": "FILTER"
   },
   "months": {
@@ -202,10 +211,18 @@
   },
   "notificationsScreen": {
     "headerTitle": "Recent Notifications",
+    "fallbackTitle": "Notification",
     "cardTitleDirasakan": "Felt Earthquake",
     "cardTitleTerdeteksi": "Detected Earthquake",
+    "defaultTsunamiTitle": "Tsunami Warning",
     "badgeDirasakan": "Felt",
     "badgeTidakDirasakan": "Not felt",
+    "badgeTsunami": "Tsunami",
+    "badgeInfo": "Info",
+    "unavailableEarthquakeInfo": "Earthquake information is not available",
+    "unavailableTsunamiInfo": "Tsunami information is not available",
+    "unavailableLocation": "Location unavailable",
+    "loadError": "Failed to load notifications. Check your connection.",
     "emptyFallback": "No notifications yet."
   },
   "inAppNotificationModal": {
@@ -226,9 +243,73 @@
     "subtitle": "Data source: BMKG ShakeMap",
     "footerNote": "* Data is updated automatically from BMKG ShakeMap"
   },
+  "narasiModal": {
+    "title": "OFFICIAL BMKG NARRATIVE",
+    "subtitle": "Data source: BMKG InfoGempa",
+    "loading": "Loading narrative...",
+    "empty": "The official narrative is not available yet.",
+    "footerNote": "* Official narrative published by the BMKG Director of Earthquake and Tsunami"
+  },
+  "historicalProcessModal": {
+    "title": "HISTORICAL PROCESS",
+    "subtitle": "Earthquake parameter update history by BMKG",
+    "loading": "Loading historical data...",
+    "empty": "Historical data is not available yet.",
+    "legendIntro": "This is the historical earthquake parameter calculation process as seismic waveform data arrives or increases from remote stations",
+    "legendUpdate": "Each row = one parameter update since the earthquake was detected",
+    "otLabel": "+OT",
+    "phaseLabel": "Phase",
+    "latitudeLabel": "Latitude",
+    "longitudeLabel": "Longitude",
+    "depthLabel": "Depth",
+    "magnitudeLabel": "Magnitude",
+    "minuteSuffix": "min",
+    "footerNote": "* Real-time parameter update data from the BMKG system"
+  },
   "earthquakeTabs": {
     "felt": "FELT EARTHQUAKE",
-    "detected": "DETECTED EARTHQUAKE"
+    "detected": "DETECTED EARTHQUAKE",
+    "tsunami": "TSUNAMI"
+  },
+  "historyTabs": {
+    "tsunami": "TSUNAMI HISTORY"
+  },
+  "historyErrors": {
+    "tsunamiHistoryLabel": "tsunami history",
+    "firebasePermission": "Firebase access for {{label}} was denied. Check read rules for /tsunamiEvents.",
+    "firebaseTimeout": "Firebase connection for {{label}} timed out. Please try again later.",
+    "loadFailed": "Failed to load data."
+  },
+  "tsunamiScreen": {
+    "defaultWarningSubject": "Tsunami Warning",
+    "labelStatus": "Status :",
+    "labelTsunamiInfo": "Tsunami Information :",
+    "btnFullInfo": "FULL INFORMATION"
+  },
+  "tsunamiInfoModal": {
+    "title": "TSUNAMI INFORMATION",
+    "subtitle": "Data source: BMKG InaTEWS",
+    "labelTsunamiInfo": "Tsunami Information :",
+    "visualInfoTitle": "Visual Information",
+    "warningAreaTitle": "Tsunami Warning Area",
+    "provinceLabel": "Province",
+    "regionLabel": "Region",
+    "levelLabel": "Level",
+    "timeLabel": "Time",
+    "observationTitle": "Tsunami Observation",
+    "locationLabel": "Location",
+    "coordinateLabel": "Coordinates",
+    "heightLabel": "Height",
+    "empty": "Complete tsunami information is not available yet."
+  },
+  "tsunamiMapSlides": {
+    "shakemap": "Shakemap",
+    "wzmap": "WZMap / Warning Zone Map",
+    "ttmap": "TTMap / Tsunami Arrival Time Map",
+    "sshmap": "SSHMap / Sea Surface Height Map"
+  },
+  "warningTabs": {
+    "update": "Update {{number}}"
   },
   "gpsButton": {
     "useGps": "Use GPS",
@@ -351,7 +432,8 @@
   },
   "notificationModal": {
     "magnitude": "MAGNITUDE",
-    "depth": "DEPTH"
+    "depth": "DEPTH",
+    "tsunamiPotential": "TSUNAMI POTENTIAL"
   },
   "common": {
     "share": "SHARE",
@@ -393,8 +475,28 @@
     "coordinate": "Coordinates",
     "distanceFromMyLocation": "{{distance}} km from my location"
   },
+  "shareQuake": {
+    "event": {
+      "felt": "Felt Earthquake",
+      "detected": "Detected Earthquake",
+      "tsunami": "Tsunami"
+    },
+    "title": {
+      "felt": "Share Felt Earthquake Information",
+      "detected": "Share Detected Earthquake Information",
+      "tsunami": "Share Tsunami Information"
+    },
+    "magnitude": "Magnitude",
+    "depth": "Depth",
+    "location": "Location",
+    "time": "Time",
+    "coordinates": "Coordinates",
+    "moreInfo": "For more information, visit https://bmkg.go.id"
+  },
   "map": {
     "showFaultLines": "Fault Lines",
-    "showSeismicSensors": "Seismic Sensors"
+    "showSeismicSensors": "Seismic Sensors",
+    "showBmkgSeismicSensors": "BMKG Seismic Sensors",
+    "showGlobalSeismicSensors": "Global Seismic Sensors"
   }
 }

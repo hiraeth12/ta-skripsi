@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export const EARTHQUAKE_TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI"] as const;
@@ -8,6 +9,13 @@ export const EARTHQUAKE_MAP_TABS = [
 ] as const;
 export type EarthquakeTab = (typeof EARTHQUAKE_TABS)[number];
 export type EarthquakeMapTab = (typeof EARTHQUAKE_MAP_TABS)[number];
+
+const TAB_LABEL_KEYS: Record<string, string> = {
+  "GEMPA DIRASAKAN": "earthquakeTabs.felt",
+  "GEMPA TERDETEKSI": "earthquakeTabs.detected",
+  "RIWAYAT TSUNAMI": "historyTabs.tsunami",
+  TSUNAMI: "earthquakeTabs.tsunami",
+};
 
 type Props<TTab extends string = EarthquakeTab> = {
   activeTab: TTab;
@@ -22,6 +30,8 @@ export default function EarthquakeTabBar<TTab extends string = EarthquakeTab>({
   disabled = false,
   tabs = EARTHQUAKE_TABS as unknown as readonly TTab[],
 }: Props<TTab>) {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.tabBar}>
       {tabs.map((tab) => {
@@ -42,7 +52,7 @@ export default function EarthquakeTabBar<TTab extends string = EarthquakeTab>({
                 disabled && isActive && { opacity: 0.6 },
               ]}
             >
-              {tab}
+              {TAB_LABEL_KEYS[tab] ? t(TAB_LABEL_KEYS[tab]) : tab}
             </Text>
           </TouchableOpacity>
         );

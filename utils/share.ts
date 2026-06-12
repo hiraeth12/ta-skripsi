@@ -16,6 +16,36 @@ type QuakeData = {
 
 type QuakeType = "dirasakan" | "terdeteksi" | "tsunami";
 
+export type ShareQuakeLabels = {
+  eventLabels: Record<QuakeType, string>;
+  titles: Record<QuakeType, string>;
+  magnitude: string;
+  depth: string;
+  location: string;
+  time: string;
+  coordinates: string;
+  moreInfo: string;
+};
+
+const DEFAULT_SHARE_QUAKE_LABELS: ShareQuakeLabels = {
+  eventLabels: {
+    dirasakan: "Gempa Dirasakan",
+    terdeteksi: "Gempa Terdeteksi",
+    tsunami: "Tsunami",
+  },
+  titles: {
+    dirasakan: "Bagikan Informasi Gempa Dirasakan",
+    terdeteksi: "Bagikan Informasi Gempa Terdeteksi",
+    tsunami: "Bagikan Informasi Tsunami",
+  },
+  magnitude: "Magnitudo",
+  depth: "Kedalaman",
+  location: "Lokasi",
+  time: "Waktu",
+  coordinates: "Koordinat",
+  moreInfo: "Informasi selengkapnya lihat di https://bmkg.go.id",
+};
+
 function safeText(value: unknown): string {
   const text = String(value ?? "").trim();
   return text || "-";
@@ -27,19 +57,36 @@ function formatCoordinate(value?: number): string {
     : "-";
 }
 
-function getTypeLabel(type: QuakeType): string {
-  if (type === "dirasakan") return "Dirasakan";
-  if (type === "terdeteksi") return "Terdeteksi";
-  return "Tsunami";
+export function getShareQuakeLabels(
+  t: (key: string) => string,
+): ShareQuakeLabels {
+  return {
+    eventLabels: {
+      dirasakan: t("shareQuake.event.felt"),
+      terdeteksi: t("shareQuake.event.detected"),
+      tsunami: t("shareQuake.event.tsunami"),
+    },
+    titles: {
+      dirasakan: t("shareQuake.title.felt"),
+      terdeteksi: t("shareQuake.title.detected"),
+      tsunami: t("shareQuake.title.tsunami"),
+    },
+    magnitude: t("shareQuake.magnitude"),
+    depth: t("shareQuake.depth"),
+    location: t("shareQuake.location"),
+    time: t("shareQuake.time"),
+    coordinates: t("shareQuake.coordinates"),
+    moreInfo: t("shareQuake.moreInfo"),
+  };
 }
 
 export async function shareQuake(
   data: QuakeData | null,
   type: QuakeType = "dirasakan",
+  labels: ShareQuakeLabels = DEFAULT_SHARE_QUAKE_LABELS,
 ): Promise<void> {
   if (!data) return;
 
-  const typeLabel = getTypeLabel(type);
   const coordinates = `${formatCoordinate(data.latitude)}, ${formatCoordinate(
     data.longitude,
   )}`;
@@ -50,26 +97,26 @@ export async function shareQuake(
 
 ${safeText(data.headline || data.description)}
 
-Magnitudo: ${safeText(data.magnitude)}
-Kedalaman: ${safeText(data.kedalaman)}
-Lokasi: ${safeText(data.wilayah)}
-Waktu: ${safeText(data.tanggal)}, ${safeText(data.jam)}
-Koordinat: ${coordinates}`
+${labels.magnitude}: ${safeText(data.magnitude)}
+${labels.depth}: ${safeText(data.kedalaman)}
+${labels.location}: ${safeText(data.wilayah)}
+${labels.time}: ${safeText(data.tanggal)}, ${safeText(data.jam)}
+${labels.coordinates}: ${coordinates}`
       : data.description ||
-        `Gempa ${typeLabel}
+        `${labels.eventLabels[type]}
 
-Magnitudo: ${safeText(data.magnitude)}
-Kedalaman: ${safeText(data.kedalaman)}
-Lokasi: ${safeText(data.wilayah)}
-Waktu: ${safeText(data.tanggal)}, ${safeText(data.jam)}
-Koordinat: ${coordinates}`;
+${labels.magnitude}: ${safeText(data.magnitude)}
+${labels.depth}: ${safeText(data.kedalaman)}
+${labels.location}: ${safeText(data.wilayah)}
+${labels.time}: ${safeText(data.tanggal)}, ${safeText(data.jam)}
+${labels.coordinates}: ${coordinates}`;
 
-  const shareMessage = `${baseMessage}\n\nInformasi selengkapnya lihat di https://bmkg.go.id`;
+  const shareMessage = `${baseMessage}\n\n${labels.moreInfo}`;
 
   try {
     await Share.share({
       message: shareMessage,
-      title: `Bagikan Informasi ${type === "tsunami" ? "Tsunami" : `Gempa ${typeLabel}`}`,
+      title: labels.titles[type],
     });
   } catch {}
 }

@@ -141,6 +141,14 @@ export function GempaTerdeteksiHistoryContent({
 }: Props) {
   const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
     ? filterYear!
@@ -568,6 +576,7 @@ export function GempaTerdeteksiHistoryContent({
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
@@ -644,7 +653,9 @@ export function GempaTerdeteksiHistoryContent({
               activeOpacity={0.8}
               onPress={() => onOpenHistory(historyUrl)}
             >
-              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+              <Text style={styles.simulasiBtnText}>
+                {t("earthquake.historicalProcess")}
+              </Text>
             </TouchableOpacity>
           )}
         </Animated.View>

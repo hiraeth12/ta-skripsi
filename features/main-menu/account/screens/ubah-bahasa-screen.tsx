@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import i18n, { STORE_LANGUAGE_KEY } from "@/constants/translations/i18n";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,13 +25,20 @@ export default function UbahBahasa() {
   const { profile } = useProfileContext(); // ← no local fetch
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
-  const [selectedLang, setSelectedLang] = useState("ID");
+  const [selectedLang, setSelectedLang] = useState(
+    i18n.language?.startsWith("en") ? "EN" : "ID",
+  );
 
-  const handleLanguageChange = (lang: string) => {
+  const handleLanguageChange = async (lang: string) => {
     if (selectedLang === lang) {
       setShowWarningModal(true);
       return;
     }
+
+    const nextLanguage = lang === "EN" ? "en" : "id";
+    await i18n.changeLanguage(nextLanguage);
+    await AsyncStorage.setItem(STORE_LANGUAGE_KEY, nextLanguage);
+
     setSelectedLang(lang);
     setShowSuccessModal(true);
   };
@@ -104,14 +113,16 @@ export default function UbahBahasa() {
             />
             <Text style={styles.infoTitle}>{t("ubahBahasaScreen.modalSuccessTitle")}</Text>
             <Text style={styles.infoDesc}>
-              Bahasa aplikasi telah berhasil diubah ke{" "}
+              {t("ubahBahasaScreen.modalSuccessDesc")}{" "}
               {selectedLang === "ID" ? "Indonesia" : "English"}.
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
               onPress={() => setShowSuccessModal(false)}
             >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
+              <Text style={styles.infoButtonText}>
+                {t("ubahBahasaScreen.modalSuccessBtn")}
+              </Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -131,7 +142,7 @@ export default function UbahBahasa() {
             />
             <Text style={styles.infoTitleError}>{t("ubahBahasaScreen.modalWarningTitle")}</Text>
             <Text style={styles.infoDesc}>
-              Aplikasi memerlukan setidaknya satu bahasa yang aktif. Anda tidak dapat mematikan semua bahasa.
+              {t("ubahBahasaScreen.modalWarningDesc")}
             </Text>
             <TouchableOpacity
               style={styles.infoButtonError}

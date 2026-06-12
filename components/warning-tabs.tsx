@@ -9,6 +9,7 @@ type WarningTabsProps = {
   warnings: WarningTabItem[];
   selectedIndex: number;
   onSelect: (index: number) => void;
+  updateLabel?: (index: number) => string;
 };
 
 const EMPTY_WARNING_TAB: WarningTabItem = {
@@ -16,15 +17,20 @@ const EMPTY_WARNING_TAB: WarningTabItem = {
   subject: "-",
 };
 
-export function getWarningTabLabel(subject: string, index: number): string {
+export function getWarningTabLabel(
+  subject: string,
+  index: number,
+  updateLabel?: (index: number) => string,
+): string {
   const match = subject.match(/\bPD[-\s]*([0-9]+(?:\.[0-9]+)?)\b/i);
-  return match ? `PD-${match[1]}` : `Update ${index + 1}`;
+  return match ? `PD-${match[1]}` : updateLabel?.(index) ?? `Update ${index + 1}`;
 }
 
 export function WarningTabs({
   warnings,
   selectedIndex,
   onSelect,
+  updateLabel,
 }: WarningTabsProps) {
   const safeWarnings = warnings.length > 0 ? warnings : [EMPTY_WARNING_TAB];
 
@@ -52,7 +58,7 @@ export function WarningTabs({
                 isSelected && styles.warningTabTextActive,
               ]}
             >
-              {getWarningTabLabel(warning.subject, index)}
+              {getWarningTabLabel(warning.subject, index, updateLabel)}
             </Text>
           </TouchableOpacity>
         );

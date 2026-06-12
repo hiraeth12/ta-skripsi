@@ -51,6 +51,22 @@ type ModalTsunamiInfoProps = {
   wzAreas: TsunamiWzArea[];
   obsAreas: TsunamiObsArea[];
   headline?: string;
+  texts?: {
+    title?: string;
+    subtitle?: string;
+    tsunamiInfoLabel?: string;
+    visualInfoTitle?: string;
+    warningAreaTitle?: string;
+    provinceLabel?: string;
+    regionLabel?: string;
+    levelLabel?: string;
+    timeLabel?: string;
+    observationTitle?: string;
+    locationLabel?: string;
+    coordinateLabel?: string;
+    heightLabel?: string;
+    empty?: string;
+  };
 };
 
 type CarouselSectionProps<T> = {
@@ -223,11 +239,29 @@ export function ModalTsunamiInfo({
   wzAreas,
   obsAreas,
   headline,
+  texts,
 }: ModalTsunamiInfoProps) {
   const { height, width } = useWindowDimensions();
   const [activeMapIndex, setActiveMapIndex] = useState(0);
   const [activeWzIndex, setActiveWzIndex] = useState(0);
   const [activeObsIndex, setActiveObsIndex] = useState(0);
+  const resolvedTexts = {
+    title: texts?.title ?? "INFORMASI TSUNAMI",
+    subtitle: texts?.subtitle ?? "Sumber data: BMKG InaTEWS",
+    tsunamiInfoLabel: texts?.tsunamiInfoLabel ?? "Informasi Tsunami :",
+    visualInfoTitle: texts?.visualInfoTitle ?? "Informasi Visual",
+    warningAreaTitle:
+      texts?.warningAreaTitle ?? "Wilayah Peringatan Tsunami",
+    provinceLabel: texts?.provinceLabel ?? "Provinsi",
+    regionLabel: texts?.regionLabel ?? "Wilayah",
+    levelLabel: texts?.levelLabel ?? "Level",
+    timeLabel: texts?.timeLabel ?? "Waktu",
+    observationTitle: texts?.observationTitle ?? "Observasi Tsunami",
+    locationLabel: texts?.locationLabel ?? "Lokasi",
+    coordinateLabel: texts?.coordinateLabel ?? "Koordinat",
+    heightLabel: texts?.heightLabel ?? "Tinggi",
+    empty: texts?.empty ?? "Informasi lengkap tsunami belum tersedia.",
+  };
 
   // Animated value untuk drag gesture
   const translateY = useRef(new Animated.Value(0)).current;
@@ -325,9 +359,9 @@ export function ModalTsunamiInfo({
 
               <View style={styles.modalHeaderBottom}>
                 <View style={styles.headerText}>
-                  <Text style={styles.modalTitleBottom}>INFORMASI TSUNAMI</Text>
+                  <Text style={styles.modalTitleBottom}>{resolvedTexts.title}</Text>
                   <Text style={styles.modalSubtitle}>
-                    Sumber data: BMKG InaTEWS
+                    {resolvedTexts.subtitle}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -351,7 +385,7 @@ export function ModalTsunamiInfo({
                     <View style={styles.headlineSection}>
                       <DetailItem
                         icon="megaphone-outline"
-                        label="Informasi Tsunami :"
+                        label={resolvedTexts.tsunamiInfoLabel}
                         value={headlineText}
                         styles={styles}
                       />
@@ -359,7 +393,7 @@ export function ModalTsunamiInfo({
                   )}
 
                   <CarouselSection
-                    title="Informasi Visual"
+                    title={resolvedTexts.visualInfoTitle}
                     data={mapSlides}
                     activeIndex={activeMapIndex}
                     width={width}
@@ -384,7 +418,7 @@ export function ModalTsunamiInfo({
                   />
 
                   <CarouselSection
-                    title="Wilayah Peringatan Tsunami"
+                    title={resolvedTexts.warningAreaTitle}
                     data={wzAreas}
                     activeIndex={activeWzIndex}
                     width={width}
@@ -394,11 +428,11 @@ export function ModalTsunamiInfo({
                     }
                     renderItem={(item, itemWidth) => (
                       <View style={[styles.dataSlide, { width: itemWidth }]}>
-                        <InfoLine label="Provinsi" value={item.province} />
-                        <InfoLine label="Wilayah" value={item.district} />
-                        <InfoLine label="Level" value={item.level} strong />
+                        <InfoLine label={resolvedTexts.provinceLabel} value={item.province} />
+                        <InfoLine label={resolvedTexts.regionLabel} value={item.district} />
+                        <InfoLine label={resolvedTexts.levelLabel} value={item.level} strong />
                         <InfoLine
-                          label="Waktu"
+                          label={resolvedTexts.timeLabel}
                           value={`${safeText(item.date)}, ${safeText(item.time)}`}
                         />
                       </View>
@@ -406,7 +440,7 @@ export function ModalTsunamiInfo({
                   />
 
                   <CarouselSection
-                    title="Observasi Tsunami"
+                    title={resolvedTexts.observationTitle}
                     data={obsAreas}
                     activeIndex={activeObsIndex}
                     width={width}
@@ -416,19 +450,19 @@ export function ModalTsunamiInfo({
                     }
                     renderItem={(item, itemWidth) => (
                       <View style={[styles.dataSlide, { width: itemWidth }]}>
-                        <InfoLine label="Lokasi" value={item.location} />
+                        <InfoLine label={resolvedTexts.locationLabel} value={item.location} />
                         <InfoLine
-                          label="Koordinat"
+                          label={resolvedTexts.coordinateLabel}
                           value={`${safeText(item.loclatitude)}, ${safeText(
                             item.loclongitude,
                           )}`}
                         />
                         <InfoLine
-                          label="Tinggi"
+                          label={resolvedTexts.heightLabel}
                           value={formatHeight(item.height)}
                         />
                         <InfoLine
-                          label="Waktu"
+                          label={resolvedTexts.timeLabel}
                           value={`${safeText(item.date)}, ${safeText(item.time)}`}
                         />
                       </View>
@@ -438,7 +472,7 @@ export function ModalTsunamiInfo({
               ) : (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyText}>
-                    Informasi lengkap tsunami belum tersedia.
+                    {resolvedTexts.empty}
                   </Text>
                 </View>
               )}
