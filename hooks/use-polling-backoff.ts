@@ -4,27 +4,11 @@ import { AppState } from "react-native";
 export type PollResult = { changed: boolean; ok: boolean };
 
 type Options = {
-  /** Delay awal dan reset saat data berubah. Default: 30_000 */
   minMs?: number;
-  /** Batas maksimum delay backoff. Default: 120_000 */
   maxMs?: number;
-  /** Apakah polling aktif. Polling berhenti total saat false. */
   isActive: boolean;
 };
 
-/**
- * Menjalankan polling dengan exponential backoff.
- *
- * - Saat `ok: false` (network error) → delay naik 15 detik tiap gagal, max `maxMs`
- * - Saat `ok: true, changed: false` → delay naik 10 detik tiap poll, max `maxMs`
- * - Saat `ok: true, changed: true` → delay reset ke `minMs`
- * - Saat app kembali ke foreground → delay reset ke `minMs` dan poll langsung
- *
- * @param fetcher  Fungsi async yang melakukan fetch. Menerima `silent: boolean`,
- *                 harus return `{ changed, ok }`. Gunakan `abortSignal` untuk
- *                 membatalkan request saat cleanup (opsional).
- * @param options  `isActive`, `minMs`, `maxMs`
- */
 export function usePollingWithBackoff(
   fetcher: (silent: boolean, abortSignal: AbortSignal) => Promise<PollResult>,
   options: Options,

@@ -378,19 +378,20 @@ export default function Home() {
         visible={infoVisibleDirasakan}
         onClose={() => setInfoVisibleDirasakan(false)}
         title="Gempabumi Terakhir Dirasakan"
-        desc="Menampilkan kejadian gempa yang getarannya dirasakan oleh manusia dan dilaporkan di wilayah sekitar."
+        desc="Menampilkan kejadian gempa yang telah diverifikasi oleh BMKG , termasuk informasi dampak dan tingkat kerusakannya."
       />
       <InfoModal
         visible={infoVisibleTerdeteksi}
         onClose={() => setInfoVisibleTerdeteksi(false)}
         title="Gempabumi Terakhir Terdeteksi"
-        desc="Menampilkan gempa yang tercatat oleh alat seismograf, tetapi Informasi ini mengutamakan kecepatan, sehingga hasil pengolahan data belum stabil dan bisa berubah seiring kelengkapan data."
+        desc="Menampilkan kejadian gempa yang masih berada pada tahap terdeteksi oleh seismograf. Informasi ini mengutamakan kecepatan, sehingga dampak dan tingkat kerusakannya belum diverifikasi oleh BMKG."
       />
       <InfoModal
         visible={infoVisibleTsunami}
         onClose={() => setInfoVisibleTsunami(false)}
-        title="Peringatan Tsunami Terakhir"
-        desc="Menampilkan informasi peringatan dini tsunami terbaru dari BMKG."
+        title="Peringatan Tsunami"
+        desc="Menampilkan informasi peringatan dini tsunami terbaru dari BMKG, termasuk tahapan PD-1 hingga PD-4 sebagai pembaruan status peringatan, mulai dari informasi awal, pemutakhiran data, pemantauan ancaman, hingga peringatan dinyatakan berakhir.
+"
       />
       <NetworkErrorModal
         visible={networkErrorModalVisible}

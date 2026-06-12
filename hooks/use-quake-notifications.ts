@@ -417,6 +417,21 @@ async function fetchDirasakanNotification() {
   if (!eventId || eventId === latestSeen.dirasakan) return;
 
   const magnitude = Number.parseFloat(String(latest.magnitude ?? "0")) || 0;
+  const date = String(latest.date ?? "");
+  const time = String(latest.time ?? "");
+
+  pushNotification({
+    id: `dirasakan:${eventId}`,
+    type: "Dirasakan",
+    magnitude: magnitude.toFixed(1),
+    location: String(latest.area ?? "Lokasi tidak tersedia"),
+    date,
+    time,
+    level: getLevel(magnitude),
+    timestamp: parseTimestamp(date, time),
+    isRead: false,
+  });
+
   const depthKm = parseDepthKm(latest.depth) ?? 0;
   const coordinates =
     parsePointCoordinates(latest?.point?.coordinates) ??
@@ -457,21 +472,6 @@ async function fetchDirasakanNotification() {
     void persistLatestSeen();
     return;
   }
-
-  const date = String(latest.date ?? "");
-  const time = String(latest.time ?? "");
-
-  pushNotification({
-    id: `dirasakan:${eventId}`,
-    type: "Dirasakan",
-    magnitude: magnitude.toFixed(1),
-    location: String(latest.area ?? "Lokasi tidak tersedia"),
-    date,
-    time,
-    level: getLevel(magnitude),
-    timestamp: parseTimestamp(date, time),
-    isRead: false,
-  });
 
   await markLocalDelivery(userLocation.userId, eventId);
   latestSeen.dirasakan = eventId;

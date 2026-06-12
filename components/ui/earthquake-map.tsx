@@ -1,4 +1,6 @@
+import CustomAlert from "@/components/ui/custom-alert";
 import { useUserSession } from "@/features/main-menu/account/user-session-context";
+import { Ionicons } from "@expo/vector-icons";
 import Mapbox from "@rnmapbox/maps";
 import { circle as turfCircle } from "@turf/turf";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -379,6 +381,7 @@ const EarthquakeMap = memo(
     const [, setHasMeasuredViewport] = useState(false);
     const [innerWaveProgress, setInnerWaveProgress] = useState(0);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isLocationAlertVisible, setIsLocationAlertVisible] = useState(false);
     const [faultLinesVisible, setFaultLinesVisible] = useState(showFaultLines);
     const [showSeismicSensors, setShowSeismicSensors] = useState(false);
     const [showGlobalSeismicSensors, setShowGlobalSeismicSensors] =
@@ -475,6 +478,35 @@ const EarthquakeMap = memo(
       [applyCameraMove],
     );
 
+    const handleLocateMe = useCallback(() => {
+      const latitude = session.location?.latitude;
+      const longitude = session.location?.longitude;
+      const hasValidCoordinates =
+        typeof latitude === "number" &&
+        Number.isFinite(latitude) &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        typeof longitude === "number" &&
+        Number.isFinite(longitude) &&
+        longitude >= -180 &&
+        longitude <= 180;
+
+      if (!hasValidCoordinates) {
+        setIsLocationAlertVisible(true);
+        return;
+      }
+
+      animateToRegion(
+        {
+          latitude,
+          longitude,
+          latitudeDelta: 0.75,
+          longitudeDelta: 0.75,
+        },
+        800,
+      );
+    }, [animateToRegion, session.location]);
+
     // Tambah animateToRegion ke deps array
     useEffect(() => {
       mapRef.current = { animateToRegion };
@@ -499,7 +531,7 @@ const EarthquakeMap = memo(
         },
         600,
       );
-    }, [markerCoordinate]);
+    }, [animateToRegion, markerCoordinate]);
 
     const highlightPolygonGeometries = useMemo(() => {
       return (highlightPolygons ?? []).map((p) => ({
@@ -848,6 +880,19 @@ const EarthquakeMap = memo(
                 </View>
               )}
               <Pressable
+                accessibilityLabel="Arahkan ke lokasi saya"
+                accessibilityRole="button"
+                hitSlop={8}
+                style={styles.locateButton}
+                onPress={handleLocateMe}
+              >
+                <Ionicons
+                  name="locate-outline"
+                  size={22}
+                  color="#1f2937"
+                />
+              </Pressable>
+              <Pressable
                 style={styles.menuButton}
                 onPress={() => setIsMenuOpen(!isMenuOpen)}
               >
@@ -860,6 +905,14 @@ const EarthquakeMap = memo(
             </View>
           </View>
         )}
+
+        <CustomAlert
+          visible={isLocationAlertVisible}
+          title="Lokasi Tidak Tersedia"
+          message="Koordinat lokasi Anda belum tersedia atau tidak valid."
+          type="error"
+          onClose={() => setIsLocationAlertVisible(false)}
+        />
       </View>
     );
   },
@@ -868,7 +921,6 @@ const EarthquakeMap = memo(
     if (prev.showFaultLines !== next.showFaultLines) return false;
     if (prev.showMapChrome !== next.showMapChrome) return false;
     if (prev.showUserMarker !== next.showUserMarker) return false;
-    // Peta perlu render ulang kalau ukuran card berubah agar bisa adjust posisi tombolnya
     if (prev.cardHeight !== next.cardHeight) return false;
     if (prev.markerCoordinate !== next.markerCoordinate) return false;
     if (prev.wzAreas !== next.wzAreas) return false;
@@ -908,6 +960,16 @@ const styles = StyleSheet.create({
   },
   menuActions: {
     alignItems: "flex-end",
+  },
+  locateButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    elevation: 5,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
   },
   menuButton: {
     width: 40,

@@ -2,9 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 import * as configPlugins from "@expo/config-plugins";
 
-const { withDangerousMod, withStringsXml } = configPlugins;
+const {
+  CodeGenerator,
+  withDangerousMod,
+  withProjectBuildGradle,
+  withStringsXml,
+} = configPlugins;
 
 const ANDROID_NOTIFICATION_SOUND_FILES = ["eq_eva.wav", "tsu_eva.wav"];
+const NOTIFEE_MAVEN_REPOSITORY_BLOCK = `allprojects {
+  repositories {
+    maven {
+      url "$rootDir/../node_modules/@notifee/react-native/android/libs"
+      content {
+        includeGroup "app.notifee"
+      }
+    }
+  }
+}`;
 const ANDROID_CLEAN_CODEGEN_ORDER_BEGIN =
   "// @generated begin react-native-clean-codegen-order - expo config plugin";
 const ANDROID_CLEAN_CODEGEN_ORDER_END =
@@ -99,6 +114,28 @@ function withAndroidNotificationSound(config) {
   ]);
 }
 
+function withNotifeeMavenRepository(config) {
+  return withProjectBuildGradle(config, (config) => {
+    if (config.modResults.language !== "groovy") {
+      throw new Error(
+        "Notifee Maven repository hanya mendukung Android build.gradle berbasis Groovy.",
+      );
+    }
+
+    const result = CodeGenerator.mergeContents({
+      src: config.modResults.contents,
+      newSrc: NOTIFEE_MAVEN_REPOSITORY_BLOCK,
+      tag: "notifee-local-maven",
+      anchor: /apply plugin: "expo-root-project"/,
+      offset: 0,
+      comment: "//",
+    });
+
+    config.modResults.contents = result.contents;
+    return config;
+  });
+}
+
 function withAndroidCleanCodegenOrder(config) {
   return withDangerousMod(config, [
     "android",
@@ -169,6 +206,7 @@ export default ({ config }) => {
     plugins: [
       withMapboxAccessToken,
       withAndroidNotificationSound,
+      withNotifeeMavenRepository,
       withAndroidCleanCodegenOrder,
       ...pluginsWithMapbox,
       "@react-native-community/datetimepicker",
