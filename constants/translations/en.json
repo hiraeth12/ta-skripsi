@@ -185,6 +185,7 @@
   },
   "homeScreen": {
     "greeting": "Hello, ",
+    "defaultUserName": "User",
     "loading": "Loading...",
     "timeAgo": {
       "justNow": "Just now",
@@ -283,6 +284,7 @@
   "tsunamiScreen": {
     "defaultWarningSubject": "Tsunami Warning",
     "labelStatus": "Status :",
+    "labelSubject": "Subject :",
     "labelTsunamiInfo": "Tsunami Information :",
     "btnFullInfo": "FULL INFORMATION"
   },

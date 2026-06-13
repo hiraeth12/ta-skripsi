@@ -185,6 +185,7 @@
   },
   "homeScreen": {
     "greeting": "Halo, ",
+    "defaultUserName": "Pengguna",
     "loading": "Memuat...",
     "timeAgo": {
       "justNow": "Baru saja",
@@ -283,6 +284,7 @@
   "tsunamiScreen": {
     "defaultWarningSubject": "Peringatan Tsunami",
     "labelStatus": "Status :",
+    "labelSubject": "Subjek :",
     "labelTsunamiInfo": "Informasi Tsunami :",
     "btnFullInfo": "INFORMASI LENGKAP"
   },

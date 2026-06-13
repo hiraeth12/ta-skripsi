@@ -164,7 +164,7 @@ export const TsunamiCard = ({
         />
         <DetailItem
           icon="alert-circle-outline"
-          label="Subject :"
+          label={t("tsunamiScreen.labelSubject")}
           value={safeValue(data?.subject)}
         />
         <DetailItem
@@ -176,7 +176,7 @@ export const TsunamiCard = ({
         />
         <DetailItem
           icon="megaphone-outline"
-          label="Informasi Tsunami :"
+          label={t("tsunamiScreen.labelTsunamiInfo")}
           value={safeValue(data?.headline)}
         />
       </View>

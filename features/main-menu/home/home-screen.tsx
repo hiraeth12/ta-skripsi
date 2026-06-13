@@ -7,7 +7,7 @@ import Skeleton from "@/components/ui/skeleton";
 import { CACHE_KEYS, getPersistentCache } from "@/utils/cache";
 import { calculateTimeAgo } from "@/utils/date";
 import { computeStatus } from "@/utils/earthquake";
-import { shareQuake } from "@/utils/share";
+import { getShareQuakeLabels, shareQuake } from "@/utils/share";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
@@ -110,18 +110,76 @@ export default function Home() {
     () => calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? "", t),
     [dirasakanData?.tanggal, dirasakanData?.jam, t],
   );
+  const displayUserName = session.profile?.name
+    ? userName
+    : t("homeScreen.defaultUserName");
+  const displayLocationName = useMemo(() => {
+    if (userLocation.name === "Lokasi GPS") {
+      return t("askLocationScreen.fallbackLocationName");
+    }
+    if (userLocation.name === "Lokasi Saya") {
+      return t("homeScreen.locationFallback");
+    }
+    return userLocation.name;
+  }, [t, userLocation.name]);
+  const shareLabels = useMemo(() => getShareQuakeLabels(t), [t]);
+  const networkErrorModalTexts = useMemo(
+    () => ({
+      title: t("networkErrorModal.title"),
+      description: t("networkErrorModal.description"),
+      button: t("networkErrorModal.button"),
+    }),
+    [t],
+  );
+  const shakeMapModalTexts = useMemo(
+    () => ({
+      title: t("shakeMapModal.title"),
+      subtitle: t("shakeMapModal.subtitle"),
+      footerNote: t("shakeMapModal.footerNote"),
+    }),
+    [t],
+  );
+  const narasiModalTexts = useMemo(
+    () => ({
+      title: t("narasiModal.title"),
+      subtitle: t("narasiModal.subtitle"),
+      loading: t("narasiModal.loading"),
+      empty: t("narasiModal.empty"),
+      footerNote: t("narasiModal.footerNote"),
+    }),
+    [t],
+  );
+  const historicalProcessModalTexts = useMemo(
+    () => ({
+      title: t("historicalProcessModal.title"),
+      subtitle: t("historicalProcessModal.subtitle"),
+      loading: t("historicalProcessModal.loading"),
+      empty: t("historicalProcessModal.empty"),
+      legendIntro: t("historicalProcessModal.legendIntro"),
+      legendUpdate: t("historicalProcessModal.legendUpdate"),
+      otLabel: t("historicalProcessModal.otLabel"),
+      phaseLabel: t("historicalProcessModal.phaseLabel"),
+      latitudeLabel: t("historicalProcessModal.latitudeLabel"),
+      longitudeLabel: t("historicalProcessModal.longitudeLabel"),
+      depthLabel: t("historicalProcessModal.depthLabel"),
+      magnitudeLabel: t("historicalProcessModal.magnitudeLabel"),
+      minuteSuffix: t("historicalProcessModal.minuteSuffix"),
+      footerNote: t("historicalProcessModal.footerNote"),
+    }),
+    [t],
+  );
 
   const handleShareDirasakan = useCallback(
-    () => shareQuake(dirasakanData, "dirasakan"),
-    [dirasakanData],
+    () => shareQuake(dirasakanData, "dirasakan", shareLabels),
+    [dirasakanData, shareLabels],
   );
   const handleShareTerdeteksi = useCallback(
-    () => shareQuake(terdeteksiData, "terdeteksi"),
-    [terdeteksiData],
+    () => shareQuake(terdeteksiData, "terdeteksi", shareLabels),
+    [terdeteksiData, shareLabels],
   );
   const handleShareTsunami = useCallback(
-    () => shareQuake(tsunamiData, "tsunami"),
-    [tsunamiData],
+    () => shareQuake(tsunamiData, "tsunami", shareLabels),
+    [shareLabels, tsunamiData],
   );
 
   /**
@@ -219,7 +277,7 @@ export default function Home() {
         {/* Greeting */}
         <View style={styles.greetingRow}>
           <View>
-            <Text style={styles.greeting}>{t("homeScreen.greeting")}{userName} !</Text>
+            <Text style={styles.greeting}>{t("homeScreen.greeting")}{displayUserName} !</Text>
             <Text style={styles.date}>
               {currentDate.toLocaleDateString(dateLocale, {
                 weekday: "long",
@@ -239,7 +297,7 @@ export default function Home() {
             <Image source={{ uri: locationImageUrl }} style={styles.locationImage} />
           )}
           <Text style={styles.locationText}>
-            <Ionicons name="location-outline" size={16} /> {userLocation.name}
+            <Ionicons name="location-outline" size={16} /> {displayLocationName}
           </Text>
 
           <View style={styles.statsRow}>
@@ -401,17 +459,20 @@ export default function Home() {
           setNetworkErrorModalVisible(false);
           networkErrorShownRef.current = false;
         }}
+        texts={networkErrorModalTexts}
       />
       <ModalShakeMap
         visible={shakeMapVisible}
         imageUrl={activeShakeMapUrl}
         onClose={() => setShakeMapVisible(false)}
+        texts={shakeMapModalTexts}
       />
       {/* Modal narasi resmi BMKG */}
       <ModalNarasi
         visible={narasiVisible}
         htmlContent={narasiHtmlContent}
         loading={narasiLoading}
+        texts={narasiModalTexts}
         onClose={() => {
           setNarasiVisible(false);
           setNarasiHtmlContent(null);
@@ -421,6 +482,7 @@ export default function Home() {
         visible={historyVisible}
         rawContent={historyRawContent}
         loading={historyLoading}
+        texts={historicalProcessModalTexts}
         onClose={() => {
           setHistoryVisible(false);
           setHistoryRawContent(null);
