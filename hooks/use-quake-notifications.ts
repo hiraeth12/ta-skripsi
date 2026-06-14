@@ -1,14 +1,3 @@
-import { XMLParser } from "fast-xml-parser";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getApp } from "@react-native-firebase/app";
-import { getAuth } from "@react-native-firebase/auth";
-import { get, getDatabase, ref } from "@react-native-firebase/database";
-import { useEffect, useState } from "react";
-import {
-  isUserInsideShakeRadius,
-  parseCoordinate,
-  parseDepthKm,
-} from "@/utils/earthquake-impact";
 import {
   EMPTY_WARNING,
   fetchTsunamiGroups,
@@ -18,6 +7,9 @@ import {
   parseTerdeteksiPayload,
 } from "@/features/main-menu/home/utils/parse-terdeteksi";
 import { notificationEmitter } from "@/services/fcm-event-emitter";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { XMLParser } from "fast-xml-parser";
+import { useEffect, useState } from "react";
 
 export type QuakeNotifType = "Dirasakan" | "Terdeteksi" | "Tsunami";
 export type QuakeNotification = {
@@ -55,14 +47,12 @@ const DIRASAKAN_API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL;
 const TERDETEKSI_API_URL_FAST =
   process.env.EXPO_PUBLIC_GEMPA_TERDETEKSI_API_URL_FAST;
 const TSUNAMI_API_URL = process.env.EXPO_PUBLIC_PERINGATAN_TSUNAMI_API_URL;
-const FIREBASE_DATABASE_URL =
-  process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() || "";
 const POLL_INTERVAL_MS = 15_000;
 const MAX_NOTIFICATIONS = 100;
 
 const STORAGE_KEY_NOTIFICATIONS = "quake_notifications_v1";
 const STORAGE_KEY_LATEST_SEEN = "quake_latest_seen_v1";
-const STORAGE_KEY_DIRASAKAN_PREFIX = "quake_notification_delivered:dirasakan:";
+
 
 let state: NotificationState = {
   notifications: [],
@@ -182,15 +172,6 @@ function getTsunamiTimestamp(timesentMs: number, date: string, time: string) {
   return parseTimestamp(date, time);
 }
 
-function parsePointCoordinates(pointCoordinates: unknown) {
-  const [lonRaw, latRaw] = String(pointCoordinates ?? "").split(",");
-  const longitude = parseCoordinate(lonRaw);
-  const latitude = parseCoordinate(latRaw);
-
-  if (latitude === null || longitude === null) return null;
-  return { latitude, longitude };
-}
-
 async function loadPersistedData(): Promise<void> {
   try {
     const [rawNotifications, rawLatestSeen] = await Promise.all([
@@ -257,41 +238,7 @@ async function persistLatestSeen() {
 }
 
 
-function getDirasakanDeliveryKey(userId: string, eventId: string) {
-  return `${STORAGE_KEY_DIRASAKAN_PREFIX}${userId}:${eventId}`;
-}
 
-async function hasLocalDelivery(userId: string, eventId: string) {
-  const value = await AsyncStorage.getItem(
-    getDirasakanDeliveryKey(userId, eventId),
-  );
-  return value === "true";
-}
-
-async function markLocalDelivery(userId: string, eventId: string) {
-  await AsyncStorage.setItem(
-    getDirasakanDeliveryKey(userId, eventId),
-    "true",
-  );
-}
-
-async function getCurrentUserLocation() {
-  const app = getApp();
-  const auth = getAuth(app);
-  const user = auth.currentUser;
-  if (!user) return null;
-
-  const database = FIREBASE_DATABASE_URL
-    ? getDatabase(app, FIREBASE_DATABASE_URL)
-    : getDatabase(app);
-  const snapshot = await get(ref(database, `users/${user.uid}`));
-  const data = snapshot.val();
-  const latitude = parseCoordinate(data?.latitude);
-  const longitude = parseCoordinate(data?.longitude);
-
-  if (latitude === null || longitude === null) return null;
-  return { userId: user.uid, latitude, longitude };
-}
 
 
 function emitTsunamiNotification(notification: QuakeNotification) {
@@ -416,6 +363,15 @@ async function fetchDirasakanNotification() {
 
   if (!eventId || eventId === latestSeen.dirasakan) return;
 
+  const alreadyExists = state.notifications.some(
+    (item) => item.id === `dirasakan:${eventId}`,
+  );
+
+  latestSeen.dirasakan = eventId;
+  void persistLatestSeen();
+
+  if (alreadyExists) return;
+
   const magnitude = Number.parseFloat(String(latest.magnitude ?? "0")) || 0;
   const date = String(latest.date ?? "");
   const time = String(latest.time ?? "");
@@ -431,51 +387,6 @@ async function fetchDirasakanNotification() {
     timestamp: parseTimestamp(date, time),
     isRead: false,
   });
-
-  const depthKm = parseDepthKm(latest.depth) ?? 0;
-  const coordinates =
-    parsePointCoordinates(latest?.point?.coordinates) ??
-    (() => {
-      const latitude = parseCoordinate(latest?.latitude);
-      const longitude = parseCoordinate(latest?.longitude);
-      return latitude === null || longitude === null
-        ? null
-        : { latitude, longitude };
-    })();
-
-  if (!coordinates || magnitude <= 0) {
-    latestSeen.dirasakan = eventId;
-    void persistLatestSeen();
-    return;
-  }
-
-  const userLocation = await getCurrentUserLocation();
-  if (!userLocation) return;
-
-  if (await hasLocalDelivery(userLocation.userId, eventId)) {
-    latestSeen.dirasakan = eventId;
-    void persistLatestSeen();
-    return;
-  }
-
-  const impact = isUserInsideShakeRadius({
-    quakeLat: coordinates.latitude,
-    quakeLon: coordinates.longitude,
-    userLat: userLocation.latitude,
-    userLon: userLocation.longitude,
-    magnitude,
-    depthKm,
-  });
-
-  if (!impact.inside) {
-    latestSeen.dirasakan = eventId;
-    void persistLatestSeen();
-    return;
-  }
-
-  await markLocalDelivery(userLocation.userId, eventId);
-  latestSeen.dirasakan = eventId;
-  void persistLatestSeen();
 }
 
 async function fetchTerdeteksiNotification() {
@@ -614,7 +525,7 @@ async function initAndStartPolling() {
     storageInitPromise = loadPersistedData();
     await storageInitPromise;
     storageInitialized = true;
-    notifyListeners(); 
+    notifyListeners();
   }
 
   void pollLatestQuakes();

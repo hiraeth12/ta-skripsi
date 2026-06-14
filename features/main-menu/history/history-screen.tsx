@@ -39,6 +39,7 @@ import {
   resolveIsoDateRange,
   serializeFilterMonths,
 } from "./utils/filter";
+import { getDirasakanDisplayLocation } from "./utils/dirasakan-location";
 import {
   HISTORY_TABS,
   type HistoryEarthquakeTab,
@@ -252,11 +253,13 @@ function SkeletonList() {
 }
 
 type EarthquakeListItemProps = {
+  displayLocation: string;
   item: ListItem;
   onPress: (item: ListItem) => void;
 };
 
 const EarthquakeListItem = memo(function EarthquakeListItem({
+  displayLocation,
   item,
   onPress,
 }: EarthquakeListItemProps) {
@@ -281,7 +284,7 @@ const EarthquakeListItem = memo(function EarthquakeListItem({
           style={listStyles.itemLocation}
           numberOfLines={1}
         >
-          {item.lokasi || "-"}
+          {displayLocation || "-"}
         </Text>
         <Text style={listStyles.itemDatetime}>
           {item.tanggal} • {item.jam}
@@ -706,10 +709,21 @@ export default function History() {
     [],
   );
   const renderItem = useCallback(
-    ({ item }: { item: ListItem }) => (
-      <EarthquakeListItem item={item} onPress={openHistoryForItem} />
-    ),
-    [openHistoryForItem],
+    ({ item }: { item: ListItem }) => {
+      const displayLocation =
+        activeTab === "GEMPA DIRASAKAN"
+          ? getDirasakanDisplayLocation(item.lokasi)
+          : item.lokasi;
+
+      return (
+        <EarthquakeListItem
+          displayLocation={displayLocation}
+          item={item}
+          onPress={openHistoryForItem}
+        />
+      );
+    },
+    [activeTab, openHistoryForItem],
   );
   const keyExtractor = useCallback((item: ListItem) => item.id, []);
 
