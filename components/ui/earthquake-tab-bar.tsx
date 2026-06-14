@@ -19,7 +19,14 @@ export const EARTHQUAKE_MAP_TABS = [
 export type EarthquakeTab = (typeof EARTHQUAKE_TABS)[number];
 export type EarthquakeMapTab = (typeof EARTHQUAKE_MAP_TABS)[number];
 
-if (Platform.OS === "android") {
+const isBridgeless =
+  (
+    globalThis as typeof globalThis & {
+      RN$Bridgeless?: boolean;
+    }
+  ).RN$Bridgeless === true;
+
+if (Platform.OS === "android" && !isBridgeless) {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
