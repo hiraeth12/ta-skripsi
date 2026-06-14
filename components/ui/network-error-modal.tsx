@@ -5,10 +5,24 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 export function NetworkErrorModal({
   visible,
   onClose,
+  texts,
 }: {
   visible: boolean;
   onClose: () => void;
+  texts?: {
+    title?: string;
+    description?: string;
+    button?: string;
+  };
 }) {
+  const resolvedTexts = {
+    title: texts?.title ?? "Koneksi Jaringan",
+    description:
+      texts?.description ??
+      "Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.",
+    button: texts?.button ?? "Mengerti",
+  };
+
   return (
     <Modal visible={visible} transparent={true} animationType="fade">
       <View style={styles.modalOverlay}>
@@ -19,12 +33,12 @@ export function NetworkErrorModal({
             color="#D9534F"
             style={styles.modalIcon}
           />
-          <Text style={styles.infoTitle}>Koneksi Jaringan</Text>
+          <Text style={styles.infoTitle}>{resolvedTexts.title}</Text>
           <Text style={styles.infoDesc}>
-            Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.
+            {resolvedTexts.description}
           </Text>
           <TouchableOpacity style={styles.infoButton} onPress={onClose}>
-            <Text style={styles.infoButtonText}>Mengerti</Text>
+            <Text style={styles.infoButtonText}>{resolvedTexts.button}</Text>
           </TouchableOpacity>
         </View>
       </View>

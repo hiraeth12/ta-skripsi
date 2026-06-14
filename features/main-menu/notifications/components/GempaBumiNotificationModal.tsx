@@ -1,6 +1,7 @@
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Image } from "expo-image";
 import React, { useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Modal, StyleSheet, Text, View } from "react-native";
 
 export type GempaBumiNotificationData = {
@@ -24,6 +25,7 @@ export function GempaBumiNotificationModal({
   closeInSecond?: number;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const player = useAudioPlayer(require("@/assets/sounds/eq_eva.wav"));
 
   // Animations
@@ -204,7 +206,9 @@ export function GempaBumiNotificationModal({
                   <Text style={[styles.hexValue, styles.textGlow]}>
                     {magnitudo}
                   </Text>
-                  <Text style={styles.hexLabel}>MAGNITUDO</Text>
+                  <Text style={styles.hexLabel}>
+                    {t("notificationModal.magnitude")}
+                  </Text>
                 </View>
               </Animated.View>
 
@@ -232,7 +236,9 @@ export function GempaBumiNotificationModal({
                   <Text style={[styles.hexValue, styles.textGlow]}>
                     {kedalaman}
                   </Text>
-                  <Text style={styles.hexLabel}>KEDALAMAN</Text>
+                  <Text style={styles.hexLabel}>
+                    {t("notificationModal.depth")}
+                  </Text>
                 </View>
               </Animated.View>
             </View>

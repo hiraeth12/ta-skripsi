@@ -52,6 +52,22 @@ type ModalHistoricalProcessProps = {
     rawContent: string | null;
     loading: boolean;
     onClose: () => void;
+    texts?: {
+        title?: string;
+        subtitle?: string;
+        loading?: string;
+        empty?: string;
+        legendIntro?: string;
+        legendUpdate?: string;
+        otLabel?: string;
+        phaseLabel?: string;
+        latitudeLabel?: string;
+        longitudeLabel?: string;
+        depthLabel?: string;
+        magnitudeLabel?: string;
+        minuteSuffix?: string;
+        footerNote?: string;
+    };
 };
 
 export function ModalHistoricalProcess({
@@ -59,8 +75,32 @@ export function ModalHistoricalProcess({
     rawContent,
     loading,
     onClose,
+    texts,
 }: ModalHistoricalProcessProps) {
     const { height } = useWindowDimensions();
+    const resolvedTexts = {
+        title: texts?.title ?? "PROSES HISTORIS",
+        subtitle:
+            texts?.subtitle ?? "Riwayat pembaruan parameter gempa oleh BMKG",
+        loading: texts?.loading ?? "Memuat data historis...",
+        empty: texts?.empty ?? "Data historis belum tersedia.",
+        legendIntro:
+            texts?.legendIntro ??
+            "Berikut ini merupakan historical proses perhitungan parameter gempabumi sejalan dengan datang atau bertambahnya data waveform seismik dari stasiun remote",
+        legendUpdate:
+            texts?.legendUpdate ??
+            "Setiap baris = satu pembaruan parameter sejak gempa terdeteksi",
+        otLabel: texts?.otLabel ?? "+OT",
+        phaseLabel: texts?.phaseLabel ?? "Fase",
+        latitudeLabel: texts?.latitudeLabel ?? "Lintang",
+        longitudeLabel: texts?.longitudeLabel ?? "Bujur",
+        depthLabel: texts?.depthLabel ?? "Kedalaman",
+        magnitudeLabel: texts?.magnitudeLabel ?? "Magnitudo",
+        minuteSuffix: texts?.minuteSuffix ?? "mnt",
+        footerNote:
+            texts?.footerNote ??
+            "* Data pembaruan parameter real-time dari sistem BMKG",
+    };
 
     const rows = useMemo(
         () => (rawContent ? parseHistoryTxt(rawContent) : []),
@@ -79,9 +119,9 @@ export function ModalHistoricalProcess({
                     {/* Header */}
                     <View style={styles.header}>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.title}>PROSES HISTORIS</Text>
+                            <Text style={styles.title}>{resolvedTexts.title}</Text>
                             <Text style={styles.subtitle}>
-                                Riwayat pembaruan parameter gempa oleh BMKG
+                                {resolvedTexts.subtitle}
                             </Text>
                         </View>
                         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -93,13 +133,13 @@ export function ModalHistoricalProcess({
                     {loading ? (
                         <View style={styles.centered}>
                             <ActivityIndicator size="large" color="#1E6F9F" />
-                            <Text style={styles.loadingText}>Memuat data historis...</Text>
+                            <Text style={styles.loadingText}>{resolvedTexts.loading}</Text>
                         </View>
                     ) : rows.length === 0 ? (
                         <View style={styles.centered}>
                             <Ionicons name="analytics-outline" size={48} color="#CBD5E1" />
                             <Text style={styles.emptyText}>
-                                Data historis belum tersedia.
+                                {resolvedTexts.empty}
                             </Text>
                         </View>
                     ) : (
@@ -108,14 +148,13 @@ export function ModalHistoricalProcess({
 
                             <View style={styles.legendRow}>
                                 <Text style={styles.legendText}>
-                                    Berikut ini merupakan historical proses perhitungan parameter gempabumi sejalan dengan 
-                                    datang atau bertambahnya data waveform seismik dari stasiun remote
+                                    {resolvedTexts.legendIntro}
                                 </Text>
                             </View>
                             <View style={styles.legendRow}>
                                 <View style={styles.legendDot} />
                                 <Text style={styles.legendText}>
-                                    Setiap baris = satu pembaruan parameter sejak gempa terdeteksi
+                                    {resolvedTexts.legendUpdate}
                                 </Text>
                             </View>
 
@@ -146,13 +185,16 @@ export function ModalHistoricalProcess({
 
                                     {/* Grid 2 kolom */}
                                     <View style={styles.grid}>
-                                        <DataCell label="+OT" value={`${row.otMin} mnt`} />
-                                        <DataCell label="Fase" value={row.phaseCount} />
-                                        <DataCell label="Lintang" value={`${row.latitude}°`} />
-                                        <DataCell label="Bujur" value={`${row.longitude}°`} />
-                                        <DataCell label="Kedalaman" value={`${row.depth} km`} />
                                         <DataCell
-                                            label="Magnitudo"
+                                            label={resolvedTexts.otLabel}
+                                            value={`${row.otMin} ${resolvedTexts.minuteSuffix}`}
+                                        />
+                                        <DataCell label={resolvedTexts.phaseLabel} value={row.phaseCount} />
+                                        <DataCell label={resolvedTexts.latitudeLabel} value={`${row.latitude}°`} />
+                                        <DataCell label={resolvedTexts.longitudeLabel} value={`${row.longitude}°`} />
+                                        <DataCell label={resolvedTexts.depthLabel} value={`${row.depth} km`} />
+                                        <DataCell
+                                            label={resolvedTexts.magnitudeLabel}
                                             value={
                                                 row.magnitude !== "-"
                                                     ? `${row.magType !== "-" ? row.magType + " " : ""}${row.magnitude} (${row.magCount})`
@@ -171,7 +213,7 @@ export function ModalHistoricalProcess({
                     {/* Footer */}
                     <View style={styles.footer}>
                         <Text style={styles.footerText}>
-                            * Data pembaruan parameter real-time dari sistem BMKG
+                            {resolvedTexts.footerNote}
                         </Text>
                     </View>
                 </View>

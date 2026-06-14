@@ -10,6 +10,7 @@ import {
 import { getDatabase, ref, set } from "@react-native-firebase/database";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { styles } from "../styles/register-styles";
@@ -88,6 +89,7 @@ const validate = (
 };
 
 export default function Register() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const [secure, setSecure] = useState(true);
@@ -251,7 +253,7 @@ export default function Register() {
         <Text style={styles.errorText}>{errors.lastName}</Text>
       )}
 
-      <Text style={styles.label}>Email</Text>
+      <Text style={styles.label}>{t("registerScreen.emailLabel")}</Text>
       <TextInput
         placeholder="email@gmail.com"
         placeholderTextColor="#999"
@@ -265,7 +267,7 @@ export default function Register() {
       />
       {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-      <Text style={styles.label}>Kata Sandi</Text>
+      <Text style={styles.label}>{t("registerScreen.passwordLabel")}</Text>
       <View
         style={[
           styles.passwordContainer,
@@ -293,7 +295,7 @@ export default function Register() {
         <Text style={styles.errorText}>{errors.password}</Text>
       )}
 
-      <Text style={styles.label}>Konfirmasi Kata Sandi</Text>
+      <Text style={styles.label}>{t("registerScreen.confirmPasswordLabel")}</Text>
       <View
         style={[
           styles.passwordContainer,
@@ -323,7 +325,7 @@ export default function Register() {
 
       <View style={{ marginTop: 30 }}>
         <AuthButton
-          title="Daftar"
+          title={t("registerScreen.buttonRegister")}
           onPress={handleRegister}
           loading={isLoading}
           disabled={isLoading}

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next"; // <-- Import i18n
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export interface CustomAlertProps {
@@ -17,11 +18,15 @@ export default function CustomAlert({
   title,
   message,
   type = "error",
-  buttonText = "Mengerti",
+  buttonText, // <-- Hapus nilai default dari parameter di sini
   onClose,
   onConfirm,
 }: CustomAlertProps) {
-  
+  const { t } = useTranslation(); // <-- Hook i18n dipanggil di sini
+
+  // <-- Gunakan t() sebagai fallback jika buttonText tidak diberikan oleh komponen induk
+  const finalButtonText = buttonText || t("customAlert.defaultButton");
+
   const handlePress = () => {
     onClose(); // Tutup modal terlebih dahulu
     if (onConfirm) {
@@ -41,9 +46,9 @@ export default function CustomAlert({
           />
           <Text style={styles.infoTitle}>{title}</Text>
           <Text style={styles.infoDesc}>{message}</Text>
-          
+
           <TouchableOpacity style={styles.infoButton} onPress={handlePress}>
-            <Text style={styles.infoButtonText}>{buttonText}</Text>
+            <Text style={styles.infoButtonText}>{finalButtonText}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -51,7 +56,7 @@ export default function CustomAlert({
   );
 }
 
-// Saya menambahkan styling dasar yang bisa kamu sesuaikan 
+// Saya menambahkan styling dasar yang bisa kamu sesuaikan
 // atau kamu bisa mengimpornya dari file styles terpisah
 const styles = StyleSheet.create({
   modalOverlay: {

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type InAppNotificationData = {
@@ -18,6 +19,7 @@ export function InAppNotificationModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (!data) return null;
 
@@ -33,23 +35,23 @@ export function InAppNotificationModal({
           />
           <Text style={styles.infoTitle}>{data.title}</Text>
           <Text style={styles.infoDesc}>{data.body}</Text>
-          
+
           <View style={styles.actionContainer}>
-            <TouchableOpacity 
-              style={[styles.button, styles.closeButton]} 
+            <TouchableOpacity
+              style={[styles.button, styles.closeButton]}
               onPress={onClose}
             >
-              <Text style={styles.closeButtonText}>Tutup</Text>
+              <Text style={styles.closeButtonText}>{t("inAppNotificationModal.closeButton")}</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.button, styles.viewButton]} 
+
+            <TouchableOpacity
+              style={[styles.button, styles.viewButton]}
               onPress={() => {
                 onClose();
                 router.push("/main-menu/notifikasi");
               }}
             >
-              <Text style={styles.viewButtonText}>Lihat Info</Text>
+              <Text style={styles.viewButtonText}>{t("inAppNotificationModal.viewButton")}</Text>
             </TouchableOpacity>
           </View>
         </View>

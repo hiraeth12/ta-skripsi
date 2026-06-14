@@ -1,0 +1,504 @@
+{
+  "askLocationScreen": {
+    "headerTitle": "Where is your current location?",
+    "searchPlaceholder": "Search Village or Sub-district...",
+    "orDivider": "Or detect automatically",
+    "useGpsButton": "Use GPS",
+    "fallbackLocationName": "GPS Location",
+    "status": {
+      "findingGps": "Finding your GPS location...",
+      "requestingPermission": "Requesting location access...",
+      "determiningPosition": "Determining your position..."
+    },
+    "alert": {
+      "permissionDeniedTitle": "Permission Denied!",
+      "permissionDeniedMsg": "GPS access is required to continue. Please enable location permissions in app settings.",
+      "errorTitle": "Error",
+      "errorMsg": "Cannot access GPS. Make sure GPS is enabled and try again."
+    }
+  },
+  "forgotPasswordScreen": {
+    "title": "Forgot Password",
+    "description": "Please enter your email address to receive a verification code to reset your password.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "buttonSending": "Sending...",
+    "buttonSend": "Send Verification Code",
+    "alert": {
+      "invalidInputTitle": "Invalid Input",
+      "invalidInputMsg": "Please enter a valid email address.",
+      "failTitle": "Failed",
+      "failMsg": "Failed to send OTP. Please try again."
+    }
+  },
+  "loginScreen": {
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "********",
+    "forgotPasswordText": "Forgot Password?",
+    "buttonLoading": "Processing...",
+    "buttonLogin": "Login",
+    "noAccountText": "Don't have an account?",
+    "registerText": "Register",
+    "alert": {
+      "missingInputTitle": "Incomplete Input",
+      "missingInputMsg": "Email and password are required.",
+      "loginFailedTitle": "Login Failed",
+      "loginFailedMsg": "Check your email/password and internet connection, then try again."
+    }
+  },
+  "newPasswordScreen": {
+    "title": "New Password",
+    "description": "Please create a strong new password for your account. Make sure both fields below are filled correctly.",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "********",
+    "confirmPasswordLabel": "Confirm Password",
+    "buttonLoading": "Saving...",
+    "buttonSave": "Save New Password",
+    "alert": {
+      "invalidPasswordTitle": "Invalid Password",
+      "invalidPasswordMsg": "Please enter a password with at least 6 characters.",
+      "passwordMismatchTitle": "Passwords Do Not Match",
+      "passwordMismatchMsg": "Please enter the same password in both fields.",
+      "saveFailedTitle": "Failed to Save",
+      "saveFailedMsg": "Failed to save the new password."
+    }
+  },
+  "registerScreen": {
+    "firstNameLabel": "First Name",
+    "firstNamePlaceholder": "Jane",
+    "lastNameLabel": "Last Name",
+    "lastNamePlaceholder": "Doe",
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "********",
+    "confirmPasswordLabel": "Confirm Password",
+    "passwordMismatchError": "Passwords do not match",
+    "buttonRegister": "Register",
+    "haveAccountText": "Already have an account?",
+    "loginText": "Login",
+    "alertButtonUnderstand": "Got it",
+    "alert": {
+      "passwordMismatchTitle": "Passwords do not match",
+      "passwordMismatchMsg": "Please ensure both password fields match.",
+      "missingInputTitle": "Incomplete Input",
+      "missingInputMsg": "Name, email, and password are required.",
+      "registerSuccessTitle": "Registration Successful",
+      "registerSuccessMsg": "Account created successfully. Please log in.",
+      "registerFailedTitle": "Registration Failed",
+      "registerFailedDefaultMsg": "An error occurred while creating the account."
+    }
+  },
+  "signInScreen": {
+    "buttonLogin": "Login",
+    "buttonRegister": "Register"
+  },
+  "successNewPasswordScreen": {
+    "title": "Password Changed Successfully",
+    "description": "Your password has been changed successfully. Please use your new password to log in to your account.",
+    "buttonLogin": "Go to Login Page"
+  },
+  "verifyCodeScreen": {
+    "title": "Verify Email Address",
+    "subtitlePrefix": "Verification code has been sent to:",
+    "fallbackEmail": "email@gmail.com",
+    "buttonVerifying": "Verifying...",
+    "buttonVerify": "Confirm Code",
+    "resendCountdown": "Resend code in ",
+    "resendSending": "Resending...",
+    "resendButton": "Resend Code",
+    "alert": {
+      "invalidInputTitle": "Invalid Input",
+      "invalidInputMsg": "Please enter a 6-digit code.",
+      "otpUsed": "OTP code has already been used. Please resend code.",
+      "otpTooManyAttempts": "Too many attempts. Please resend code.",
+      "otpExpired": "OTP code has expired. Please resend code.",
+      "otpInvalid": "Invalid or expired OTP code.",
+      "verifyFailedTitle": "Verification Failed",
+      "resendSuccessTitle": "Code Sent",
+      "resendSuccessMsg": "A new verification code has been sent to your email.",
+      "resendFailedTitle": "Failed",
+      "resendFailedMsg": "Failed to resend OTP. Please try again."
+    }
+  },
+  "gempaDirasakanScreen": {
+    "distanceSuffix": " km from Bandung",
+    "statMagnitude": "Magnitude",
+    "statDepth": "Depth",
+    "latLabel": "Lat",
+    "lonLabel": "Lon",
+    "labelLocation": "Earthquake Location :",
+    "labelTime": "Time :",
+    "labelDistance": "Distance :",
+    "labelFelt": "Felt Area (MMI Scale) :",
+    "btnShakeMap": "SHAKEMAP"
+  },
+  "gempaTerdeteksiScreen": {
+    "statMagnitude": "Magnitude",
+    "statDepth": "Depth",
+    "latLabel": "Lat",
+    "lonLabel": "Lon",
+    "labelLocation": "Earthquake Location :",
+    "labelTime": "Time :",
+    "labelFase": "Phase :",
+    "labelDate": "Date :",
+    "labelHour": "Time :",
+    "labelStatus": "Status :"
+  },
+  "filterScreen": {
+    "title": "Filter",
+    "modeRange": "7 Days / Range",
+    "modeMonth": "Year / Month",
+    "selectYear": "Select Year",
+    "selectMonth": "Select Month",
+    "dateFrom": "From date",
+    "dateTo": "To date",
+    "btnReset": "Reset",
+    "btnSave": "Save"
+  },
+  "historyScreen": {
+    "distanceSuffix": " km from your location",
+    "magLabel": "Mag",
+    "depthPrefix": "Depth: ",
+    "emptyDataText": "Earthquake data is not available.",
+    "emptyTsunamiText": "Tsunami data is not available.",
+    "listTitleDirasakan": "Recent Felt Earthquakes",
+    "listTitleTerdeteksi": "Recent Detected Earthquakes",
+    "listTitleTsunami": "Tsunami History",
+    "filterBtnText": "FILTER"
+  },
+  "months": {
+    "1": "January",
+    "2": "February",
+    "3": "March",
+    "4": "April",
+    "5": "May",
+    "6": "June",
+    "7": "July",
+    "8": "August",
+    "9": "September",
+    "10": "October",
+    "11": "November",
+    "12": "December"
+  },
+  "homeScreen": {
+    "greeting": "Hello, ",
+    "defaultUserName": "User",
+    "loading": "Loading...",
+    "timeAgo": {
+      "justNow": "Just now",
+      "yesterday": "Yesterday",
+      "daysAgo": " Days Ago",
+      "hoursAgo": " Hours Ago",
+      "minsAgo": " Mins Ago"
+    },
+    "status": {
+      "danger": "Danger",
+      "affected": "Affected",
+      "safe": "Safe"
+    },
+    "locationFallback": "My Location",
+    "statLastQuake": "LAST QUAKE",
+    "statDistance": "QUAKE DISTANCE",
+    "statStatus": "AREA STATUS",
+    "titleDirasakan": "Latest Felt Earthquake",
+    "descDirasakan": "Displays earthquake events whose vibrations are felt by humans and reported in the surrounding area.",
+    "titleTerdeteksi": "Latest Detected Earthquake",
+    "descTerdeteksi": "Displays earthquakes recorded by seismographs, but not felt by humans.",
+    "titleTsunami": "Latest Tsunami Information",
+    "descTsunami": "Displays the latest tsunami early warning information from BMKG."
+  },
+  "notificationsScreen": {
+    "headerTitle": "Recent Notifications",
+    "fallbackTitle": "Notification",
+    "cardTitleDirasakan": "Felt Earthquake",
+    "cardTitleTerdeteksi": "Detected Earthquake",
+    "defaultTsunamiTitle": "Tsunami Warning",
+    "badgeDirasakan": "Felt",
+    "badgeTidakDirasakan": "Not felt",
+    "badgeTsunami": "Tsunami",
+    "badgeInfo": "Info",
+    "unavailableEarthquakeInfo": "Earthquake information is not available",
+    "unavailableTsunamiInfo": "Tsunami information is not available",
+    "unavailableLocation": "Location unavailable",
+    "loadError": "Failed to load notifications. Check your connection.",
+    "emptyFallback": "No notifications yet."
+  },
+  "inAppNotificationModal": {
+    "closeButton": "Close",
+    "viewButton": "View Info"
+  },
+  "locationSearchModal": {
+    "title": "Select Location",
+    "searchPlaceholder": "Type village or sub-district..."
+  },
+  "networkErrorModal": {
+    "title": "Network Connection",
+    "description": "Unable to connect to the network. Please check your internet connection.",
+    "button": "Got it"
+  },
+  "shakeMapModal": {
+    "title": "SHAKEMAP",
+    "subtitle": "Data source: BMKG ShakeMap",
+    "footerNote": "* Data is updated automatically from BMKG ShakeMap"
+  },
+  "narasiModal": {
+    "title": "OFFICIAL BMKG NARRATIVE",
+    "subtitle": "Data source: BMKG InfoGempa",
+    "loading": "Loading narrative...",
+    "empty": "The official narrative is not available yet.",
+    "footerNote": "* Official narrative published by the BMKG Director of Earthquake and Tsunami"
+  },
+  "historicalProcessModal": {
+    "title": "HISTORICAL PROCESS",
+    "subtitle": "Earthquake parameter update history by BMKG",
+    "loading": "Loading historical data...",
+    "empty": "Historical data is not available yet.",
+    "legendIntro": "This is the historical earthquake parameter calculation process as seismic waveform data arrives or increases from remote stations",
+    "legendUpdate": "Each row = one parameter update since the earthquake was detected",
+    "otLabel": "+OT",
+    "phaseLabel": "Phase",
+    "latitudeLabel": "Latitude",
+    "longitudeLabel": "Longitude",
+    "depthLabel": "Depth",
+    "magnitudeLabel": "Magnitude",
+    "minuteSuffix": "min",
+    "footerNote": "* Real-time parameter update data from the BMKG system"
+  },
+  "earthquakeTabs": {
+    "felt": "FELT EARTHQUAKE",
+    "detected": "DETECTED EARTHQUAKE",
+    "tsunami": "TSUNAMI"
+  },
+  "historyTabs": {
+    "tsunami": "TSUNAMI HISTORY"
+  },
+  "historyErrors": {
+    "tsunamiHistoryLabel": "tsunami history",
+    "firebasePermission": "Firebase access for {{label}} was denied. Check read rules for /tsunamiEvents.",
+    "firebaseTimeout": "Firebase connection for {{label}} timed out. Please try again later.",
+    "loadFailed": "Failed to load data."
+  },
+  "tsunamiScreen": {
+    "defaultWarningSubject": "Tsunami Warning",
+    "labelStatus": "Status :",
+    "labelSubject": "Subject :",
+    "labelTsunamiInfo": "Tsunami Information :",
+    "btnFullInfo": "FULL INFORMATION"
+  },
+  "tsunamiInfoModal": {
+    "title": "TSUNAMI INFORMATION",
+    "subtitle": "Data source: BMKG InaTEWS",
+    "labelTsunamiInfo": "Tsunami Information :",
+    "visualInfoTitle": "Visual Information",
+    "warningAreaTitle": "Tsunami Warning Area",
+    "provinceLabel": "Province",
+    "regionLabel": "Region",
+    "levelLabel": "Level",
+    "timeLabel": "Time",
+    "observationTitle": "Tsunami Observation",
+    "locationLabel": "Location",
+    "coordinateLabel": "Coordinates",
+    "heightLabel": "Height",
+    "empty": "Complete tsunami information is not available yet."
+  },
+  "tsunamiMapSlides": {
+    "shakemap": "Shakemap",
+    "wzmap": "WZMap / Warning Zone Map",
+    "ttmap": "TTMap / Tsunami Arrival Time Map",
+    "sshmap": "SSHMap / Sea Surface Height Map"
+  },
+  "warningTabs": {
+    "update": "Update {{number}}"
+  },
+  "gpsButton": {
+    "useGps": "Use GPS",
+    "loading": "Loading..."
+  },
+  "accountScreen": {
+    "menuProfile": "Profile Settings",
+    "menuPassword": "Change Password",
+    "menuLocation": "Change Location",
+    "menuLanguage": "Change Language",
+    "menuPushNotif": "Push Notifications",
+    "menuAbout": "About App",
+    "modalNotifActive": "Notifications Active",
+    "modalNotifInactive": "Notifications Inactive",
+    "modalDescActive": "With this, you will receive direct notifications on your device regarding the latest earthquake activity.",
+    "modalDescInactive": "You have turned off notifications. You will not receive direct notifications regarding system updates or earthquakes.",
+    "modalBtnUnderstand": "Got it"
+  },
+  "pengaturanProfilScreen": {
+    "title": "Profile Settings",
+    "firstNameLabel": "First Name",
+    "lastNameLabel": "Last Name",
+    "btnCancel": "Cancel",
+    "btnSaving": "Saving...",
+    "btnSave": "Save",
+    "btnLogouting": "Logging out...",
+    "btnLogout": "Log Out",
+    "modalLogoutTitle": "Log Out from Account?",
+    "modalLogoutDesc": "Are you sure you want to log out from this account?",
+    "alert": {
+      "errorTitle": "Error",
+      "missingFirstName": "First name is required",
+      "userNotLoggedIn": "User is not logged in",
+      "updateFailed": "Failed to update profile",
+      "logoutFailedTitle": "Logout Failed",
+      "logoutFailedMsg": "Failed to log out. Please try again."
+    }
+  },
+  "tentangAplikasiScreen": {
+    "title": "About App",
+    "desc1": " is a cutting-edge seismic activity monitoring platform specifically designed to map earthquake data in real-time across Indonesia.",
+    "desc2": "This application serves as an early disaster mitigation solution, making it easier for the public to access earthquake parameters such as magnitude, depth, and coordinates instantly.",
+    "desc3_1": "Our flagship features include a location-based (GPS) automatic alarm notification system. Currently, the early warning feature is optimized specifically for the ",
+    "desc3_2": " region to ensure more precise data accuracy.",
+    "desc4_1": "All presented data is sourced directly from ",
+    "desc4_2": " as the official authority, ensuring the accuracy of the information you receive.",
+    "versionLabel": "Version: 1.0.0",
+    "btnBack": "Back"
+  },
+  "ubahBahasaScreen": {
+    "title": "Change Language",
+    "btnBack": "Back",
+    "modalSuccessTitle": "Success",
+    "modalSuccessDesc": "The application language has been successfully changed to",
+    "modalSuccessBtn": "Got it",
+    "modalWarningTitle": "Warning",
+    "modalWarningDesc": "The application requires at least one active language. You cannot disable all languages.",
+    "modalWarningBtn": "Close"
+  },
+  "ubahKataSandiScreen": {
+    "title": "Change Password",
+    "oldPasswordLabel": "Current Password",
+    "newPasswordLabel": "New Password",
+    "confirmPasswordLabel": "Confirm Password",
+    "errorMismatch": "New password and confirmation do not match",
+    "btnCancel": "Cancel",
+    "btnSaving": "Saving...",
+    "btnSave": "Save",
+    "alert": {
+      "errorTitle": "Error",
+      "missingFields": "All password fields are required",
+      "minLen": "New password must be at least 6 characters",
+      "invalidUser": "Invalid user, please log in again",
+      "wrongCurrentPass": "Current password is incorrect",
+      "weakPass": "New password is too weak",
+      "tooManyRequests": "Too many attempts, please try again later",
+      "updateFailed": "Failed to update password"
+    }
+  },
+  "ubahLokasiScreen": {
+    "title": "Change Location",
+    "description": "Please Select Your Location or Use GPS Mode",
+    "searchLabel": "Search Location",
+    "searchPlaceholder": "Search Village or Sub-district...",
+    "orDivider": "Or",
+    "btnGps": "Use GPS",
+    "btnCancel": "Cancel",
+    "btnSave": "Save",
+    "fallbackGpsLocation": "GPS Location",
+    "modalSuccessTitle": "Success",
+    "modalSuccessDesc": "Your location has been successfully updated in the SeismoTrack system.",
+    "modalSuccessBtn": "Got it",
+    "status": {
+      "updating": "Updating Location ...",
+      "requestingPermission": "Requesting location access...",
+      "updatingLocation": "Updating location..."
+    },
+    "alert": {
+      "permissionDeniedTitle": "Permission Denied",
+      "permissionDeniedMsg": "Enable location permission in settings.",
+      "gpsTimeoutTitle": "Slow GPS",
+      "gpsTimeoutMsg": "GPS signal is unavailable. Try again in an open area.",
+      "errorTitle": "Error",
+      "gpsErrorMsg": "Cannot access GPS.",
+      "saveErrorNoLocationMsg": "Please select a location first",
+      "saveErrorDbMsg": "Failed to save location to database"
+    }
+  },
+  "rootLayout": {
+    "fallbackNotifTitle": "Earthquake Warning!"
+  },
+  "bottomNav": {
+    "home": "HOME",
+    "gempa": "QUAKE",
+    "riwayat": "HISTORY",
+    "akun": "ACCOUNT"
+  },
+  "customAlert": {
+    "defaultButton": "Got it"
+  },
+  "notificationModal": {
+    "magnitude": "MAGNITUDE",
+    "depth": "DEPTH",
+    "tsunamiPotential": "TSUNAMI POTENTIAL"
+  },
+  "common": {
+    "share": "SHARE",
+    "understand": "Got it",
+    "close": "Close"
+  },
+  "earthquake": {
+    "shakeMap": "SHAKEMAP",
+    "magnitude": "Magnitude",
+    "depth": "Depth",
+    "latitude": "S Lat",
+    "longitude": "E Long",
+    "location": "Earthquake Location",
+    "date": "Date",
+    "time": "Time",
+    "phase": "Phase",
+    "eventTime": "Event Time",
+    "distance": "Distance",
+    "distanceFromYourLocation": "{{distance}} km from your location",
+    "feltArea": "Felt Area",
+    "feltAreaMmi": "Felt Area (MMI Scale) :",
+    "tabs": {
+      "felt": "FELT EARTHQUAKE",
+      "detected": "DETECTED EARTHQUAKE"
+    },
+    "officialNarrative": "OFFICIAL NARRATIVE",
+    "historicalProcess": "HISTORICAL PROCESS",
+    "status": "Status"
+  },
+  "share": {
+    "title": "Share Earthquake Information",
+    "subtitle": "Choose how you want to share this earthquake information:",
+    "viaApp": "Share via App",
+    "preview": "Preview",
+    "earthquakeInfo": "{{type}} Earthquake Information",
+    "feltEarthquake": "Felt",
+    "detectedEarthquake": "Detected",
+    "location": "Location",
+    "coordinate": "Coordinates",
+    "distanceFromMyLocation": "{{distance}} km from my location"
+  },
+  "shareQuake": {
+    "event": {
+      "felt": "Felt Earthquake",
+      "detected": "Detected Earthquake",
+      "tsunami": "Tsunami"
+    },
+    "title": {
+      "felt": "Share Felt Earthquake Information",
+      "detected": "Share Detected Earthquake Information",
+      "tsunami": "Share Tsunami Information"
+    },
+    "magnitude": "Magnitude",
+    "depth": "Depth",
+    "location": "Location",
+    "time": "Time",
+    "coordinates": "Coordinates",
+    "moreInfo": "For more information, visit https://bmkg.go.id"
+  },
+  "map": {
+    "showFaultLines": "Fault Lines",
+    "showSeismicSensors": "Seismic Sensors",
+    "showBmkgSeismicSensors": "BMKG Seismic Sensors",
+    "showGlobalSeismicSensors": "Global Seismic Sensors"
+  }
+}

@@ -4,6 +4,7 @@ import DateTimePicker, {
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Platform,
   ScrollView,
@@ -20,7 +21,6 @@ import {
   getNowYearMonth,
   isMonthDisabled,
   isYearDisabled,
-  MONTH_NAMES_ID,
   normalizeFilterMonths,
   parseFilterMonthsParam,
   parseIsoDate,
@@ -51,8 +51,8 @@ function resolveReturnTo(value?: string | string[]): string {
   return "/main-menu/history";
 }
 
-function formatDisplayDate(value: Date): string {
-  return value.toLocaleDateString("id-ID", {
+function formatDisplayDate(value: Date, locale: string): string {
+  return value.toLocaleDateString(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -67,12 +67,14 @@ function clampDate(value: Date, min: Date, max: Date): Date {
 
 function DateField({
   label,
+  locale,
   max,
   min,
   onChange,
   value,
 }: {
   label: string;
+  locale: string;
   max: Date;
   min: Date;
   onChange: (value: Date) => void;
@@ -114,7 +116,7 @@ function DateField({
         >
           <Feather name="calendar" size={15} color="#0C4A6E" />
           <Text style={{ color: "#0F172A", fontSize: 14, fontWeight: "500" }}>
-            {formatDisplayDate(value)}
+            {formatDisplayDate(value, locale)}
           </Text>
         </TouchableOpacity>
       )}
@@ -127,7 +129,7 @@ function DateField({
           minimumDate={min}
           maximumDate={max}
           onChange={handleChange}
-          locale="id-ID"
+          locale={locale}
           themeVariant="light"
           accentColor="#0891B2"
         />
@@ -138,6 +140,7 @@ function DateField({
 
 export default function FilterGempaScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const params = useLocalSearchParams<{
     tab?: string;
     filterYear?: string;
@@ -150,6 +153,7 @@ export default function FilterGempaScreen() {
     restoreListPanel?: string;
   }>();
   const now = useMemo(() => new Date(), []);
+  const dateLocale = i18n.language === "en" ? "en-US" : "id-ID";
   const tab: HistoryTabKey =
     params.tab === "tsunami"
       ? "tsunami"
@@ -328,7 +332,7 @@ export default function FilterGempaScreen() {
       >
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Filter</Text>
+            <Text style={styles.cardTitle}>{t("filterScreen.title")}</Text>
             <TouchableOpacity
               style={styles.closeIcon}
               activeOpacity={0.7}
@@ -370,7 +374,9 @@ export default function FilterGempaScreen() {
                         fontWeight: "600",
                       }}
                     >
-                      {mode === "range" ? "7 Hari / Range" : "Tahun / Bulan"}
+                      {mode === "range"
+                        ? t("filterScreen.modeRange")
+                        : t("filterScreen.modeMonth")}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -401,7 +407,7 @@ export default function FilterGempaScreen() {
                         expandedSection === "year" && { color: "#0C4A6E" },
                       ]}
                     >
-                      Pilih Tahun
+                      {t("filterScreen.selectYear")}
                     </Text>
                   </View>
                   <Feather
@@ -501,7 +507,7 @@ export default function FilterGempaScreen() {
                           expandedSection === "month" && { color: "#0C4A6E" },
                         ]}
                       >
-                        Pilih Bulan
+                        {t("filterScreen.selectMonth")}
                       </Text>
                     </View>
                     <Feather
@@ -521,8 +527,9 @@ export default function FilterGempaScreen() {
                         style={{ maxHeight: 220 }}
                         nestedScrollEnabled={true}
                       >
-                        {MONTH_NAMES_ID.map((label, idx) => {
+                        {Array.from({ length: 12 }).map((_, idx) => {
                           const month = idx + 1;
+                          const label = t(`months.${month}`);
                           const disabled = isMonthDisabled(
                             selectedYear,
                             month,
@@ -532,10 +539,10 @@ export default function FilterGempaScreen() {
                           const isSelected = selectedMonths.includes(month);
                           return (
                             <TouchableOpacity
-                              key={label}
+                              key={month}
                               style={[
                                 styles.listItem,
-                                idx === MONTH_NAMES_ID.length - 1 && {
+                                idx === 11 && {
                                   borderBottomWidth: 0,
                                 },
                                 disabled && { opacity: 0.45 },
@@ -601,14 +608,16 @@ export default function FilterGempaScreen() {
               }}
             >
               <DateField
-                label="Dari tanggal"
+                label={t("filterScreen.dateFrom")}
+                locale={dateLocale}
                 value={dateFrom}
                 min={minDate}
                 max={dateTo}
                 onChange={handleDateFromChange}
               />
               <DateField
-                label="Sampai tanggal"
+                label={t("filterScreen.dateTo")}
+                locale={dateLocale}
                 value={dateTo}
                 min={dateFrom}
                 max={today}
@@ -628,7 +637,8 @@ export default function FilterGempaScreen() {
               >
                 <Feather name="info" size={13} color="#2563EB" />
                 <Text style={{ color: "#2563EB", flex: 1, fontSize: 11 }}>
-                  {formatDisplayDate(dateFrom)} - {formatDisplayDate(dateTo)}
+                  {formatDisplayDate(dateFrom, dateLocale)} -{" "}
+                  {formatDisplayDate(dateTo, dateLocale)}
                 </Text>
               </View>
             </View>
@@ -640,7 +650,9 @@ export default function FilterGempaScreen() {
               activeOpacity={0.7}
               onPress={handleReset}
             >
-              <Text style={styles.btnResetText}>Reset</Text>
+              <Text style={styles.btnResetText}>
+                {t("filterScreen.btnReset")}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -648,7 +660,9 @@ export default function FilterGempaScreen() {
               activeOpacity={0.7}
               onPress={handleSimpan}
             >
-              <Text style={styles.btnSimpanText}>Simpan</Text>
+              <Text style={styles.btnSimpanText}>
+                {t("filterScreen.btnSave")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

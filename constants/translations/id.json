@@ -1,0 +1,504 @@
+{
+  "askLocationScreen": {
+    "headerTitle": "Dimana lokasi Anda saat ini?",
+    "searchPlaceholder": "Cari Kelurahan atau Desa...",
+    "orDivider": "Atau deteksi otomatis",
+    "useGpsButton": "Gunakan GPS",
+    "fallbackLocationName": "Lokasi GPS",
+    "status": {
+      "findingGps": "Sedang mencari lokasi GPS Anda...",
+      "requestingPermission": "Meminta izin akses lokasi...",
+      "determiningPosition": "Sedang menentukan posisi Anda..."
+    },
+    "alert": {
+      "permissionDeniedTitle": "Permission Ditolak!",
+      "permissionDeniedMsg": "Akses GPS diperlukan untuk melanjutkan. Silakan aktifkan izin lokasi di pengaturan aplikasi.",
+      "errorTitle": "Error",
+      "errorMsg": "Tidak dapat mengakses GPS. Pastikan GPS sudah aktif dan coba lagi."
+    }
+  },
+  "forgotPasswordScreen": {
+    "title": "Lupa Kata Sandi",
+    "description": "Silakan masukkan alamat email Anda untuk menerima kode verifikasi untuk mengatur ulang kata sandi.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "buttonSending": "Mengirim...",
+    "buttonSend": "Kirim Kode Verifikasi",
+    "alert": {
+      "invalidInputTitle": "Input Tidak Valid",
+      "invalidInputMsg": "Silakan masukkan alamat email yang valid.",
+      "failTitle": "Gagal",
+      "failMsg": "Gagal mengirim OTP. Silakan coba lagi."
+    }
+  },
+  "loginScreen": {
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "passwordLabel": "Kata Sandi",
+    "passwordPlaceholder": "********",
+    "forgotPasswordText": "Lupa Kata Sandi?",
+    "buttonLoading": "Memproses...",
+    "buttonLogin": "Login",
+    "noAccountText": "Belum Punya Akun?",
+    "registerText": "Daftar",
+    "alert": {
+      "missingInputTitle": "Input belum lengkap",
+      "missingInputMsg": "Email dan kata sandi wajib diisi.",
+      "loginFailedTitle": "Login gagal",
+      "loginFailedMsg": "Periksa email/kata sandi dan koneksi internet, lalu coba lagi."
+    }
+  },
+  "newPasswordScreen": {
+    "title": "Kata Sandi Baru",
+    "description": "Silakan buat kata sandi baru yang kuat untuk akun Anda. Pastikan kedua kolom di bawah ini terisi dengan benar.",
+    "passwordLabel": "Kata Sandi",
+    "passwordPlaceholder": "********",
+    "confirmPasswordLabel": "Konfirmasi Sandi",
+    "buttonLoading": "Menyimpan...",
+    "buttonSave": "Simpan Kata Sandi Baru",
+    "alert": {
+      "invalidPasswordTitle": "Kata Sandi Tidak Valid",
+      "invalidPasswordMsg": "Silakan masukkan kata sandi minimal 6 karakter.",
+      "passwordMismatchTitle": "Kata Sandi Tidak Cocok",
+      "passwordMismatchMsg": "Silakan masukkan kata sandi yang sama di kedua kolom.",
+      "saveFailedTitle": "Gagal Menyimpan",
+      "saveFailedMsg": "Gagal menyimpan kata sandi baru."
+    }
+  },
+  "registerScreen": {
+    "firstNameLabel": "Nama Depan",
+    "firstNamePlaceholder": "Jane",
+    "lastNameLabel": "Nama Belakang",
+    "lastNamePlaceholder": "Doe",
+    "emailLabel": "Email",
+    "emailPlaceholder": "email@gmail.com",
+    "passwordLabel": "Kata Sandi",
+    "passwordPlaceholder": "********",
+    "confirmPasswordLabel": "Konfirmasi Kata Sandi",
+    "passwordMismatchError": "Kata sandi tidak cocok",
+    "buttonRegister": "Daftar",
+    "haveAccountText": "Sudah Punya Akun?",
+    "loginText": "Masuk",
+    "alertButtonUnderstand": "Mengerti",
+    "alert": {
+      "passwordMismatchTitle": "Kata sandi tidak cocok",
+      "passwordMismatchMsg": "Pastikan kata sandi dan konfirmasi sama.",
+      "missingInputTitle": "Input belum lengkap",
+      "missingInputMsg": "Nama, email, dan kata sandi wajib diisi.",
+      "registerSuccessTitle": "Registrasi Berhasil",
+      "registerSuccessMsg": "Akun berhasil dibuat. Silakan login.",
+      "registerFailedTitle": "Registrasi Gagal",
+      "registerFailedDefaultMsg": "Terjadi kesalahan saat membuat akun."
+    }
+  },
+  "signInScreen": {
+    "buttonLogin": "Masuk",
+    "buttonRegister": "Daftar"
+  },
+  "successNewPasswordScreen": {
+    "title": "Kata Sandi Berhasil Diubah",
+    "description": "Kata sandi Anda telah berhasil diubah. Silakan gunakan kata sandi baru Anda untuk masuk ke akun Anda.",
+    "buttonLogin": "Menuju Halaman Masuk"
+  },
+  "verifyCodeScreen": {
+    "title": "Verifikasi Alamat Email",
+    "subtitlePrefix": "Kode verifikasi telah dikirim ke:",
+    "fallbackEmail": "email@gmail.com",
+    "buttonVerifying": "Memverifikasi...",
+    "buttonVerify": "Konfirmasi Kode",
+    "resendCountdown": "Kirim ulang kode dalam ",
+    "resendSending": "Mengirim ulang...",
+    "resendButton": "Kirim Ulang Kode",
+    "alert": {
+      "invalidInputTitle": "Input Tidak Valid",
+      "invalidInputMsg": "Silakan masukkan kode 6 digit.",
+      "otpUsed": "Kode OTP sudah pernah dipakai. Silakan kirim ulang kode.",
+      "otpTooManyAttempts": "Terlalu banyak percobaan. Silakan kirim ulang kode.",
+      "otpExpired": "Kode OTP sudah kedaluwarsa. Silakan kirim ulang kode.",
+      "otpInvalid": "Kode OTP salah atau kedaluwarsa.",
+      "verifyFailedTitle": "Verifikasi Gagal",
+      "resendSuccessTitle": "Kode Dikirim",
+      "resendSuccessMsg": "Kode verifikasi baru telah dikirim ke email Anda.",
+      "resendFailedTitle": "Gagal",
+      "resendFailedMsg": "Gagal mengirim ulang OTP. Silakan coba lagi."
+    }
+  },
+  "gempaDirasakanScreen": {
+    "distanceSuffix": " km dari Bandung",
+    "statMagnitude": "Magnitudo",
+    "statDepth": "Kedalaman",
+    "latLabel": "LS",
+    "lonLabel": "BT",
+    "labelLocation": "Lokasi Gempa :",
+    "labelTime": "Waktu :",
+    "labelDistance": "Jarak :",
+    "labelFelt": "Wilayah Dirasakan (Skala MMI) :",
+    "btnShakeMap": "PETA GUNCANGAN"
+  },
+  "gempaTerdeteksiScreen": {
+    "statMagnitude": "Magnitudo",
+    "statDepth": "Kedalaman",
+    "latLabel": "LS",
+    "lonLabel": "BT",
+    "labelLocation": "Lokasi Gempa :",
+    "labelTime": "Waktu :",
+    "labelFase": "Fase :",
+    "labelDate": "Tanggal :",
+    "labelHour": "Jam :",
+    "labelStatus": "Status :"
+  },
+  "filterScreen": {
+    "title": "Filter",
+    "modeRange": "7 Hari / Range",
+    "modeMonth": "Tahun / Bulan",
+    "selectYear": "Pilih Tahun",
+    "selectMonth": "Pilih Bulan",
+    "dateFrom": "Dari tanggal",
+    "dateTo": "Sampai tanggal",
+    "btnReset": "Reset",
+    "btnSave": "Simpan"
+  },
+  "historyScreen": {
+    "distanceSuffix": " km dari lokasi Anda",
+    "magLabel": "Mag",
+    "depthPrefix": "Kedalaman: ",
+    "emptyDataText": "Data gempa belum tersedia.",
+    "emptyTsunamiText": "Data tsunami belum tersedia.",
+    "listTitleDirasakan": "Gempa Dirasakan Terbaru",
+    "listTitleTerdeteksi": "Gempa Terdeteksi Terbaru",
+    "listTitleTsunami": "Riwayat Tsunami",
+    "filterBtnText": "FILTER"
+  },
+  "months": {
+    "1": "Januari",
+    "2": "Februari",
+    "3": "Maret",
+    "4": "April",
+    "5": "Mei",
+    "6": "Juni",
+    "7": "Juli",
+    "8": "Agustus",
+    "9": "September",
+    "10": "Oktober",
+    "11": "November",
+    "12": "Desember"
+  },
+  "homeScreen": {
+    "greeting": "Halo, ",
+    "defaultUserName": "Pengguna",
+    "loading": "Memuat...",
+    "timeAgo": {
+      "justNow": "Baru saja",
+      "yesterday": "Kemarin",
+      "daysAgo": " Hari Lalu",
+      "hoursAgo": " Jam Lalu",
+      "minsAgo": " Menit Lalu"
+    },
+    "status": {
+      "danger": "Bahaya",
+      "affected": "Terdampak",
+      "safe": "Aman"
+    },
+    "locationFallback": "Lokasi Saya",
+    "statLastQuake": "GEMPA TERAKHIR",
+    "statDistance": "JARAK GEMPA",
+    "statStatus": "STATUS WILAYAH",
+    "titleDirasakan": "Gempabumi Terakhir Dirasakan",
+    "descDirasakan": "Menampilkan kejadian gempa yang getarannya dirasakan oleh manusia dan dilaporkan di wilayah sekitar.",
+    "titleTerdeteksi": "Gempabumi Terakhir Terdeteksi",
+    "descTerdeteksi": "Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia.",
+    "titleTsunami": "Informasi Tsunami Terakhir",
+    "descTsunami": "Menampilkan informasi peringatan dini tsunami terbaru dari BMKG."
+  },
+  "notificationsScreen": {
+    "headerTitle": "Notifikasi Terbaru",
+    "fallbackTitle": "Notifikasi",
+    "cardTitleDirasakan": "Gempa Dirasakan",
+    "cardTitleTerdeteksi": "Gempa Terdeteksi",
+    "defaultTsunamiTitle": "Peringatan Tsunami",
+    "badgeDirasakan": "Dirasakan",
+    "badgeTidakDirasakan": "Tidak dirasakan",
+    "badgeTsunami": "Tsunami",
+    "badgeInfo": "Info",
+    "unavailableEarthquakeInfo": "Informasi gempa tidak tersedia",
+    "unavailableTsunamiInfo": "Informasi tsunami tidak tersedia",
+    "unavailableLocation": "Lokasi tidak tersedia",
+    "loadError": "Gagal memuat notifikasi. Periksa koneksi Anda.",
+    "emptyFallback": "Belum ada notifikasi."
+  },
+  "inAppNotificationModal": {
+    "closeButton": "Tutup",
+    "viewButton": "Lihat Info"
+  },
+  "locationSearchModal": {
+    "title": "Pilih Lokasi",
+    "searchPlaceholder": "Ketik nama desa atau kecamatan..."
+  },
+  "networkErrorModal": {
+    "title": "Koneksi Jaringan",
+    "description": "Tidak dapat terhubung ke jaringan. Pastikan internet Anda aktif.",
+    "button": "Mengerti"
+  },
+  "shakeMapModal": {
+    "title": "PETA GUNCANGAN",
+    "subtitle": "Sumber data: BMKG ShakeMap",
+    "footerNote": "* Data diperbarui secara otomatis dari BMKG ShakeMap"
+  },
+  "narasiModal": {
+    "title": "NARASI RESMI BMKG",
+    "subtitle": "Sumber data: BMKG InfoGempa",
+    "loading": "Memuat narasi...",
+    "empty": "Narasi resmi belum tersedia.",
+    "footerNote": "* Narasi resmi diterbitkan oleh Direktur Gempabumi dan Tsunami BMKG"
+  },
+  "historicalProcessModal": {
+    "title": "PROSES HISTORIS",
+    "subtitle": "Riwayat pembaruan parameter gempa oleh BMKG",
+    "loading": "Memuat data historis...",
+    "empty": "Data historis belum tersedia.",
+    "legendIntro": "Berikut ini merupakan historical proses perhitungan parameter gempabumi sejalan dengan datang atau bertambahnya data waveform seismik dari stasiun remote",
+    "legendUpdate": "Setiap baris = satu pembaruan parameter sejak gempa terdeteksi",
+    "otLabel": "+OT",
+    "phaseLabel": "Fase",
+    "latitudeLabel": "Lintang",
+    "longitudeLabel": "Bujur",
+    "depthLabel": "Kedalaman",
+    "magnitudeLabel": "Magnitudo",
+    "minuteSuffix": "mnt",
+    "footerNote": "* Data pembaruan parameter real-time dari sistem BMKG"
+  },
+  "earthquakeTabs": {
+    "felt": "GEMPA DIRASAKAN",
+    "detected": "GEMPA TERDETEKSI",
+    "tsunami": "TSUNAMI"
+  },
+  "historyTabs": {
+    "tsunami": "RIWAYAT TSUNAMI"
+  },
+  "historyErrors": {
+    "tsunamiHistoryLabel": "riwayat tsunami",
+    "firebasePermission": "Akses Firebase untuk {{label}} ditolak. Periksa rules read /tsunamiEvents.",
+    "firebaseTimeout": "Koneksi Firebase untuk {{label}} terlalu lama. Coba lagi nanti.",
+    "loadFailed": "Gagal memuat data."
+  },
+  "tsunamiScreen": {
+    "defaultWarningSubject": "Peringatan Tsunami",
+    "labelStatus": "Status :",
+    "labelSubject": "Subjek :",
+    "labelTsunamiInfo": "Informasi Tsunami :",
+    "btnFullInfo": "INFORMASI LENGKAP"
+  },
+  "tsunamiInfoModal": {
+    "title": "INFORMASI TSUNAMI",
+    "subtitle": "Sumber data: BMKG InaTEWS",
+    "labelTsunamiInfo": "Informasi Tsunami :",
+    "visualInfoTitle": "Informasi Visual",
+    "warningAreaTitle": "Wilayah Peringatan Tsunami",
+    "provinceLabel": "Provinsi",
+    "regionLabel": "Wilayah",
+    "levelLabel": "Level",
+    "timeLabel": "Waktu",
+    "observationTitle": "Observasi Tsunami",
+    "locationLabel": "Lokasi",
+    "coordinateLabel": "Koordinat",
+    "heightLabel": "Tinggi",
+    "empty": "Informasi lengkap tsunami belum tersedia."
+  },
+  "tsunamiMapSlides": {
+    "shakemap": "Shakemap / Peta Guncangan",
+    "wzmap": "WZMap / Peta Zona Peringatan",
+    "ttmap": "TTMap / Peta Waktu Tiba Tsunami",
+    "sshmap": "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height"
+  },
+  "warningTabs": {
+    "update": "Update {{number}}"
+  },
+  "gpsButton": {
+    "useGps": "Gunakan GPS",
+    "loading": "Sedang memuat..."
+  },
+  "accountScreen": {
+    "menuProfile": "Pengaturan Profil",
+    "menuPassword": "Ubah Kata Sandi",
+    "menuLocation": "Ubah Lokasi",
+    "menuLanguage": "Ubah Bahasa",
+    "menuPushNotif": "Notifikasi Push",
+    "menuAbout": "Tentang Aplikasi",
+    "modalNotifActive": "Notifikasi Aktif",
+    "modalNotifInactive": "Notifikasi Nonaktif",
+    "modalDescActive": "Dengan ini, Anda akan menerima pemberitahuan langsung di perangkat Anda terkait aktivitas gempa terkini.",
+    "modalDescInactive": "Anda telah mematikan notifikasi. Anda tidak akan menerima pemberitahuan langsung mengenai pembaruan sistem atau gempa.",
+    "modalBtnUnderstand": "Mengerti"
+  },
+  "pengaturanProfilScreen": {
+    "title": "Pengaturan Profil",
+    "firstNameLabel": "Nama Depan",
+    "lastNameLabel": "Nama Belakang",
+    "btnCancel": "Batal",
+    "btnSaving": "Menyimpan...",
+    "btnSave": "Simpan",
+    "btnLogouting": "Keluar...",
+    "btnLogout": "Keluar",
+    "modalLogoutTitle": "Keluar dari Akun?",
+    "modalLogoutDesc": "Apakah Anda benar-benar ingin logout dari akun ini?",
+    "alert": {
+      "errorTitle": "Error",
+      "missingFirstName": "Nama depan wajib diisi",
+      "userNotLoggedIn": "User belum login",
+      "updateFailed": "Gagal memperbarui profil",
+      "logoutFailedTitle": "Gagal Keluar",
+      "logoutFailedMsg": "Gagal keluar. Silakan coba lagi."
+    }
+  },
+  "tentangAplikasiScreen": {
+    "title": "Tentang Aplikasi",
+    "desc1": " adalah platform pemantauan aktivitas seismik mutakhir yang dirancang khusus untuk memetakan data gempa bumi secara real-time di seluruh wilayah Indonesia.",
+    "desc2": "Aplikasi ini hadir sebagai solusi mitigasi bencana dini, memberikan kemudahan bagi masyarakat untuk mengakses informasi parameter gempa seperti magnitudo, kedalaman, dan koordinat secara instan.",
+    "desc3_1": "Fitur unggulan kami mencakup sistem notifikasi alarm otomatis berbasis lokasi (GPS). Saat ini, fitur peringatan dini dioptimalkan khusus untuk wilayah ",
+    "desc3_2": " guna memastikan akurasi data yang lebih presisi.",
+    "desc4_1": "Seluruh data yang disajikan bersumber langsung dari ",
+    "desc4_2": " sebagai otoritas resmi, sehingga informasi yang Anda terima terjamin keakuratannya.",
+    "versionLabel": "Versi: 1.0.0",
+    "btnBack": "Kembali"
+  },
+  "ubahBahasaScreen": {
+    "title": "Ubah Bahasa",
+    "btnBack": "Kembali",
+    "modalSuccessTitle": "Berhasil",
+    "modalSuccessDesc": "Bahasa aplikasi telah berhasil diubah ke",
+    "modalSuccessBtn": "Mengerti",
+    "modalWarningTitle": "Peringatan",
+    "modalWarningDesc": "Aplikasi memerlukan setidaknya satu bahasa yang aktif. Anda tidak dapat mematikan semua bahasa.",
+    "modalWarningBtn": "Tutup"
+  },
+  "ubahKataSandiScreen": {
+    "title": "Ubah Kata Sandi",
+    "oldPasswordLabel": "Kata Sandi Saat Ini",
+    "newPasswordLabel": "Kata Sandi Baru",
+    "confirmPasswordLabel": "Konfirmasi Kata Sandi",
+    "errorMismatch": "Kata sandi baru dan konfirmasi tidak cocok",
+    "btnCancel": "Batal",
+    "btnSaving": "Menyimpan...",
+    "btnSave": "Simpan",
+    "alert": {
+      "errorTitle": "Error",
+      "missingFields": "Semua field kata sandi wajib diisi",
+      "minLen": "Kata sandi baru minimal 6 karakter",
+      "invalidUser": "User tidak valid, silakan login ulang",
+      "wrongCurrentPass": "Kata sandi saat ini salah",
+      "weakPass": "Kata sandi baru terlalu lemah",
+      "tooManyRequests": "Terlalu banyak percobaan, coba lagi nanti",
+      "updateFailed": "Gagal memperbarui kata sandi"
+    }
+  },
+  "ubahLokasiScreen": {
+    "title": "Ubah Lokasi",
+    "description": "Silahkan Pilih Lokasi Anda atau Menggunakan Mode GPS",
+    "searchLabel": "Cari Lokasi",
+    "searchPlaceholder": "Cari Kelurahan atau Desa...",
+    "orDivider": "Atau",
+    "btnGps": "Pakai GPS",
+    "btnCancel": "Batal",
+    "btnSave": "Simpan",
+    "fallbackGpsLocation": "Lokasi GPS",
+    "modalSuccessTitle": "Berhasil",
+    "modalSuccessDesc": "Lokasi Anda telah berhasil diperbarui di sistem SeismoTrack.",
+    "modalSuccessBtn": "Mengerti",
+    "status": {
+      "updating": "Memperbarui Lokasi ...",
+      "requestingPermission": "Meminta izin akses lokasi...",
+      "updatingLocation": "Sedang memperbarui lokasi..."
+    },
+    "alert": {
+      "permissionDeniedTitle": "Permission Ditolak",
+      "permissionDeniedMsg": "Aktifkan izin lokasi di pengaturan.",
+      "gpsTimeoutTitle": "GPS Lambat",
+      "gpsTimeoutMsg": "Sinyal GPS tidak tersedia. Coba lagi di area terbuka.",
+      "errorTitle": "Error",
+      "gpsErrorMsg": "Tidak dapat mengakses GPS.",
+      "saveErrorNoLocationMsg": "Silakan pilih lokasi terlebih dahulu",
+      "saveErrorDbMsg": "Gagal menyimpan lokasi ke database"
+    }
+  },
+  "rootLayout": {
+    "fallbackNotifTitle": "Peringatan Gempa Bumiii!"
+  },
+  "bottomNav": {
+    "home": "HOME",
+    "gempa": "GEMPA",
+    "riwayat": "RIWAYAT",
+    "akun": "AKUN"
+  },
+  "customAlert": {
+    "defaultButton": "Mengerti"
+  },
+  "notificationModal": {
+    "magnitude": "MAGNITUDO",
+    "depth": "KEDALAMAN",
+    "tsunamiPotential": "POTENSI TSUNAMI"
+  },
+  "common": {
+    "share": "BAGIKAN",
+    "understand": "Mengerti",
+    "close": "Tutup"
+  },
+  "earthquake": {
+    "shakeMap": "PETA GUNCANGAN",
+    "magnitude": "Magnitudo",
+    "depth": "Kedalaman",
+    "latitude": "LS",
+    "longitude": "BT",
+    "location": "Lokasi Gempa",
+    "date": "Tanggal",
+    "time": "Jam",
+    "phase": "Fase",
+    "eventTime": "Waktu",
+    "distance": "Jarak",
+    "distanceFromYourLocation": "{{distance}} km dari lokasi Anda",
+    "feltArea": "Wilayah Dirasakan",
+    "feltAreaMmi": "Wilayah Dirasakan (Skala MMI) :",
+    "tabs": {
+      "felt": "GEMPA DIRASAKAN",
+      "detected": "GEMPA TERDETEKSI"
+    },
+    "officialNarrative": "NARASI RESMI",
+    "historicalProcess": "PROSES HISTORIS",
+    "status": "Status"
+  },
+  "share": {
+    "title": "Bagikan Informasi Gempa",
+    "subtitle": "Pilih cara untuk membagikan informasi gempa ini:",
+    "viaApp": "Bagikan via Aplikasi",
+    "preview": "Preview",
+    "earthquakeInfo": "Informasi Gempa {{type}}",
+    "feltEarthquake": "Dirasakan",
+    "detectedEarthquake": "Terdeteksi",
+    "location": "Lokasi",
+    "coordinate": "Koordinat",
+    "distanceFromMyLocation": "{{distance}} km dari lokasi saya"
+  },
+  "shareQuake": {
+    "event": {
+      "felt": "Gempa Dirasakan",
+      "detected": "Gempa Terdeteksi",
+      "tsunami": "Tsunami"
+    },
+    "title": {
+      "felt": "Bagikan Informasi Gempa Dirasakan",
+      "detected": "Bagikan Informasi Gempa Terdeteksi",
+      "tsunami": "Bagikan Informasi Tsunami"
+    },
+    "magnitude": "Magnitudo",
+    "depth": "Kedalaman",
+    "location": "Lokasi",
+    "time": "Waktu",
+    "coordinates": "Koordinat",
+    "moreInfo": "Informasi selengkapnya lihat di https://bmkg.go.id"
+  },
+  "map": {
+    "showFaultLines": "Tampilkan patahan",
+    "showSeismicSensors": "Tampilkan sensor seismik",
+    "showBmkgSeismicSensors": "Sensor Seismik BMKG",
+    "showGlobalSeismicSensors": "Sensor Seismik Global"
+  }
+}

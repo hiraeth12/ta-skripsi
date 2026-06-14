@@ -9,6 +9,7 @@ import {
 } from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
     Image,
     KeyboardAvoidingView,
@@ -39,6 +40,7 @@ function getFirebaseAuthError(code: string | undefined): string {
 }
 
 export default function Login() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [secure, setSecure] = useState(true);
   const [email, setEmail] = useState("");
@@ -128,7 +130,7 @@ export default function Login() {
           resizeMode="contain"
         />
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>{t("loginScreen.emailLabel")}</Text>
         <TextInput
           placeholder="email@gmail.com"
           placeholderTextColor="#999"
@@ -139,7 +141,7 @@ export default function Login() {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Kata Sandi</Text>
+        <Text style={styles.label}>{t("loginScreen.passwordLabel")}</Text>
         <View style={styles.passwordContainer}>
           <TextInput
             placeholder="********"
@@ -164,7 +166,7 @@ export default function Login() {
         <TouchableOpacity
           onPress={() => router.push("/starter/forgot-password")}
         >
-          <Text style={styles.forgotPassword}>Lupa Kata Sandi?</Text>
+          <Text style={styles.forgotPassword}>{t("loginScreen.forgotPasswordText")}</Text>
         </TouchableOpacity>
 
         <AuthButton
@@ -175,7 +177,7 @@ export default function Login() {
 
         <Text style={styles.signUpText}>Belum Punya Akun?</Text>
         <TouchableOpacity onPress={() => router.push("/starter/register")}>
-          <Text style={styles.registerText}>Daftar</Text>
+          <Text style={styles.registerText}>{t("loginScreen.registerText")}</Text>
         </TouchableOpacity>
       </ScrollView>
 

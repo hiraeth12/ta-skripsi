@@ -4,6 +4,12 @@ const READ_TIMEOUT_MS = 8000;
 
 type RealtimeDatabase = Parameters<typeof ref>[0];
 
+type RealtimeReadErrorMessages = {
+  permissionDenied?: (label: string) => string;
+  timeout?: (label: string) => string;
+  fallback?: (label: string) => string;
+};
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -86,16 +92,26 @@ export async function readRealtimeNode(
   }
 }
 
-export function describeRealtimeReadError(error: unknown, label: string): string {
+export function describeRealtimeReadError(
+  error: unknown,
+  label: string,
+  messages?: RealtimeReadErrorMessages,
+): string {
   const message = errorMessage(error);
 
   if (/permission|denied/i.test(message)) {
-    return `Akses Firebase untuk ${label} ditolak. Periksa rules read /tsunamiEvents.`;
+    return (
+      messages?.permissionDenied?.(label) ??
+      `Akses Firebase untuk ${label} ditolak. Periksa rules read /tsunamiEvents.`
+    );
   }
 
   if (/timeout|abort/i.test(message)) {
-    return `Koneksi Firebase untuk ${label} terlalu lama. Coba lagi nanti.`;
+    return (
+      messages?.timeout?.(label) ??
+      `Koneksi Firebase untuk ${label} terlalu lama. Coba lagi nanti.`
+    );
   }
 
-  return `Gagal memuat ${label}.`;
+  return messages?.fallback?.(label) ?? `Gagal memuat ${label}.`;
 }

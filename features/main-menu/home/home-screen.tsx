@@ -7,11 +7,12 @@ import Skeleton from "@/components/ui/skeleton";
 import { CACHE_KEYS, getPersistentCache } from "@/utils/cache";
 import { calculateTimeAgo } from "@/utils/date";
 import { computeStatus } from "@/utils/earthquake";
-import { shareQuake } from "@/utils/share";
+import { getShareQuakeLabels, shareQuake } from "@/utils/share";
 import { Ionicons } from "@expo/vector-icons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Image,
   NativeScrollEvent,
@@ -38,6 +39,8 @@ import type { TsunamiQuake } from "./components/tsunami-card";
 export default function Home() {
   const router = useRouter();
   const session = useUserSession();
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === "en" ? "en-US" : "id-ID";
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -102,23 +105,81 @@ export default function Home() {
     showNetworkError,
   });
 
-  const status = useMemo(() => computeStatus(dirasakanData), [dirasakanData]);
+  const status = useMemo(() => computeStatus(dirasakanData, t), [dirasakanData, t]);
   const timeAgo = useMemo(
-    () => calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? ""),
-    [dirasakanData?.tanggal, dirasakanData?.jam],
+    () => calculateTimeAgo(dirasakanData?.tanggal ?? "", dirasakanData?.jam ?? "", t),
+    [dirasakanData?.tanggal, dirasakanData?.jam, t],
+  );
+  const displayUserName = session.profile?.name
+    ? userName
+    : t("homeScreen.defaultUserName");
+  const displayLocationName = useMemo(() => {
+    if (userLocation.name === "Lokasi GPS") {
+      return t("askLocationScreen.fallbackLocationName");
+    }
+    if (userLocation.name === "Lokasi Saya") {
+      return t("homeScreen.locationFallback");
+    }
+    return userLocation.name;
+  }, [t, userLocation.name]);
+  const shareLabels = useMemo(() => getShareQuakeLabels(t), [t]);
+  const networkErrorModalTexts = useMemo(
+    () => ({
+      title: t("networkErrorModal.title"),
+      description: t("networkErrorModal.description"),
+      button: t("networkErrorModal.button"),
+    }),
+    [t],
+  );
+  const shakeMapModalTexts = useMemo(
+    () => ({
+      title: t("shakeMapModal.title"),
+      subtitle: t("shakeMapModal.subtitle"),
+      footerNote: t("shakeMapModal.footerNote"),
+    }),
+    [t],
+  );
+  const narasiModalTexts = useMemo(
+    () => ({
+      title: t("narasiModal.title"),
+      subtitle: t("narasiModal.subtitle"),
+      loading: t("narasiModal.loading"),
+      empty: t("narasiModal.empty"),
+      footerNote: t("narasiModal.footerNote"),
+    }),
+    [t],
+  );
+  const historicalProcessModalTexts = useMemo(
+    () => ({
+      title: t("historicalProcessModal.title"),
+      subtitle: t("historicalProcessModal.subtitle"),
+      loading: t("historicalProcessModal.loading"),
+      empty: t("historicalProcessModal.empty"),
+      legendIntro: t("historicalProcessModal.legendIntro"),
+      legendUpdate: t("historicalProcessModal.legendUpdate"),
+      otLabel: t("historicalProcessModal.otLabel"),
+      phaseLabel: t("historicalProcessModal.phaseLabel"),
+      latitudeLabel: t("historicalProcessModal.latitudeLabel"),
+      longitudeLabel: t("historicalProcessModal.longitudeLabel"),
+      depthLabel: t("historicalProcessModal.depthLabel"),
+      magnitudeLabel: t("historicalProcessModal.magnitudeLabel"),
+      minuteSuffix: t("historicalProcessModal.minuteSuffix"),
+      footerNote: t("historicalProcessModal.footerNote"),
+    }),
+    [t],
   );
 
   const handleShareDirasakan = useCallback(
-    () => shareQuake(dirasakanData, "dirasakan"),
-    [dirasakanData],
+    () => shareQuake(dirasakanData, "dirasakan", shareLabels),
+    [dirasakanData, shareLabels],
   );
   const handleShareTerdeteksi = useCallback(
-    () => shareQuake(terdeteksiData, "terdeteksi"),
-    [terdeteksiData],
+    () => shareQuake(terdeteksiData, "terdeteksi", shareLabels),
+    [terdeteksiData, shareLabels],
   );
   const handleShareTsunami = useCallback(
-    () => shareQuake(tsunamiData, "tsunami"),
-    [tsunamiData],
+    () => shareQuake(tsunamiData, "tsunami", shareLabels),
+    [shareLabels, tsunamiData],
   );
 
   /**
@@ -216,9 +277,9 @@ export default function Home() {
         {/* Greeting */}
         <View style={styles.greetingRow}>
           <View>
-            <Text style={styles.greeting}>Halo, {userName} !</Text>
+            <Text style={styles.greeting}>{t("homeScreen.greeting")}{displayUserName} !</Text>
             <Text style={styles.date}>
-              {currentDate.toLocaleDateString("id-ID", {
+              {currentDate.toLocaleDateString(dateLocale, {
                 weekday: "long",
                 year: "numeric",
                 month: "long",
@@ -236,13 +297,13 @@ export default function Home() {
             <Image source={{ uri: locationImageUrl }} style={styles.locationImage} />
           )}
           <Text style={styles.locationText}>
-            <Ionicons name="location-outline" size={16} /> {userLocation.name}
+            <Ionicons name="location-outline" size={16} /> {displayLocationName}
           </Text>
 
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <MaterialIcons name="history" size={20} color="#1E6F9F" />
-              <Text style={styles.statLabel}>GEMPA TERAKHIR</Text>
+              <Text style={styles.statLabel}>{t("homeScreen.statLastQuake")}</Text>
               {dirasakanData ? (
                 <Text style={styles.statValue}>{timeAgo}</Text>
               ) : (
@@ -251,7 +312,7 @@ export default function Home() {
             </View>
             <View style={styles.statItem}>
               <Ionicons name="location-outline" size={20} color="#1E6F9F" />
-              <Text style={styles.statLabel}>JARAK GEMPA</Text>
+              <Text style={styles.statLabel}>{t("homeScreen.statDistance")}</Text>
               {dirasakanData ? (
                 <Text style={styles.statValue}>{`${dirasakanData.distanceKm} km`}</Text>
               ) : (
@@ -264,7 +325,7 @@ export default function Home() {
                 size={20}
                 color={dirasakanData ? status.color : "#CBD5E1"}
               />
-              <Text style={styles.statLabel}>STATUS WILAYAH</Text>
+              <Text style={styles.statLabel}>{t("homeScreen.statStatus")}</Text>
               {dirasakanData ? (
                 <Text style={[styles.statValue, { color: status.color, fontWeight: "bold" }]}>
                   {status.label}
@@ -289,7 +350,7 @@ export default function Home() {
             {/* Dirasakan */}
             <View style={{ width: SCREEN_WIDTH }}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Gempabumi Terakhir Dirasakan</Text>
+                <Text style={styles.sectionTitle}>{t("homeScreen.titleDirasakan")}</Text>
                 <TouchableOpacity onPress={() => setInfoVisibleDirasakan(true)}>
                   <Ionicons name="information-circle-outline" size={25} color="#fff" />
                 </TouchableOpacity>
@@ -317,7 +378,7 @@ export default function Home() {
             {/* Terdeteksi */}
             <View style={{ width: SCREEN_WIDTH }}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Gempabumi Terakhir Terdeteksi</Text>
+                <Text style={styles.sectionTitle}>{t("homeScreen.titleTerdeteksi")}</Text>
                 <TouchableOpacity onPress={() => setInfoVisibleTerdeteksi(true)}>
                   <Ionicons name="information-circle-outline" size={25} color="#fff" />
                 </TouchableOpacity>
@@ -340,7 +401,7 @@ export default function Home() {
             {/* Tsunami */}
             <View style={{ width: SCREEN_WIDTH }}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Informasi Tsunami Terakhir</Text>
+                <Text style={styles.sectionTitle}>{t("homeScreen.titleTsunami")}</Text>
                 <TouchableOpacity onPress={() => setInfoVisibleTsunami(true)}>
                   <Ionicons name="information-circle-outline" size={25} color="#fff" />
                 </TouchableOpacity>
@@ -377,21 +438,20 @@ export default function Home() {
       <InfoModal
         visible={infoVisibleDirasakan}
         onClose={() => setInfoVisibleDirasakan(false)}
-        title="Gempabumi Terakhir Dirasakan"
-        desc="Menampilkan kejadian gempa yang telah diverifikasi oleh BMKG , termasuk informasi dampak dan tingkat kerusakannya."
+        title={t("homeScreen.titleDirasakan")}
+        desc={t("homeScreen.descDirasakan")}
       />
       <InfoModal
         visible={infoVisibleTerdeteksi}
         onClose={() => setInfoVisibleTerdeteksi(false)}
-        title="Gempabumi Terakhir Terdeteksi"
-        desc="Menampilkan kejadian gempa yang masih berada pada tahap terdeteksi oleh seismograf. Informasi ini mengutamakan kecepatan, sehingga dampak dan tingkat kerusakannya belum diverifikasi oleh BMKG."
+        title={t("homeScreen.titleTerdeteksi")}
+        desc={t("homeScreen.descTerdeteksi")}
       />
       <InfoModal
         visible={infoVisibleTsunami}
         onClose={() => setInfoVisibleTsunami(false)}
-        title="Peringatan Tsunami"
-        desc="Menampilkan informasi peringatan dini tsunami terbaru dari BMKG, termasuk tahapan PD-1 hingga PD-4 sebagai pembaruan status peringatan, mulai dari informasi awal, pemutakhiran data, pemantauan ancaman, hingga peringatan dinyatakan berakhir.
-"
+        title={t("homeScreen.titleTsunami")}
+        desc={t("homeScreen.descTsunami")}
       />
       <NetworkErrorModal
         visible={networkErrorModalVisible}
@@ -399,17 +459,20 @@ export default function Home() {
           setNetworkErrorModalVisible(false);
           networkErrorShownRef.current = false;
         }}
+        texts={networkErrorModalTexts}
       />
       <ModalShakeMap
         visible={shakeMapVisible}
         imageUrl={activeShakeMapUrl}
         onClose={() => setShakeMapVisible(false)}
+        texts={shakeMapModalTexts}
       />
       {/* Modal narasi resmi BMKG */}
       <ModalNarasi
         visible={narasiVisible}
         htmlContent={narasiHtmlContent}
         loading={narasiLoading}
+        texts={narasiModalTexts}
         onClose={() => {
           setNarasiVisible(false);
           setNarasiHtmlContent(null);
@@ -419,6 +482,7 @@ export default function Home() {
         visible={historyVisible}
         rawContent={historyRawContent}
         loading={historyLoading}
+        texts={historicalProcessModalTexts}
         onClose={() => {
           setHistoryVisible(false);
           setHistoryRawContent(null);

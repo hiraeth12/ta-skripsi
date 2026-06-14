@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { getNotificationMeta } from "@/features/main-menu/notifications/utils/notification-meta";
 import {
   getNotificationDisplayTitle,
@@ -10,11 +11,28 @@ import { styles } from "../styles/notifications-screen.styles";
 import type { NotifCardProps } from "../types";
 
 export function NotifCard({ item, onPress }: NotifCardProps) {
-  const meta = getNotificationMeta(item.type);
+  const { t } = useTranslation();
+  const meta = getNotificationMeta(item.type, {
+    feltTitle: t("notificationsScreen.cardTitleDirasakan"),
+    detectedTitle: t("notificationsScreen.cardTitleTerdeteksi"),
+    fallbackTitle: t("notificationsScreen.fallbackTitle"),
+    feltBadge: t("notificationsScreen.badgeDirasakan"),
+    notFeltBadge: t("notificationsScreen.badgeTidakDirasakan"),
+    tsunamiBadge: t("notificationsScreen.badgeTsunami"),
+    infoBadge: t("notificationsScreen.badgeInfo"),
+  });
+  const formatterLabels = {
+    defaultTsunamiTitle: t("notificationsScreen.defaultTsunamiTitle"),
+    unavailableEarthquakeInfo: t(
+      "notificationsScreen.unavailableEarthquakeInfo",
+    ),
+    unavailableTsunamiInfo: t("notificationsScreen.unavailableTsunamiInfo"),
+    unavailableLocation: t("notificationsScreen.unavailableLocation"),
+  };
   const displayTitle =
     item.type === "Tsunami"
-      ? getNotificationDisplayTitle(item)
-      : (meta.title ?? "Notifikasi");
+      ? getNotificationDisplayTitle(item, formatterLabels)
+      : (meta.title ?? t("notificationsScreen.fallbackTitle"));
   const timeLabel = getNotificationTimeLabel(item);
 
   return (
@@ -30,7 +48,7 @@ export function NotifCard({ item, onPress }: NotifCardProps) {
         <View style={styles.textWrapper}>
           <Text style={styles.notifTitle}>{displayTitle}</Text>
           <Text style={styles.notifSubTitle}>
-            {getNotificationSubtitle(item)}
+            {getNotificationSubtitle(item, formatterLabels)}
           </Text>
           {timeLabel ? (
             <Text style={styles.notifTime}>{timeLabel}</Text>

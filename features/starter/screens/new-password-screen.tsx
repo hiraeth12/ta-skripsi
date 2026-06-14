@@ -3,12 +3,14 @@ import CustomAlert from "@/components/ui/custom-alert";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { resetPasswordWithToken } from "../services/auth-service";
 import { styles } from "../styles/new-password-styles";
 
 export default function NewPassword() {
+  const { t } = useTranslation();
   const router = useRouter();
   const navigation = useNavigation();
   const { email, resetToken } = useLocalSearchParams<{
@@ -125,14 +127,14 @@ export default function NewPassword() {
         resizeMode="contain"
       />
 
-      <Text style={styles.label}>Kata Sandi Baru</Text>
+      <Text style={styles.label}>{t("newPasswordScreen.title")}</Text>
 
       <Text style={styles.description}>
         Silakan buat kata sandi baru yang kuat untuk akun Anda. Pastikan kedua
         kolom di bawah ini terisi dengan benar.
       </Text>
 
-      <Text style={styles.label}>Kata Sandi</Text>
+      <Text style={styles.label}>{t("newPasswordScreen.passwordLabel")}</Text>
       <View style={styles.passwordContainer}>
         <TextInput
           placeholder="********"
@@ -151,7 +153,7 @@ export default function NewPassword() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.label}>Konfirmasi Sandi</Text>
+      <Text style={styles.label}>{t("newPasswordScreen.confirmPasswordLabel")}</Text>
       <View style={styles.passwordContainer2}>
         <TextInput
           placeholder="********"
@@ -171,7 +173,7 @@ export default function NewPassword() {
       </View>
 
       <AuthButton
-        title={isLoading ? "Menyimpan..." : "Simpan Kata Sandi Baru"}
+        title={isLoading ? t("newPasswordScreen.buttonLoading") : t("newPasswordScreen.buttonSave")}
         onPress={handleResetPassword}
         disabled={isLoading}
       />

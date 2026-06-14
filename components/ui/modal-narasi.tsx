@@ -16,6 +16,13 @@ type ModalNarasiProps = {
   htmlContent: string | null;
   loading: boolean;
   onClose: () => void;
+  texts?: {
+    title?: string;
+    subtitle?: string;
+    loading?: string;
+    empty?: string;
+    footerNote?: string;
+  };
 };
 
 export function ModalNarasi({
@@ -23,8 +30,18 @@ export function ModalNarasi({
   htmlContent,
   loading,
   onClose,
+  texts,
 }: ModalNarasiProps) {
   const { height, width } = useWindowDimensions();
+  const resolvedTexts = {
+    title: texts?.title ?? "NARASI RESMI BMKG",
+    subtitle: texts?.subtitle ?? "Sumber data: BMKG InfoGempa",
+    loading: texts?.loading ?? "Memuat narasi...",
+    empty: texts?.empty ?? "Narasi resmi belum tersedia.",
+    footerNote:
+      texts?.footerNote ??
+      "* Narasi resmi diterbitkan oleh Direktur Gempabumi dan Tsunami BMKG",
+  };
 
   return (
     <Modal
@@ -37,9 +54,9 @@ export function ModalNarasi({
         <View style={[styles.modalCardBottom, { height: height * 0.9 }]}>
           <View style={styles.modalHeaderBottom}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitleBottom}>NARASI RESMI BMKG</Text>
+              <Text style={styles.modalTitleBottom}>{resolvedTexts.title}</Text>
               <Text style={styles.modalSubtitle}>
-                Sumber data: BMKG InfoGempa
+                {resolvedTexts.subtitle}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.modalCloseCircle}>
@@ -54,7 +71,7 @@ export function ModalNarasi({
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#1E6F9F" />
-                <Text style={styles.loadingText}>Memuat narasi...</Text>
+                <Text style={styles.loadingText}>{resolvedTexts.loading}</Text>
               </View>
             ) : htmlContent ? (
               <RenderHtml
@@ -70,7 +87,7 @@ export function ModalNarasi({
                   color="#CBD5E1"
                 />
                 <Text style={styles.emptyText}>
-                  Narasi resmi belum tersedia.
+                  {resolvedTexts.empty}
                 </Text>
               </View>
             )}
@@ -78,8 +95,7 @@ export function ModalNarasi({
 
           <View style={styles.modalFooter}>
             <Text style={styles.scrollHint}>
-              * Narasi resmi diterbitkan oleh Direktur Gempabumi dan Tsunami
-              BMKG
+              {resolvedTexts.footerNote}
             </Text>
           </View>
         </View>
