@@ -2,6 +2,7 @@ import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import {
@@ -31,6 +32,7 @@ function getOtpErrorMessage(error: unknown): string {
 }
 
 export default function VerifyCode() {
+  const { t } = useTranslation();
   const router = useRouter();
   const navigation = useNavigation();
   const { email } = useLocalSearchParams<{ email: string }>();
@@ -182,7 +184,7 @@ export default function VerifyCode() {
         resizeMode="contain"
       />
 
-      <Text style={styles.title}>Verifikasi Alamat Email</Text>
+      <Text style={styles.title}>{t("verifyCodeScreen.title")}</Text>
       <Text style={styles.subtitle}>
         Kode verifikasi telah dikirim ke:{"\n"}
         <Text style={styles.emailText}>{email || "email@gmail.com"}</Text>
@@ -215,7 +217,7 @@ export default function VerifyCode() {
       </View>
 
       <AuthButton
-        title={isLoading ? "Memverifikasi..." : "Konfirmasi Kode"}
+        title={isLoading ? t("verifyCodeScreen.buttonVerifying") : t("verifyCodeScreen.buttonVerify")}
         onPress={handleVerify}
         disabled={isLoading}
       />

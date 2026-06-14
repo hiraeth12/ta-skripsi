@@ -2,6 +2,7 @@ import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { DetailItem } from "./detail-item";
@@ -36,6 +37,7 @@ export const TerdeteksiCard = ({
   hasHistory: boolean;
 }) => {
   const mapRef = useRef<MapViewType | null>(null);
+  const { t } = useTranslation();
 
   return (
     <TouchableOpacity
@@ -81,7 +83,7 @@ export const TerdeteksiCard = ({
               }}
             >
               <Feather name="activity" size={12} color="white" />
-              <Text style={styles.mapButtonText}>PROSES HISTORIS</Text>
+              <Text style={styles.mapButtonText}>{t("earthquake.historicalProcess")}</Text>
             </TouchableOpacity>
           )}
 
@@ -93,7 +95,7 @@ export const TerdeteksiCard = ({
             }}
           >
             <Feather name="share" size={12} color="white" />
-            <Text style={styles.mapButtonText}>BAGIKAN</Text>
+            <Text style={styles.mapButtonText}>{t("common.share")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -102,21 +104,21 @@ export const TerdeteksiCard = ({
         <StatItem
           icon="triangle-wave"
           value={data?.magnitude ?? "-"}
-          label="Magnitudo"
+          label={t("earthquake.magnitude")}
         />
         <View style={styles.statTopDivider} />
-        <StatItem icon="rss" value={data?.kedalaman ?? "-"} label="Kedalaman" />
+        <StatItem icon="rss" value={data?.kedalaman ?? "-"} label={t("earthquake.depth")} />
         <View style={styles.statTopDivider} />
         <StatItem
           icon="compass-outline"
           value={data?.latText ?? "-"}
-          label="LS"
+          label={t("earthquake.latitude")}
         />
         <View style={styles.statTopDivider} />
         <StatItem
           icon="compass-outline"
           value={data?.lonText ?? "-"}
-          label="BT"
+          label={t("earthquake.longitude")}
         />
       </View>
 
@@ -125,23 +127,23 @@ export const TerdeteksiCard = ({
       <View style={styles.infoContent}>
         <DetailItem
           icon="location"
-          label="Lokasi Gempa :"
+          label={t("gempaDirasakanScreen.labelLocation")}
           value={data?.wilayah ?? "-"}
         />
         <DetailItem
           icon="calendar-outline"
-          label="Tanggal :"
+          label={t("earthquake.date")}
           value={data?.tanggal ?? "-"}
         />
         <DetailItem
           icon="time-outline"
-          label="Jam :"
+          label={t("earthquake.time")}
           value={data?.jam ?? "-"}
         />
         {!!data?.status && (
           <DetailItem
             icon="alert-circle-outline"
-            label="Status :"
+            label={t("earthquake.status")}
             value={data.status}
           />
         )}

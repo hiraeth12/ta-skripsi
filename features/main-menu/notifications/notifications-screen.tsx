@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
 import type { QuakeNotification } from "@/hooks/use-quake-notifications";
@@ -15,6 +16,7 @@ import {
 import { styles } from "./styles/notifications-screen.styles";
 
 export default function Notifikasi() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { visibleNotifications, error } = useVisibleNotifications();
 
@@ -57,7 +59,9 @@ export default function Notifikasi() {
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.sectionTitle}>Notifikasi Terbaru</Text>
+            <Text style={styles.sectionTitle}>
+              {t("notificationsScreen.headerTitle")}
+            </Text>
           </View>
 
           <FlatList
@@ -73,7 +77,9 @@ export default function Notifikasi() {
             )}
             ListEmptyComponent={() => (
               <Text style={styles.emptyText}>
-                {error ?? "Belum ada notifikasi."}
+                {error
+                  ? t("notificationsScreen.loadError")
+                  : t("notificationsScreen.emptyFallback")}
               </Text>
             )}
           />

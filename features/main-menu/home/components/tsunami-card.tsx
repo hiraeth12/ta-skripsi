@@ -2,6 +2,7 @@ import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
 import Feather from "@expo/vector-icons/Feather";
 import React, { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "../styles/homeStyles";
 import { DetailItem } from "./detail-item";
@@ -47,6 +48,7 @@ export const TsunamiCard = ({
   onShare: () => void;
 }) => {
   const mapRef = useRef<MapViewType | null>(null);
+  const { t } = useTranslation();
   const hasCoordinate =
     typeof data?.latitude === "number" && typeof data?.longitude === "number";
 
@@ -95,7 +97,7 @@ export const TsunamiCard = ({
               }}
             >
               <Feather name="file-text" size={12} color="white" />
-              <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+              <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
             </TouchableOpacity>
           )}
 
@@ -109,7 +111,7 @@ export const TsunamiCard = ({
               }}
             >
               <Feather name="map" size={12} color="white" />
-              <Text style={styles.mapButtonText}>PETA GUNCANGAN</Text>
+              <Text style={styles.mapButtonText}>{t("earthquake.shakeMap")}</Text>
             </TouchableOpacity>
           )}
 
@@ -121,7 +123,7 @@ export const TsunamiCard = ({
             }}
           >
             <Feather name="share" size={12} color="white" />
-            <Text style={styles.mapButtonText}>BAGIKAN</Text>
+            <Text style={styles.mapButtonText}>{t("common.share")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -130,25 +132,25 @@ export const TsunamiCard = ({
         <StatItem
           icon="triangle-wave"
           value={safeValue(data?.magnitude)}
-          label="Magnitudo"
+          label={t("earthquake.magnitude")}
         />
         <View style={styles.statTopDivider} />
         <StatItem
           icon="rss"
           value={safeValue(data?.kedalaman)}
-          label="Kedalaman"
+          label={t("earthquake.depth")}
         />
         <View style={styles.statTopDivider} />
         <StatItem
           icon="compass-outline"
           value={safeValue(data?.latText)}
-          label="LS"
+          label={t("earthquake.latitude")}
         />
         <View style={styles.statTopDivider} />
         <StatItem
           icon="compass-outline"
           value={safeValue(data?.lonText)}
-          label="BT"
+          label={t("earthquake.longitude")}
         />
       </View>
 
@@ -157,24 +159,24 @@ export const TsunamiCard = ({
       <View style={styles.infoContent}>
         <DetailItem
           icon="location"
-          label="Lokasi Gempa :"
+          label={t("gempaDirasakanScreen.labelLocation")}
           value={safeValue(data?.wilayah)}
         />
         <DetailItem
           icon="alert-circle-outline"
-          label="Subject :"
+          label={t("tsunamiScreen.labelSubject")}
           value={safeValue(data?.subject)}
         />
         <DetailItem
           icon="time-outline"
-          label="Waktu :"
+          label={t("gempaDirasakanScreen.labelTime")}
           value={
             data ? `${safeValue(data.tanggal)}, ${safeValue(data.jam)}` : "-"
           }
         />
         <DetailItem
           icon="megaphone-outline"
-          label="Informasi Tsunami :"
+          label={t("tsunamiScreen.labelTsunamiInfo")}
           value={safeValue(data?.headline)}
         />
       </View>

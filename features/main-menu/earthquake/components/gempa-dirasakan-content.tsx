@@ -10,10 +10,11 @@ import {
     parseDepthKm,
 } from "@/utils/earthquake-impact";
 import { formatLatText, formatLonText, haversineDistanceKm } from "@/utils/geo";
-import { shareQuake } from "@/utils/share";
+import { getShareQuakeLabels, shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 
 import EarthquakeMap from "@/components/ui/earthquake-map";
@@ -61,6 +62,7 @@ export default function GempaDirasakan({
   onOpenNarasi,
   isActive = true,
 }: Props) {
+  const { t } = useTranslation();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [narasiUrl, setNarasiUrl] = useState<string | null>(null);
@@ -85,6 +87,32 @@ export default function GempaDirasakan({
   const mapRef = useRef<MapViewType | null>(null);
   const { networkErrorVisible, showNetworkError, dismissNetworkError } =
     useNetworkError();
+
+  const shareLabels = useMemo(() => getShareQuakeLabels(t), [t]);
+  const networkErrorTexts = useMemo(
+    () => ({
+      title: t("networkErrorModal.title"),
+      description: t("networkErrorModal.description"),
+      button: t("networkErrorModal.button"),
+    }),
+    [t],
+  );
+  const shakeMapModalTexts = useMemo(
+    () => ({
+      title: t("shakeMapModal.title"),
+      subtitle: t("shakeMapModal.subtitle"),
+      footerNote: t("shakeMapModal.footerNote"),
+    }),
+    [t],
+  );
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
 
   const waveOverlays = useMemo(() => {
     if (!latestQuake) return [];
@@ -243,6 +271,7 @@ export default function GempaDirasakan({
       <EarthquakeMap
         mapRef={mapRef}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
         highlightPolygons={[]}
         waveOverlays={waveOverlays}
         markerCoordinate={
@@ -282,16 +311,16 @@ export default function GempaDirasakan({
                 onPress={() => onOpenNarasi(narasiUrl)}
               >
                 <Feather name="file-text" size={12} color="white" />
-                <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+                <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
               style={styles.mapButton}
-              onPress={() => shareQuake(latestQuake, "dirasakan")}
+              onPress={() => shareQuake(latestQuake, "dirasakan", shareLabels)}
             >
               <Feather name="share" size={12} color="white" />
-              <Text style={styles.mapButtonText}>BAGIKAN</Text>
+              <Text style={styles.mapButtonText}>{t("common.share")}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -311,54 +340,54 @@ export default function GempaDirasakan({
             <StatItem
               icon="triangle-wave"
               value={latestQuake.magnitude}
-              label="Magnitudo"
+              label={t("gempaDirasakanScreen.statMagnitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={latestQuake.kedalaman}
-              label="Kedalaman"
+              label={t("gempaDirasakanScreen.statDepth")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.latText}
-              label="LS"
+              label={t("gempaDirasakanScreen.latLabel")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.lonText}
-              label="BT"
+              label={t("gempaDirasakanScreen.lonLabel")}
               styles={styles}
             />
           </View>
           <View style={styles.separator} />
           <DetailItem
             icon="location"
-            label="Lokasi Gempa :"
+            label={t("gempaDirasakanScreen.labelLocation")}
             value={latestQuake.wilayah}
             styles={styles}
           />
           <DetailItem
             icon="time-outline"
-            label="Waktu :"
+            label={t("gempaDirasakanScreen.labelTime")}
             value={`${latestQuake.tanggal}, ${latestQuake.jam}`}
             styles={styles}
           />
           <DetailItem
             icon="walk-outline"
-            label="Jarak :"
+            label={t("gempaDirasakanScreen.labelDistance")}
             value={`${latestQuake.distanceKm} km`}
             styles={styles}
           />
           {!!latestQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Wilayah Dirasakan (Skala MMI) :"
+              label={t("gempaDirasakanScreen.labelFelt")}
               value={latestQuake.felt}
               styles={styles}
             />
@@ -372,7 +401,7 @@ export default function GempaDirasakan({
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}
           >
-            <Text style={styles.simulasiBtnText}>PETA GUNCANGAN</Text>
+            <Text style={styles.simulasiBtnText}>{t("gempaDirasakanScreen.btnShakeMap")}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -380,11 +409,13 @@ export default function GempaDirasakan({
       <ModalShakeMap
         visible={shakeMapVisible}
         imageUrl={shakeMapUrl}
+        texts={shakeMapModalTexts}
         onClose={() => setShakeMapVisible(false)}
       />
 
       <NetworkErrorModal
         visible={networkErrorVisible}
+        texts={networkErrorTexts}
         onClose={dismissNetworkError}
       />
     </View>

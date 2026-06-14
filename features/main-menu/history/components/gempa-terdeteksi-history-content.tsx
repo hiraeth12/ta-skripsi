@@ -17,6 +17,7 @@ import {
     startAt,
 } from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
@@ -138,7 +139,16 @@ export function GempaTerdeteksiHistoryContent({
   filterDateFrom,
   filterDateTo,
 }: Props) {
+  const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
     ? filterYear!
@@ -566,6 +576,7 @@ export function GempaTerdeteksiHistoryContent({
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
       />
 
       <View style={styles.topControls}>{tabBar}</View>
@@ -587,28 +598,28 @@ export function GempaTerdeteksiHistoryContent({
             <StatItem
               icon="triangle-wave"
               value={activeQuake.magnitude}
-              label="Magnitudo"
+              label={t("gempaDirasakanScreen.statMagnitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={activeQuake.kedalaman}
-              label="Kedalaman"
+              label={t("gempaDirasakanScreen.statDepth")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.latText}
-              label="LS"
+              label={t("gempaDirasakanScreen.latLabel")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.lonText}
-              label="BT"
+              label={t("gempaDirasakanScreen.lonLabel")}
               styles={styles}
             />
           </View>
@@ -617,20 +628,20 @@ export function GempaTerdeteksiHistoryContent({
 
           <DetailItem
             icon="location"
-            label="Lokasi Gempa :"
+            label={t("gempaDirasakanScreen.labelLocation")}
             value={activeQuake.wilayah}
             styles={styles}
           />
           <DetailItem
             icon="time-outline"
-            label="Waktu :"
+            label={t("gempaDirasakanScreen.labelTime")}
             value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
             styles={styles}
           />
           {!!activeQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Fase :"
+              label={t("gempaTerdeteksiScreen.labelFase")}
               value={activeQuake.felt}
               styles={styles}
             />
@@ -642,7 +653,9 @@ export function GempaTerdeteksiHistoryContent({
               activeOpacity={0.8}
               onPress={() => onOpenHistory(historyUrl)}
             >
-              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+              <Text style={styles.simulasiBtnText}>
+                {t("earthquake.historicalProcess")}
+              </Text>
             </TouchableOpacity>
           )}
         </Animated.View>

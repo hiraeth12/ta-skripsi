@@ -2,12 +2,14 @@ import AuthButton from "@/components/ui/auth-button";
 import CustomAlert from "@/components/ui/custom-alert";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { sendResetOtp } from "../services/auth-service";
 import { styles } from "../styles/forgot-password-styles";
 
 export default function ForgotPassword() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -94,7 +96,7 @@ export default function ForgotPassword() {
         resizeMode="contain"
       />
 
-      <Text style={styles.title}>Lupa Kata Sandi</Text>
+      <Text style={styles.title}>{t("forgotPasswordScreen.title")}</Text>
 
       <Text style={styles.description}>
         Silakan masukkan alamat email Anda untuk menerima kode verifikasi untuk
@@ -102,9 +104,9 @@ export default function ForgotPassword() {
       </Text>
 
       <View style={styles.inputArea}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>{t("forgotPasswordScreen.emailLabel")}</Text>
         <TextInput
-          placeholder="email@gmail.com"
+          placeholder={t("forgotPasswordScreen.emailPlaceholder")}
           placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -117,7 +119,7 @@ export default function ForgotPassword() {
 
       <View style={styles.buttonWrapper}>
         <AuthButton
-          title={isLoading ? "Mengirim..." : "Kirim Kode Verifikasi"}
+          title={isLoading ? t("forgotPasswordScreen.buttonSending") : t("forgotPasswordScreen.buttonSend")}
           onPress={handleSendOtp}
           disabled={isLoading}
         />

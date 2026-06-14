@@ -2,8 +2,10 @@ import AuthButton from "@/components/ui/auth-button";
 import { router } from "expo-router";
 import { Image, Text, View } from "react-native";
 import { styles } from "../styles/success-new-password-styles";
+import { useTranslation } from "react-i18next";
 
 export default function SuccessNewPassword() {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <Image
@@ -18,15 +20,12 @@ export default function SuccessNewPassword() {
         resizeMode="contain"
       />
 
-      <Text style={styles.title}>Kata Sandi Berhasil Diubah</Text>
+      <Text style={styles.title}>{t("successNewPasswordScreen.title")}</Text>
 
-      <Text style={styles.description}>
-        Kata sandi Anda telah berhasil diubah. Silakan gunakan kata sandi baru
-        Anda untuk masuk ke akun Anda.
-      </Text>
+      <Text style={styles.description}>{t("successNewPasswordScreen.description")}</Text>
 
       <AuthButton
-        title="Menuju Halaman Masuk"
+        title={t("successNewPasswordScreen.buttonLogin")}
         onPress={() => router.replace("/starter/login")}
       />
     </View>

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import {
   Image,
   Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,10 +14,27 @@ type ModalShakeMapProps = {
   visible: boolean;
   imageUrl?: string | null;
   onClose: () => void;
+  texts?: {
+    title?: string;
+    subtitle?: string;
+    footerNote?: string;
+  };
 };
 
-export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps) {
+export function ModalShakeMap({
+  visible,
+  imageUrl,
+  onClose,
+  texts,
+}: ModalShakeMapProps) {
   const { height, width } = useWindowDimensions();
+  const [imageHeight, setImageHeight] = useState(0);
+  const resolvedTexts = {
+    title: texts?.title ?? "PETA GUNCANGAN",
+    subtitle: texts?.subtitle ?? "Sumber data: BMKG ShakeMap",
+    footerNote:
+      texts?.footerNote ?? "* Data diperbarui secara otomatis oleh BMKG",
+  };
 
   return (
     <Modal
@@ -30,25 +47,31 @@ export function ModalShakeMap({ visible, imageUrl, onClose }: ModalShakeMapProps
         <View style={[styles.modalCardBottom, { height: height * 0.9 }]}>
           <View style={styles.modalHeaderBottom}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitleBottom}>PETA GUNCANGAN</Text>
-              <Text style={styles.modalSubtitle}>Sumber data: BMKG ShakeMap</Text>
+              <Text style={styles.modalTitleBottom}>{resolvedTexts.title}</Text>
+              <Text style={styles.modalSubtitle}>
+                {resolvedTexts.subtitle}
+              </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.modalCloseCircle}>
               <Ionicons name="close" size={20} color="#333" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }}>
+          <View style={styles.imageContainer}>
             {imageUrl && (
               <Image
                 source={{ uri: imageUrl }}
-                style={[styles.maximizedImage, { width }]}
+                style={{ width, height: imageHeight || undefined }}
                 resizeMode="contain"
+                onLoad={(e) => {
+                  const { width: w, height: h } = e.nativeEvent.source;
+                  setImageHeight((h / w) * width);
+                }}
               />
             )}
-          </ScrollView>
+          </View>
           <View style={styles.modalFooter}>
             <Text style={styles.scrollHint}>
-              * Data diperbarui secara otomatis oleh BMKG 
+              {resolvedTexts.footerNote}
             </Text>
           </View>
         </View>
@@ -79,7 +102,12 @@ const styles = StyleSheet.create({
   },
   modalTitleBottom: { color: "#0C4A6E", fontWeight: "700", fontSize: 16 },
   modalSubtitle: { fontSize: 11, color: "#777" },
-  maximizedImage: { height: 600, marginTop: 10 },
+  imageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
   modalFooter: {
     padding: 15,
     borderTopWidth: 1,

@@ -1,6 +1,7 @@
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { Image } from "expo-image";
 import React, { useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Animated,
   Modal,
@@ -32,6 +33,7 @@ export function TsunamiAlertNotificationModal({
   closeInSecond?: number;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
   const player = useAudioPlayer(require("@/assets/sounds/tsu_eva.wav"));
 
@@ -44,6 +46,10 @@ export function TsunamiAlertNotificationModal({
   const bannerHeight = bannerWidth * (186 / 931);
   const messageMaxHeight = Math.min(height * 0.24, 160);
   const levelText = (level || "-").toUpperCase();
+  const displayedLevelText =
+    levelText === "PERINGATAN TSUNAMI" || levelText === "TSUNAMI WARNING"
+      ? t("notificationsScreen.defaultTsunamiTitle").toUpperCase()
+      : levelText;
 
   const pauseSound = useCallback(() => {
     try {
@@ -179,14 +185,16 @@ export function TsunamiAlertNotificationModal({
               <View style={styles.panelContent}>
                 <View style={styles.sectionBorder}>
                   <View style={styles.labelBand}>
-                    <Text style={styles.labelText}>POTENSI TSUNAMI</Text>
+                    <Text style={styles.labelText}>
+                      {t("notificationModal.tsunamiPotential")}
+                    </Text>
                   </View>
                 </View>
 
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.labelBand}>
-                      <Text style={styles.levelText}>{levelText}</Text>
+                      <Text style={styles.levelText}>{displayedLevelText}</Text>
                     </View>
                   </View>
 

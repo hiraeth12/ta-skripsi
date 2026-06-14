@@ -1,4 +1,5 @@
 import { Stack } from "expo-router";
+import "../../constants/translations/i18n";
 
 export default function StarterLayout() {
   return (

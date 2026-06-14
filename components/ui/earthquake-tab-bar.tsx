@@ -1,4 +1,14 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useTranslation } from "react-i18next";
+import {
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  UIManager,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 export const EARTHQUAKE_TABS = ["GEMPA DIRASAKAN", "GEMPA TERDETEKSI"] as const;
 export const EARTHQUAKE_MAP_TABS = [
@@ -8,6 +18,29 @@ export const EARTHQUAKE_MAP_TABS = [
 ] as const;
 export type EarthquakeTab = (typeof EARTHQUAKE_TABS)[number];
 export type EarthquakeMapTab = (typeof EARTHQUAKE_MAP_TABS)[number];
+
+const isBridgeless =
+  (
+    globalThis as typeof globalThis & {
+      RN$Bridgeless?: boolean;
+    }
+  ).RN$Bridgeless === true;
+
+if (Platform.OS === "android" && !isBridgeless) {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
+
+const TAB_LABEL_KEYS: Record<string, string> = {
+  "GEMPA DIRASAKAN": "earthquakeTabs.felt",
+  "GEMPA TERDETEKSI": "earthquakeTabs.detected",
+  "RIWAYAT TSUNAMI": "historyTabs.tsunami",
+  TSUNAMI: "earthquakeTabs.tsunami",
+};
+
+const TAB_BAR_MAX_WIDTH = 360;
+const TAB_BAR_HORIZONTAL_SAFE_SPACE = 40;
+const ACTIVE_TAB_FLEX = 1.75;
+const INACTIVE_TAB_FLEX = 1;
 
 type Props<TTab extends string = EarthquakeTab> = {
   activeTab: TTab;
@@ -22,44 +55,72 @@ export default function EarthquakeTabBar<TTab extends string = EarthquakeTab>({
   disabled = false,
   tabs = EARTHQUAKE_TABS as unknown as readonly TTab[],
 }: Props<TTab>) {
+  const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const tabBarWidth = Math.min(
+    Math.max(width - TAB_BAR_HORIZONTAL_SAFE_SPACE, 0),
+    TAB_BAR_MAX_WIDTH,
+  );
+
   return (
-    <View style={styles.tabBar}>
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab;
-        return (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => !disabled && onTabPress(tab)}
-            style={[styles.tab, isActive && styles.tabActive]}
-            activeOpacity={0.8}
-            disabled={disabled}
-          >
-            <Text
-              numberOfLines={1}
+    <View style={[styles.tabBarFrame, { width: tabBarWidth }]}>
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab;
+          const handlePress = () => {
+            if (disabled) return;
+            if (!isActive) {
+              LayoutAnimation.configureNext(
+                LayoutAnimation.Presets.easeInEaseOut,
+              );
+            }
+            onTabPress(tab);
+          };
+
+          return (
+            <TouchableOpacity
+              key={tab}
+              onPress={handlePress}
               style={[
-                styles.tabText,
-                isActive && styles.tabTextActive,
-                disabled && isActive && { opacity: 0.6 },
+                styles.tab,
+                { flex: isActive ? ACTIVE_TAB_FLEX : INACTIVE_TAB_FLEX },
+                isActive && styles.tabActive,
               ]}
+              activeOpacity={0.8}
+              disabled={disabled}
             >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[
+                  styles.tabText,
+                  isActive && styles.tabTextActive,
+                  disabled && isActive && { opacity: 0.6 },
+                ]}
+              >
+                {TAB_LABEL_KEYS[tab] ? t(TAB_LABEL_KEYS[tab]) : tab}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  tabBarFrame: {
+    alignSelf: "center",
+    maxWidth: "100%",
+  },
   tabBar: {
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
     backgroundColor: "#EDEDED",
     borderRadius: 50,
+    height: 42,
     padding: 5,
-    maxWidth: "100%",
-    alignSelf: "center", // ← rata tengah secara horizontal
+    width: "100%",
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -67,20 +128,23 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   tab: {
-    flex: 1, // ← tiap tab ambil porsi yang sama
-    alignItems: "center", // ← teks di tengah tab
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     borderRadius: 50,
+    overflow: "hidden",
   },
   tabActive: {
     backgroundColor: "#0C4A6E",
   },
   tabText: {
-    fontSize: 11, // ← turunkan sedikit
+    fontSize: 10.5,
     fontWeight: "700",
     color: "#0C4A6E",
-    letterSpacing: 0.5,
+    letterSpacing: 0,
+    textAlign: "center",
   },
   tabTextActive: {
     color: "#EDEDED",

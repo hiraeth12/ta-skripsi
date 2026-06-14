@@ -6,6 +6,7 @@ import { get, getDatabase, ref, remove } from "@react-native-firebase/database";
 import { deleteToken, getMessaging } from "@react-native-firebase/messaging";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Modal,
   Pressable,
@@ -23,6 +24,7 @@ import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/account-styles";
 
 export default function Account() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { profile, loading } = useProfileContext();
   const [isNotificationsEnabled, setIsNotificationsEnabled] = useState(true);
@@ -187,22 +189,22 @@ export default function Account() {
         >
           <MenuLink
             icon="account-circle-outline"
-            title="Pengaturan Profil"
+            title={t("accountScreen.menuProfile")}
             onPress={() => navigate("/main-menu/pengaturan")}
           />
           <MenuLink
             icon="lock-outline"
-            title="Ubah Kata Sandi"
+            title={t("accountScreen.menuPassword")}
             onPress={() => navigate("/main-menu/ubah-kata-sandi")}
           />
           <MenuLink
             icon="map-marker-outline"
-            title="Ubah Lokasi"
+            title={t("accountScreen.menuLocation")}
             onPress={() => navigate("/main-menu/ubah-lokasi")}
           />
           <MenuLink
             icon="earth"
-            title="Ubah Bahasa"
+            title={t("accountScreen.menuLanguage")}
             onPress={() => navigate("/main-menu/ubah-bahasa")}
           />
 
@@ -216,7 +218,7 @@ export default function Account() {
                 />
               </View>
               <Text style={styles.menuText} numberOfLines={1}>
-                Notifikasi Push
+                {t("accountScreen.menuPushNotif")}
               </Text>
             </View>
             <View style={styles.menuRightControl}>
@@ -233,7 +235,7 @@ export default function Account() {
 
           <MenuLink
             icon="cellphone-information"
-            title="Tentang Aplikasi"
+            title={t("accountScreen.menuAbout")}
             onPress={() => navigate("/main-menu/tentang-aplikasi")}
           />
         </ScrollView>
@@ -252,18 +254,18 @@ export default function Account() {
               style={styles.modalIcon}
             />
             <Text style={styles.infoTitle}>
-              Notifikasi {notifStatus ? "Aktif" : "Nonaktif"}
+              {notifStatus ? t("accountScreen.modalNotifActive") : t("accountScreen.modalNotifInactive")}
             </Text>
             <Text style={styles.infoDesc}>
               {notifStatus
-                ? "Dengan ini, Anda akan menerima pemberitahuan langsung di perangkat Anda terkait aktivitas gempa terkini."
-                : "Anda telah mematikan notifikasi. Anda tidak akan menerima pemberitahuan langsung mengenai pembaruan sistem atau gempa."}
+                ? t("accountScreen.modalDescActive")
+                : t("accountScreen.modalDescInactive")}
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
               onPress={() => setShowNotifModal(false)}
             >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
+              <Text style={styles.infoButtonText}>{t("accountScreen.modalBtnUnderstand")}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

@@ -48,6 +48,13 @@ export type TsunamiEventGroup = {
   warnings: TsunamiWarning[];
 };
 
+export type TsunamiMapSlideTitles = {
+  shakemap: string;
+  wzmap: string;
+  ttmap: string;
+  sshmap: string;
+};
+
 type ParsedTsunamiInfo = Omit<
   TsunamiEventGroup,
   "latestWarningIndex" | "warnings"
@@ -148,22 +155,28 @@ function getEventGroupKey(
 
 export function buildTsunamiMapSlides(
   warning: TsunamiWarning,
+  titles: TsunamiMapSlideTitles = {
+    shakemap: "Shakemap / Peta Guncangan",
+    wzmap: "WZMap / Peta Zona Peringatan",
+    ttmap: "TTMap / Peta Waktu Tiba Tsunami",
+    sshmap: "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height",
+  },
 ): TsunamiMapSlide[] {
   return [
     {
-      title: "Shakemap / Peta Guncangan",
+      title: titles.shakemap,
       imageUrl: warning.shakemap,
     },
     {
-      title: "WZMap / Peta Zona Peringatan",
+      title: titles.wzmap,
       imageUrl: warning.wzmap,
     },
     {
-      title: "TTMap / Peta Waktu Tiba Tsunami",
+      title: titles.ttmap,
       imageUrl: warning.ttmap,
     },
     {
-      title: "SSHMap / Peta Tinggi Muka Laut / Sea Surface Height",
+      title: titles.sshmap,
       imageUrl: warning.sshmap,
     },
   ].filter((slide) => slide.imageUrl);

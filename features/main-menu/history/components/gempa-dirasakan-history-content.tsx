@@ -23,6 +23,7 @@ import {
 } from "@react-native-firebase/database";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
@@ -195,7 +196,24 @@ export function GempaDirasakanHistoryContent({
   filterDateTo,
   onTabActivate,
 }: Props) {
+  const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
+  const shakeMapModalTexts = useMemo(
+    () => ({
+      title: t("shakeMapModal.title"),
+      subtitle: t("shakeMapModal.subtitle"),
+      footerNote: t("shakeMapModal.footerNote"),
+    }),
+    [t],
+  );
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
     ? filterYear!
@@ -312,7 +330,7 @@ export function GempaDirasakanHistoryContent({
         depth: q.kedalaman,
         eventId: q.eventId,
       })),
-    [quakes],
+    [quakes, t],
   );
 
   const listItems = useMemo(
@@ -322,9 +340,9 @@ export function GempaDirasakanHistoryContent({
         magnitude: q.magnitude,
         lokasi: q.wilayah,
         waktu: `${q.jam} • ${q.tanggal}`,
-        jarak: `${q.distanceKm} km dari Bandung`,
+        jarak: `${q.distanceKm}${t("historyScreen.distanceSuffix")}`,
       })),
-    [quakes],
+    [quakes, t],
   );
 
   // ── Card animation ─────────────────────────────────────────────────────────
@@ -675,7 +693,9 @@ export function GempaDirasakanHistoryContent({
     isActive,
     now,
     onLoadingChange,
+    overrideQuake,
     ranges,
+    showCardRef,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -698,6 +718,7 @@ export function GempaDirasakanHistoryContent({
         onMapPress={handleMapPress}
         onMarkerPressIndex={handleMarkerPressIndex}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
       />
 
       <View style={styles.topControls}>
@@ -709,7 +730,7 @@ export function GempaDirasakanHistoryContent({
               onPress={() => onOpenNarasi(narasiUrl)}
             >
               <Feather name="file-text" size={12} color="white" />
-              <Text style={styles.mapButtonText}>NARASI RESMI</Text>
+              <Text style={styles.mapButtonText}>{t("earthquake.officialNarrative")}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -732,28 +753,28 @@ export function GempaDirasakanHistoryContent({
             <StatItem
               icon="triangle-wave"
               value={activeQuake.magnitude}
-              label="Magnitudo"
+              label={t("gempaDirasakanScreen.statMagnitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={activeQuake.kedalaman}
-              label="Kedalaman"
+              label={t("gempaDirasakanScreen.statDepth")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.latText}
-              label="LS"
+              label={t("gempaDirasakanScreen.latLabel")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={activeQuake.lonText}
-              label="BT"
+              label={t("gempaDirasakanScreen.lonLabel")}
               styles={styles}
             />
           </View>
@@ -762,26 +783,26 @@ export function GempaDirasakanHistoryContent({
 
           <DetailItem
             icon="location"
-            label="Lokasi Gempa :"
+            label={t("gempaDirasakanScreen.labelLocation")}
             value={activeQuake.wilayah}
             styles={styles}
           />
           <DetailItem
             icon="time-outline"
-            label="Waktu :"
+            label={t("gempaDirasakanScreen.labelTime")}
             value={`${activeQuake.tanggal}, ${activeQuake.jam}`}
             styles={styles}
           />
           <DetailItem
             icon="walk-outline"
-            label="Jarak :"
+            label={t("gempaDirasakanScreen.labelDistance")}
             value={`${activeQuake.distanceKm} km`}
             styles={styles}
           />
           {!!activeQuake.felt && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Wilayah Dirasakan (Skala MMI) :"
+              label={t("gempaDirasakanScreen.labelFelt")}
               value={activeQuake.felt}
               styles={styles}
             />
@@ -796,7 +817,7 @@ export function GempaDirasakanHistoryContent({
             onPress={() => shakeMapUrl && setShakeMapVisible(true)}
             disabled={!shakeMapUrl}
           >
-            <Text style={styles.simulasiBtnText}>PETA GUNCANGAN</Text>
+            <Text style={styles.simulasiBtnText}>{t("gempaDirasakanScreen.btnShakeMap")}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -804,6 +825,7 @@ export function GempaDirasakanHistoryContent({
       <ModalShakeMap
         visible={shakeMapVisible}
         imageUrl={shakeMapUrl}
+        texts={shakeMapModalTexts}
         onClose={() => setShakeMapVisible(false)}
       />
     </View>

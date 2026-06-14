@@ -1,6 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import i18n, { STORE_LANGUAGE_KEY } from "@/constants/translations/i18n";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Image,
   Modal,
@@ -17,17 +20,25 @@ import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/ubah-bahasa-styles";
 
 export default function UbahBahasa() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { profile } = useProfileContext(); // ← no local fetch
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
-  const [selectedLang, setSelectedLang] = useState("ID");
+  const [selectedLang, setSelectedLang] = useState(
+    i18n.language?.startsWith("en") ? "EN" : "ID",
+  );
 
-  const handleLanguageChange = (lang: string) => {
+  const handleLanguageChange = async (lang: string) => {
     if (selectedLang === lang) {
       setShowWarningModal(true);
       return;
     }
+
+    const nextLanguage = lang === "EN" ? "en" : "id";
+    await i18n.changeLanguage(nextLanguage);
+    await AsyncStorage.setItem(STORE_LANGUAGE_KEY, nextLanguage);
+
     setSelectedLang(lang);
     setShowSuccessModal(true);
   };
@@ -35,7 +46,7 @@ export default function UbahBahasa() {
   return (
     <>
       <ProfilePageLayout
-        title="Ubah Bahasa"
+        title={t("ubahBahasaScreen.title")}
         headerName={profile.name}
         headerEmail={profile.email}
         headerLocation={profile.location}
@@ -84,7 +95,7 @@ export default function UbahBahasa() {
           style={styles.backItem}
           onPress={() => goBackToAccount(router)}
         >
-          <Text style={styles.backText}>Kembali</Text>
+          <Text style={styles.backText}>{t("ubahBahasaScreen.btnBack")}</Text>
         </TouchableOpacity>
       </ProfilePageLayout>
 
@@ -100,16 +111,18 @@ export default function UbahBahasa() {
               color="#1E6F9F"
               style={styles.modalIcon}
             />
-            <Text style={styles.infoTitle}>Berhasil</Text>
+            <Text style={styles.infoTitle}>{t("ubahBahasaScreen.modalSuccessTitle")}</Text>
             <Text style={styles.infoDesc}>
-              Bahasa aplikasi telah berhasil diubah ke{" "}
+              {t("ubahBahasaScreen.modalSuccessDesc")}{" "}
               {selectedLang === "ID" ? "Indonesia" : "English"}.
             </Text>
             <TouchableOpacity
               style={styles.infoButton}
               onPress={() => setShowSuccessModal(false)}
             >
-              <Text style={styles.infoButtonText}>Mengerti</Text>
+              <Text style={styles.infoButtonText}>
+                {t("ubahBahasaScreen.modalSuccessBtn")}
+              </Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -127,15 +140,15 @@ export default function UbahBahasa() {
               color="#E11D48"
               style={styles.modalIcon}
             />
-            <Text style={styles.infoTitleError}>Peringatan</Text>
+            <Text style={styles.infoTitleError}>{t("ubahBahasaScreen.modalWarningTitle")}</Text>
             <Text style={styles.infoDesc}>
-              Aplikasi memerlukan setidaknya satu bahasa yang aktif. Anda tidak dapat mematikan semua bahasa.
+              {t("ubahBahasaScreen.modalWarningDesc")}
             </Text>
             <TouchableOpacity
               style={styles.infoButtonError}
               onPress={() => setShowWarningModal(false)}
             >
-              <Text style={styles.infoButtonText}>Tutup</Text>
+              <Text style={styles.infoButtonText}>{t("ubahBahasaScreen.modalWarningBtn")}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

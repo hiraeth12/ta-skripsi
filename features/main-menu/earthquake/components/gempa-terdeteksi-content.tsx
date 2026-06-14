@@ -12,10 +12,11 @@ import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import { formatLatText, formatLonText } from "@/utils/geo";
-import { shareQuake } from "@/utils/share";
+import { getShareQuakeLabels, shareQuake } from "@/utils/share";
 import { Feather } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-terdeteksi-content.styles";
@@ -60,11 +61,29 @@ export default function GempaTerdeteksi({
   onOpenHistory,
   isActive = true,
 }: Props) {
+  const { t } = useTranslation();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [historyUrl, setHistoryUrl] = useState<string | null>(null);
   const mapRef = useRef<MapViewType | null>(null);
   const { networkErrorVisible, showNetworkError, dismissNetworkError } =
     useNetworkError();
+  const shareLabels = useMemo(() => getShareQuakeLabels(t), [t]);
+  const networkErrorTexts = useMemo(
+    () => ({
+      title: t("networkErrorModal.title"),
+      description: t("networkErrorModal.description"),
+      button: t("networkErrorModal.button"),
+    }),
+    [t],
+  );
+  const mapChromeLabels = useMemo(
+    () => ({
+      showFaultLines: t("map.showFaultLines"),
+      showBmkgSeismicSensors: t("map.showBmkgSeismicSensors"),
+      showGlobalSeismicSensors: t("map.showGlobalSeismicSensors"),
+    }),
+    [t],
+  );
 
   const {
     showCard,
@@ -193,6 +212,7 @@ export default function GempaTerdeteksi({
       <EarthquakeMap
         mapRef={mapRef}
         isCardOpen={showCard}
+        chromeLabels={mapChromeLabels}
         markerCoordinate={
           latestQuake
             ? {
@@ -226,10 +246,10 @@ export default function GempaTerdeteksi({
           <Animated.View style={[styles.mapButtons, { opacity: btnOpacity }]}>
             <TouchableOpacity
               style={styles.mapButton}
-              onPress={() => shareQuake(latestQuake, "terdeteksi")}
+              onPress={() => shareQuake(latestQuake, "terdeteksi", shareLabels)}
             >
               <Feather name="share" size={12} color="white" />
-              <Text style={styles.mapButtonText}>BAGIKAN</Text>
+              <Text style={styles.mapButtonText}>{t("common.share")}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -250,28 +270,28 @@ export default function GempaTerdeteksi({
             <StatItem
               icon="triangle-wave"
               value={latestQuake.magnitude}
-              label="Magnitudo"
+              label={t("gempaTerdeteksiScreen.statMagnitude")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="rss"
               value={latestQuake.kedalaman}
-              label="Kedalaman"
+              label={t("gempaTerdeteksiScreen.statDepth")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.latText}
-              label="LS"
+              label={t("gempaTerdeteksiScreen.latLabel")}
               styles={styles}
             />
             <View style={styles.statTopDivider} />
             <StatItem
               icon="compass-outline"
               value={latestQuake.lonText}
-              label="BT"
+              label={t("gempaTerdeteksiScreen.lonLabel")}
               styles={styles}
             />
           </View>
@@ -280,26 +300,26 @@ export default function GempaTerdeteksi({
 
           <DetailItem
             icon="location"
-            label="Lokasi Gempa :"
+            label={t("gempaTerdeteksiScreen.labelLocation")}
             value={latestQuake.wilayah}
             styles={styles}
           />
           <DetailItem
             icon="calendar-outline"
-            label="Tanggal :"
+            label={t("gempaTerdeteksiScreen.labelDate")}
             value={latestQuake.tanggal}
             styles={styles}
           />
           <DetailItem
             icon="time-outline"
-            label="Jam :"
+            label={t("gempaTerdeteksiScreen.labelHour")}
             value={latestQuake.jam}
             styles={styles}
           />
           {!!latestQuake.status && (
             <DetailItem
               icon="alert-circle-outline"
-              label="Status :"
+              label={t("gempaTerdeteksiScreen.labelStatus")}
               value={latestQuake.status}
               styles={styles}
             />
@@ -310,7 +330,7 @@ export default function GempaTerdeteksi({
               activeOpacity={0.8}
               onPress={() => historyUrl && onOpenHistory(historyUrl)}
             >
-              <Text style={styles.simulasiBtnText}>PROSES HISTORIS</Text>
+              <Text style={styles.simulasiBtnText}>{t("earthquake.historicalProcess")}</Text>
             </TouchableOpacity>
           )}
         </Animated.View>
@@ -318,6 +338,7 @@ export default function GempaTerdeteksi({
 
       <NetworkErrorModal
         visible={networkErrorVisible}
+        texts={networkErrorTexts}
         onClose={dismissNetworkError}
       />
     </View>

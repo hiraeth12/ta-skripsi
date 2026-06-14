@@ -9,6 +9,7 @@ import {
 } from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { goBackToAccount } from "../navigation";
@@ -17,12 +18,13 @@ import { styles } from "./styles/ubah-kata-sandi-styles";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 const PASSWORD_FIELDS = [
-  { label: "Kata Sandi Saat Ini", key: "passwordLama" },
-  { label: "Kata Sandi Baru", key: "passwordBaru" },
-  { label: "Konfirmasi Kata Sandi", key: "konfirmasiPassword" },
+  { labelKey: "ubahKataSandiScreen.oldPasswordLabel", key: "passwordLama" },
+  { labelKey: "ubahKataSandiScreen.newPasswordLabel", key: "passwordBaru" },
+  { labelKey: "ubahKataSandiScreen.confirmPasswordLabel", key: "konfirmasiPassword" },
 ] as const;
 
 export default function UbahKataSandi() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { profile } = useProfileContext(); // ← no local fetch
 
@@ -51,7 +53,7 @@ export default function UbahKataSandi() {
   const showCustomAlert = (message: string) => {
     setModalConfig({
       visible: true,
-      title: "Error",
+      title: t("ubahKataSandiScreen.alert.errorTitle"),
       message,
       type: "error",
     });
@@ -112,7 +114,7 @@ export default function UbahKataSandi() {
 
   return (
     <ProfilePageLayout
-      title="Ubah Kata Sandi"
+      title={t("ubahKataSandiScreen.title")}
       headerName={profile.name}
       headerEmail={profile.email}
       headerLocation={profile.location}
@@ -127,9 +129,9 @@ export default function UbahKataSandi() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.inputCard}>
-          {PASSWORD_FIELDS.map(({ label, key }) => (
+          {PASSWORD_FIELDS.map(({ labelKey, key }) => (
             <View key={key} style={styles.inputArea}>
-              <Text style={styles.label}>{label}</Text>
+              <Text style={styles.label}>{t(labelKey)}</Text>
               <View
                 style={[
                   styles.passwordContainer,
@@ -176,7 +178,7 @@ export default function UbahKataSandi() {
               style={styles.btnBatal}
               onPress={() => goBackToAccount(router)}
             >
-              <Text style={styles.btnTextBatal}>Batal</Text>
+              <Text style={styles.btnTextBatal}>{t("ubahKataSandiScreen.btnCancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnSimpan}
@@ -184,7 +186,7 @@ export default function UbahKataSandi() {
               disabled={isSaving}
             >
               <Text style={styles.btnTextSimpan}>
-                {isSaving ? "Menyimpan..." : "Simpan"}
+                {isSaving ? t("ubahKataSandiScreen.btnSaving") : t("ubahKataSandiScreen.btnSave")}
               </Text>
             </TouchableOpacity>
           </View>

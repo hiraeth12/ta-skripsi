@@ -6,7 +6,8 @@ import EarthquakeTabBar, {
 } from "@/components/ui/earthquake-tab-bar";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StyleSheet, View } from "react-native";
 import GempaDirasakan from "./components/gempa-dirasakan-content";
 import GempaTerdeteksi from "./components/gempa-terdeteksi-content";
@@ -15,6 +16,7 @@ import TsunamiContent from "./components/tsunami-content";
 export default function Earthquake() {
   const { tab } = useLocalSearchParams<{ tab?: string | string[] }>();
   const isFocused = useIsFocused();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] =
     useState<EarthquakeMapTab>("GEMPA DIRASAKAN");
   const [loading, setLoading] = useState(false);
@@ -105,6 +107,37 @@ export default function Earthquake() {
     }
   }, []);
 
+  const narasiModalTexts = useMemo(
+    () => ({
+      title: t("narasiModal.title"),
+      subtitle: t("narasiModal.subtitle"),
+      loading: t("narasiModal.loading"),
+      empty: t("narasiModal.empty"),
+      footerNote: t("narasiModal.footerNote"),
+    }),
+    [t],
+  );
+
+  const historicalProcessModalTexts = useMemo(
+    () => ({
+      title: t("historicalProcessModal.title"),
+      subtitle: t("historicalProcessModal.subtitle"),
+      loading: t("historicalProcessModal.loading"),
+      empty: t("historicalProcessModal.empty"),
+      legendIntro: t("historicalProcessModal.legendIntro"),
+      legendUpdate: t("historicalProcessModal.legendUpdate"),
+      otLabel: t("historicalProcessModal.otLabel"),
+      phaseLabel: t("historicalProcessModal.phaseLabel"),
+      latitudeLabel: t("historicalProcessModal.latitudeLabel"),
+      longitudeLabel: t("historicalProcessModal.longitudeLabel"),
+      depthLabel: t("historicalProcessModal.depthLabel"),
+      magnitudeLabel: t("historicalProcessModal.magnitudeLabel"),
+      minuteSuffix: t("historicalProcessModal.minuteSuffix"),
+      footerNote: t("historicalProcessModal.footerNote"),
+    }),
+    [t],
+  );
+
   const dirasakanActive = isFocused && activeTab === "GEMPA DIRASAKAN";
   const terdeteksiActive = isFocused && activeTab === "GEMPA TERDETEKSI";
   const tsunamiActive = isFocused && activeTab === "TSUNAMI";
@@ -162,6 +195,7 @@ export default function Earthquake() {
         visible={narasiVisible}
         htmlContent={narasiHtmlContent}
         loading={narasiLoading}
+        texts={narasiModalTexts}
         onClose={() => {
           setNarasiVisible(false);
           setNarasiHtmlContent(null);
@@ -171,6 +205,7 @@ export default function Earthquake() {
         visible={historyVisible}
         rawContent={historyRawContent}
         loading={historyLoading}
+        texts={historicalProcessModalTexts}
         onClose={() => {
           setHistoryVisible(false);
           setHistoryRawContent(null);

@@ -9,6 +9,7 @@ import { getDatabase, ref, update } from "@react-native-firebase/database";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Image,
   KeyboardAvoidingView,
@@ -120,6 +121,7 @@ const saveLocationToDatabase = async (
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AskLocation() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("");
@@ -346,17 +348,17 @@ export default function AskLocation() {
             >
               {loading
                 ? "Memuat daftar lokasi..."
-                : selectedLocation || "Cari Kelurahan atau Desa..."}
+                : selectedLocation || t("askLocationScreen.searchPlaceholder")}
             </Text>
             <EvilIcons name="search" size={24} color="#1E6F9F" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.orText}>Atau deteksi otomatis</Text>
+        <Text style={styles.orText}>{t("askLocationScreen.orDivider")}</Text>
 
         <View style={styles.buttonWrapper}>
           <GpsButton
-            text="Gunakan GPS"
+            text={t("askLocationScreen.useGpsButton")}
             loadingText={gpsMessage}
             loading={gpsLoading}
             onPress={handleUseGPS}

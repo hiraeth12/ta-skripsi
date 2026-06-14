@@ -4,14 +4,16 @@ import { goBackToAccount } from "../navigation";
 import ProfilePageLayout from "../components/profile-page-layout";
 import { useProfileContext } from "../profile-context";
 import { styles } from "./styles/tentang-aplikasi.styles";
+import { useTranslation } from "react-i18next";
 
 export default function TentangAplikasi() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { profile } = useProfileContext(); // ← no local fetch
 
   return (
     <ProfilePageLayout
-      title="Tentang Aplikasi"
+      title={t("tentangAplikasiScreen.title")}
       headerName={profile.name}
       headerEmail={profile.email}
       headerLocation={profile.location}
@@ -23,28 +25,26 @@ export default function TentangAplikasi() {
             <Image source={require("@/assets/images/SeismoTrack_2-removebg-preview.png")} style={styles.appLogo} resizeMode="contain" />
 
             <Text style={styles.description}>
-              <Text style={{ fontWeight: "bold" }}>SeismoTrack</Text> adalah platform pemantauan aktivitas seismik mutakhir yang dirancang khusus untuk memetakan data gempa bumi secara real-time di seluruh wilayah Indonesia.
+              <Text style={{ fontWeight: "bold" }}>SeismoTrack</Text>{t("tentangAplikasiScreen.desc1")}
+            </Text>
+            <Text style={styles.description}>{t("tentangAplikasiScreen.desc2")}</Text>
+            <Text style={styles.description}>
+              {t("tentangAplikasiScreen.desc3_1")}<Text style={{ fontWeight: "bold" }}>Jawa Barat</Text>{t("tentangAplikasiScreen.desc3_2")}
             </Text>
             <Text style={styles.description}>
-              Aplikasi ini hadir sebagai solusi mitigasi bencana dini, memberikan kemudahan bagi masyarakat untuk mengakses informasi parameter gempa seperti magnitudo, kedalaman, dan koordinat secara instan.
-            </Text>
-            <Text style={styles.description}>
-              Fitur unggulan kami mencakup sistem notifikasi alarm otomatis berbasis lokasi (GPS). Saat ini, fitur peringatan dini dioptimalkan khusus untuk wilayah <Text style={{ fontWeight: "bold" }}>Jawa Barat</Text> guna memastikan akurasi data yang lebih presisi.
-            </Text>
-            <Text style={styles.description}>
-              Seluruh data yang disajikan bersumber langsung dari <Text style={{ fontWeight: "bold" }}>BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)</Text> sebagai otoritas resmi, sehingga informasi yang Anda terima terjamin keakuratannya.
+              {t("tentangAplikasiScreen.desc4_1")}<Text style={{ fontWeight: "bold" }}>BMKG (Badan Meteorologi, Klimatologi, dan Geofisika)</Text>{t("tentangAplikasiScreen.desc4_2")}
             </Text>
 
             <Image source={require("@/assets/images/logo-bmkg-2010.png")} style={[styles.appLogo, { marginTop: 10 }]} resizeMode="contain" />
             <View style={styles.versionContainer}>
-              <Text style={styles.versionLabel}>Versi: 1.0.0</Text>
+              <Text style={styles.versionLabel}>{t("tentangAplikasiScreen.versionLabel")}</Text>
             </View>
           </ScrollView>
         </View>
       </View>
 
       <TouchableOpacity style={styles.btnBack} onPress={() => goBackToAccount(router)}>
-        <Text style={styles.btnTextBack}>Kembali</Text>
+        <Text style={styles.btnTextBack}>{t("tentangAplikasiScreen.btnBack")}</Text>
       </TouchableOpacity>
     </ProfilePageLayout>
   );

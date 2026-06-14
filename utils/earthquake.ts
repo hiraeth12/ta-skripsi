@@ -23,7 +23,10 @@ type QuakeInput = {
  * Menggunakan radius MMI yang sama dengan outer/inner ring pada peta.
  * @returns { label: "Aman" | "Terdampak" | "Bahaya", color: string }
  */
-export function computeStatus(data: QuakeInput | null): StatusResult {
+export function computeStatus(
+  data: QuakeInput | null,
+  t?: (key: string) => string,
+): StatusResult {
   if (!data) return { label: "-", color: "#1E6F9F" };
 
   const magnitude = Number.parseFloat(String(data.magnitude));
@@ -47,10 +50,16 @@ export function computeStatus(data: QuakeInput | null): StatusResult {
   const innerRadiusKm = innerRadiusMeters / 1000;
 
   if (distanceKm <= innerRadiusKm) {
-    return { label: "Bahaya", color: "#F44336" };
+    return {
+      label: t ? t("homeScreen.status.danger") : "Bahaya",
+      color: "#F44336",
+    };
   }
   if (distanceKm <= outerRadiusKm) {
-    return { label: "Terdampak", color: "#FF9800" };
+    return {
+      label: t ? t("homeScreen.status.affected") : "Terdampak",
+      color: "#FF9800",
+    };
   }
-  return { label: "Aman", color: "#4CAF50" };
+  return { label: t ? t("homeScreen.status.safe") : "Aman", color: "#4CAF50" };
 }
