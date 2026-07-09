@@ -28,7 +28,10 @@ import { InfoModal } from "./components/info-modal";
 import { TerdeteksiCard } from "./components/terdeteksi-card";
 import { TsunamiCard } from "./components/tsunami-card";
 import { SCREEN_WIDTH } from "./constants";
-import { useHomeData } from "@/features/main-menu/home/hooks/use-home-data";
+import {
+  normalizeHomeTerdeteksiTime,
+  useHomeData,
+} from "@/features/main-menu/home/hooks/use-home-data";
 import { useHomePolling } from "@/features/main-menu/home/hooks/use-home-polling";
 import { useUserLocation } from "@/features/main-menu/home/hooks/use-user-location";
 import { styles } from "./styles/homeStyles";
@@ -242,7 +245,9 @@ export default function Home() {
         ]);
       if (!isMounted) return;
       if (!dirasakanData && cachedDirasakan) setDirasakanData(cachedDirasakan);
-      if (!terdeteksiData && cachedTerdeteksi) setTerdeteksiData(cachedTerdeteksi);
+      if (!terdeteksiData && cachedTerdeteksi) {
+        setTerdeteksiData(normalizeHomeTerdeteksiTime(cachedTerdeteksi));
+      }
       if (!tsunamiData && cachedTsunami) setTsunamiData(cachedTsunami);
     }
     hydrateLatestFromStorage();

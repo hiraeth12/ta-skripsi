@@ -7,6 +7,10 @@ import { buildHistoryUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { formatLatText, formatLonText } from "@/utils/geo";
 import {
+    ensureTerdeteksiWibSuffix,
+    normalizeTerdeteksiWibTime,
+} from "@/utils/terdeteksi-time";
+import {
     endAt,
     get,
     getDatabase,
@@ -102,17 +106,23 @@ type Props = {
 function buildQuakeItem(rawItem: unknown): QuakeItem | null {
   const item = normalizeTerdeteksiHistoryItem(rawItem);
   if (!item) return null;
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: item.eventTimeMs,
+    waktu: item.waktu,
+    tanggal: item.tanggal,
+    jam: item.jam,
+  });
 
   return {
     eventId: item.eventid,
     historyEventId: item.eventid,
-    eventTimeMs: item.eventTimeMs,
+    eventTimeMs: eventTime?.eventTimeMs ?? item.eventTimeMs,
     latitude: item.latitude,
     longitude: item.longitude,
     magnitude: item.magnitude,
     wilayah: item.lokasi,
-    tanggal: item.tanggal,
-    jam: item.jam,
+    tanggal: eventTime?.tanggal ?? item.tanggal,
+    jam: eventTime?.jam ?? ensureTerdeteksiWibSuffix(item.jam),
     kedalaman: item.kedalaman,
     felt: item.felt,
     latText: formatLatText(item.latitude),
@@ -368,6 +378,11 @@ export function GempaTerdeteksiHistoryContent({
     const targetIndex = quakes.findIndex(
       (q) => q.eventId === externalSelection.eventId,
     );
+    const externalEventTime = normalizeTerdeteksiWibTime({
+      waktu: `${externalSelection.tanggal} ${externalSelection.jam}`.trim(),
+      tanggal: externalSelection.tanggal,
+      jam: externalSelection.jam,
+    });
 
     const quake: QuakeItem =
       targetIndex >= 0
@@ -376,15 +391,15 @@ export function GempaTerdeteksiHistoryContent({
             eventId: externalSelection.eventId,
             historyEventId: externalSelection.eventId,
             eventTimeMs:
-              Date.parse(
-                `${externalSelection.tanggal}T${externalSelection.jam}`,
-              ) || Number.NEGATIVE_INFINITY,
+              externalEventTime?.eventTimeMs ?? Number.NEGATIVE_INFINITY,
             latitude: externalSelection.latitude,
             longitude: externalSelection.longitude,
             magnitude: externalSelection.magnitude,
             wilayah: externalSelection.lokasi,
-            tanggal: externalSelection.tanggal,
-            jam: externalSelection.jam,
+            tanggal: externalEventTime?.tanggal ?? externalSelection.tanggal,
+            jam:
+              externalEventTime?.jam ??
+              ensureTerdeteksiWibSuffix(externalSelection.jam),
             kedalaman: externalSelection.kedalaman,
             felt: externalSelection.felt,
             latText: formatLatText(externalSelection.latitude),

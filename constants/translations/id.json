@@ -203,12 +203,12 @@
     "statLastQuake": "GEMPA TERAKHIR",
     "statDistance": "JARAK GEMPA",
     "statStatus": "STATUS WILAYAH",
-    "titleDirasakan": "Gempabumi Terakhir Dirasakan",
-    "descDirasakan": "Menampilkan kejadian gempa yang getarannya dirasakan oleh manusia dan dilaporkan di wilayah sekitar.",
-    "titleTerdeteksi": "Gempabumi Terakhir Terdeteksi",
-    "descTerdeteksi": "Menampilkan gempa yang tercatat oleh alat seismograf, namun tidak dirasakan oleh manusia.",
+    "titleDirasakan": "Gempa Bumi Terakhir Dirasakan",
+    "descDirasakan": "Displays a list of felt earthquake information disseminated after BMKG receives reports from the public indicating that the earthquake was felt or caused damage.",
+    "titleTerdeteksi": "Gempa Bumi Terakhir Terdeteksi",
+    "descTerdeteksi": "Displays earthquake information disseminated automatically in real time.\n\nEarthquake parameters may be updated after further analysis by BMKG geophysicists as additional seismic waveform data from remote monitoring stations is received.",
     "titleTsunami": "Informasi Tsunami Terakhir",
-    "descTsunami": "Menampilkan informasi peringatan dini tsunami terbaru dari BMKG."
+    "descTsunami": "Displays the latest tsunami early warning information issued by BMKG.\n\nPD-1: Earthquake Information & Tsunami Potential\nPD-2: Information Update, Estimated Arrival Time & Tsunami Height\nPD-3.1-n: Updated information on areas affected by the tsunami\nPD-4: Tsunami Warning Ended"
   },
   "notificationsScreen": {
     "headerTitle": "Notifikasi Terbaru",
@@ -217,7 +217,7 @@
     "cardTitleTerdeteksi": "Gempa Terdeteksi",
     "defaultTsunamiTitle": "Peringatan Tsunami",
     "badgeDirasakan": "Dirasakan",
-    "badgeTidakDirasakan": "Tidak dirasakan",
+    "badgeTidakDirasakan": "Terdeteksi",
     "badgeTsunami": "Tsunami",
     "badgeInfo": "Info",
     "unavailableEarthquakeInfo": "Informasi gempa tidak tersedia",
@@ -352,7 +352,7 @@
   },
   "tentangAplikasiScreen": {
     "title": "Tentang Aplikasi",
-    "desc1": " adalah platform pemantauan aktivitas seismik mutakhir yang dirancang khusus untuk memetakan data gempa bumi secara real-time di seluruh wilayah Indonesia.",
+    "desc1": " adalah platform pemantauan aktivitas seismik yang dirancang khusus untuk memetakan data gempa bumi secara real-time di seluruh wilayah Indonesia.",
     "desc2": "Aplikasi ini hadir sebagai solusi mitigasi bencana dini, memberikan kemudahan bagi masyarakat untuk mengakses informasi parameter gempa seperti magnitudo, kedalaman, dan koordinat secara instan.",
     "desc3_1": "Fitur unggulan kami mencakup sistem notifikasi alarm otomatis berbasis lokasi (GPS). Saat ini, fitur peringatan dini dioptimalkan khusus untuk wilayah ",
     "desc3_2": " guna memastikan akurasi data yang lebih presisi.",

@@ -1,4 +1,5 @@
 import { parseCoordinateText } from "@/utils/geo";
+import { normalizeTerdeteksiWibTime } from "@/utils/terdeteksi-time";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -28,33 +29,6 @@ function firstText(...values: unknown[]): string {
   return "";
 }
 
-function splitWaktu(value: unknown): { tanggal: string; jam: string } {
-  const [tanggal = "", jamRaw = ""] = String(value ?? "").trim().split(/\s+/);
-  return {
-    tanggal,
-    jam: jamRaw.split(".")[0] ?? "",
-  };
-}
-
-function parseDateTimeMs(value: unknown): number {
-  const raw = String(value ?? "").trim();
-  const match = raw.match(
-    /^(\d{4})-(\d{1,2})-(\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?/,
-  );
-  if (!match) return Number.NEGATIVE_INFINITY;
-
-  const timestamp = Date.UTC(
-    Number.parseInt(match[1], 10),
-    Number.parseInt(match[2], 10) - 1,
-    Number.parseInt(match[3], 10),
-    Number.parseInt(match[4], 10),
-    Number.parseInt(match[5], 10),
-    match[6] ? Number.parseInt(match[6], 10) : 0,
-  );
-
-  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
-}
-
 export function toTerdeteksiHistoryArray(rawData: unknown): unknown[] {
   const root = asRecord(rawData);
   const itemsNode = root.items ?? rawData;
@@ -71,17 +45,14 @@ export function toTerdeteksiHistoryArray(rawData: unknown): unknown[] {
 export function getTerdeteksiEventTimeMs(item: unknown): number {
   const root = asRecord(item);
   const props = asRecord(root.properties ?? root);
-  const rawEventTimeMs = Number(props.eventTimeMs);
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: props.eventTimeMs,
+    waktu: firstText(props.waktu, props.time),
+    tanggal: props.tanggal,
+    jam: props.jam,
+  });
 
-  if (Number.isFinite(rawEventTimeMs)) return rawEventTimeMs;
-
-  const fallbackWaktu = firstText(
-    props.waktu,
-    props.time,
-    `${firstText(props.tanggal)} ${firstText(props.jam)}`.trim(),
-  );
-
-  return parseDateTimeMs(fallbackWaktu);
+  return eventTime?.eventTimeMs ?? Number.NEGATIVE_INFINITY;
 }
 
 export function isTerdeteksiInMonth(
@@ -101,13 +72,15 @@ export function isTerdeteksiInMonth(
 
   const root = asRecord(item);
   const props = asRecord(root.properties ?? root);
-  const tanggal = firstText(props.tanggal, splitWaktu(props.waktu).tanggal);
-  const match = tanggal.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (!match) return false;
-
+  const eventTime = normalizeTerdeteksiWibTime({
+    waktu: firstText(props.waktu, props.time),
+    tanggal: props.tanggal,
+    jam: props.jam,
+  });
   return (
-    Number.parseInt(match[1], 10) === year &&
-    Number.parseInt(match[2], 10) === month
+    eventTime?.tanggal.startsWith(
+      `${year}-${String(month).padStart(2, "0")}`,
+    ) ?? false
   );
 }
 
@@ -139,20 +112,20 @@ export function normalizeTerdeteksiHistoryItem(
   );
   if (latitude === null || longitude === null) return null;
 
-  const eventTimeMs = getTerdeteksiEventTimeMs(props);
-  if (!Number.isFinite(eventTimeMs)) return null;
-
-  const waktuParts = splitWaktu(firstText(props.waktu, props.time));
-  const tanggal = firstText(props.tanggal, waktuParts.tanggal);
-  const jam = firstText(props.jam, waktuParts.jam);
-  const waktu = firstText(props.waktu, props.time, `${tanggal} ${jam}`.trim());
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: props.eventTimeMs,
+    waktu: firstText(props.waktu, props.time),
+    tanggal: props.tanggal,
+    jam: props.jam,
+  });
+  if (!eventTime) return null;
 
   return {
     eventid,
-    eventTimeMs,
-    tanggal,
-    jam,
-    waktu,
+    eventTimeMs: eventTime.eventTimeMs,
+    tanggal: eventTime.tanggal,
+    jam: eventTime.jam,
+    waktu: eventTime.waktu,
     magnitude: firstText(props.magnitude, props.mag, "0.0"),
     kedalaman: firstText(props.kedalaman, props.depth),
     lokasi: firstText(props.lokasi, props.place, props.area),

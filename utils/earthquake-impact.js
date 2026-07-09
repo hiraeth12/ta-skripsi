@@ -1,4 +1,4 @@
-const EARTH_RADIUS_KM = 6371;
+  const EARTH_RADIUS_KM = 6371;
 const GRAVITY_CM_PER_S2 = 980.665;
 
 function toRad(degrees) {
@@ -51,7 +51,7 @@ function estimatePgaGal({ magnitude, distanceKm, depthKm }) {
 
   const a = -1.2;
   const b = 0.55;
-  const c = 1.15;
+  const c = 1.55;
   const d = 0.003;
 
   const log10PgaG = a + b * magnitude - c * Math.log10(r) - d * r;

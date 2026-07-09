@@ -162,12 +162,17 @@ export const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 12,
   },
+  infoDescScroll: {
+    height: 88, // 4 baris x lineHeight 22
+    flexGrow: 0,
+    flexShrink: 1,
+    marginBottom: 24,
+  },
   infoDesc: {
     fontSize: 14,
     color: "#555",
-    textAlign: "center",
+    textAlign: "justify",
     lineHeight: 22,
-    marginBottom: 24,
   },
   infoButton: {
     backgroundColor: "#1E6F9F",

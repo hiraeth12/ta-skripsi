@@ -217,7 +217,7 @@
     "cardTitleTerdeteksi": "Detected Earthquake",
     "defaultTsunamiTitle": "Tsunami Warning",
     "badgeDirasakan": "Felt",
-    "badgeTidakDirasakan": "Not felt",
+    "badgeTidakDirasakan": "Detected",
     "badgeTsunami": "Tsunami",
     "badgeInfo": "Info",
     "unavailableEarthquakeInfo": "Earthquake information is not available",
@@ -352,7 +352,7 @@
   },
   "tentangAplikasiScreen": {
     "title": "About App",
-    "desc1": " is a cutting-edge seismic activity monitoring platform specifically designed to map earthquake data in real-time across Indonesia.",
+    "desc1": " is a seismic activity monitoring platform specifically designed to map earthquake data in real-time across Indonesia.",
     "desc2": "This application serves as an early disaster mitigation solution, making it easier for the public to access earthquake parameters such as magnitude, depth, and coordinates instantly.",
     "desc3_1": "Our flagship features include a location-based (GPS) automatic alarm notification system. Currently, the early warning feature is optimized specifically for the ",
     "desc3_2": " region to ensure more precise data accuracy.",
