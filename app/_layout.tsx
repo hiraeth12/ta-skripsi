@@ -8,10 +8,17 @@ import {
   type NormalizedTsunamiNotification,
 } from "@/services/notification-payload";
 import { useFcm } from "@/hooks/use-fcm";
+import {
+  finishNavigationLatency,
+  installNavigationLatencyRouterPatch,
+  setNavigationLatencyPath,
+} from "@/utils/navigation-latency";
 import notifee from "@notifee/react-native";
-import { Stack, useSegments } from "expo-router";
+import { Stack, usePathname, useSegments } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, InteractionManager, StyleSheet } from "react-native";
+
+installNavigationLatencyRouterPatch();
 
 function FcmBootstrap() {
   useFcm();
@@ -40,6 +47,28 @@ function waitForNextFrame() {
       resolve();
     });
   });
+}
+
+function usePageLatencyLog() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setNavigationLatencyPath(pathname);
+
+    let animationFrame: number | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      animationFrame = requestAnimationFrame(() => {
+        finishNavigationLatency(pathname);
+      });
+    });
+
+    return () => {
+      task.cancel();
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [pathname]);
 }
 
 function LogoutTransitionOverlay() {
@@ -97,6 +126,7 @@ export default function RootLayout() {
     useState<NormalizedTsunamiNotification | null>(null);
   const [fcmReady, setFcmReady] = useState(false);
   const segments = useSegments();
+  usePageLatencyLog();
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {

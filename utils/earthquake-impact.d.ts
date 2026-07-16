@@ -20,6 +20,11 @@ export function getRealisticShakeRadiiMeters(
   magnitude: number,
   depthKm: number,
 ): ShakeRadiiMeters;
+export function getRealisticShakeRadiiMetersFromFelt(
+  magnitude: number,
+  depthKm: number,
+  felt: string,
+): ShakeRadiiMeters;
 export function isUserInsideShakeRadius(input: {
   quakeLat: number;
   quakeLon: number;

@@ -30,7 +30,7 @@ export function haversineDistanceKm(
 export interface GeoLocation {
   latitude: number;
   longitude: number;
-  [key: string]: unknown; // field tambahan bebas
+  [key: string]: unknown; 
 }
 
 export function findNearestLocation<T extends GeoLocation>(

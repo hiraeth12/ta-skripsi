@@ -13,6 +13,10 @@ import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
 import { formatLatText, formatLonText } from "@/utils/geo";
 import { getShareQuakeLabels, shareQuake } from "@/utils/share";
+import {
+  ensureTerdeteksiWibSuffix,
+  normalizeTerdeteksiWibTime,
+} from "@/utils/terdeteksi-time";
 import { Feather } from "@expo/vector-icons";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -125,8 +129,16 @@ export default function GempaTerdeteksi({
 
         const { latitude, longitude } = parsed;
         const sourceEventId = parsed.eventId.trim();
+        const eventTime = normalizeTerdeteksiWibTime({
+          waktu: parsed.waktu,
+          tanggal: parsed.tanggal,
+          jam: parsed.jam,
+        });
+        const displayTanggal = eventTime?.tanggal ?? parsed.tanggal;
+        const displayJam =
+          eventTime?.jam ?? ensureTerdeteksiWibSuffix(parsed.jam);
         const eventKey =
-          sourceEventId || `${parsed.tanggal}_${parsed.jam}_${latitude}_${longitude}`;
+          sourceEventId || `${displayTanggal}_${displayJam}_${latitude}_${longitude}`;
         const isSameEvent = eventKey && eventKey === latestEventIdRef.current;
 
         const wasOffline = isOfflineRef.current;
@@ -151,8 +163,8 @@ export default function GempaTerdeteksi({
           longitude,
           magnitude: parsed.magnitude,
           wilayah: parsed.wilayah,
-          tanggal: parsed.tanggal,
-          jam: parsed.jam,
+          tanggal: displayTanggal,
+          jam: displayJam,
           kedalaman: parsed.kedalaman,
           status: parsed.status,
           latText: formatLatText(latitude),

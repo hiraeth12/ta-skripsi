@@ -5,6 +5,7 @@ import {
   useUserSession,
 } from "@/features/main-menu/account/user-session-context";
 import { useQuakeNotifications } from "@/hooks/use-quake-notifications";
+import { startNavigationLatency } from "@/utils/navigation-latency";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -187,6 +188,7 @@ function MainLayoutInner() {
                 onChange={(tab) => {
                   const routeName = ROUTE_MAP[tab];
                   if (!routeName || routeName === currentRoute) return;
+                  startNavigationLatency(pathname, `/main-menu/${routeName}`);
                   navigation.navigate(routeName as never);
                 }}
               />

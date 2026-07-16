@@ -195,7 +195,6 @@
       "minsAgo": " Mins Ago"
     },
     "status": {
-      "danger": "Danger",
       "affected": "Affected",
       "safe": "Safe"
     },
@@ -204,11 +203,11 @@
     "statDistance": "QUAKE DISTANCE",
     "statStatus": "AREA STATUS",
     "titleDirasakan": "Latest Felt Earthquake",
-    "descDirasakan": "Displays earthquake events whose vibrations are felt by humans and reported in the surrounding area.",
+    "descDirasakan": "Displays a list of felt earthquake information disseminated after BMKG receives reports from the public indicating that the earthquake was felt or caused damage.",
     "titleTerdeteksi": "Latest Detected Earthquake",
-    "descTerdeteksi": "Displays earthquakes recorded by seismographs, but not felt by humans.",
+    "descTerdeteksi": "Displays earthquake information disseminated automatically in real time.\n\nEarthquake parameters may be updated after further analysis by BMKG geophysicists as additional seismic waveform data from remote monitoring stations is received.",
     "titleTsunami": "Latest Tsunami Information",
-    "descTsunami": "Displays the latest tsunami early warning information from BMKG."
+    "descTsunami": "Displays the latest tsunami early warning information issued by BMKG.\n\nPD-1: Earthquake Information & Tsunami Potential\nPD-2: Information Update, Estimated Arrival Time & Tsunami Height\nPD-3.1-n: Updated information on areas affected by the tsunami\nPD-4: Tsunami Warning Ended"
   },
   "notificationsScreen": {
     "headerTitle": "Recent Notifications",
@@ -217,7 +216,7 @@
     "cardTitleTerdeteksi": "Detected Earthquake",
     "defaultTsunamiTitle": "Tsunami Warning",
     "badgeDirasakan": "Felt",
-    "badgeTidakDirasakan": "Not felt",
+    "badgeTidakDirasakan": "Detected",
     "badgeTsunami": "Tsunami",
     "badgeInfo": "Info",
     "unavailableEarthquakeInfo": "Earthquake information is not available",
@@ -352,7 +351,7 @@
   },
   "tentangAplikasiScreen": {
     "title": "About App",
-    "desc1": " is a cutting-edge seismic activity monitoring platform specifically designed to map earthquake data in real-time across Indonesia.",
+    "desc1": " is a seismic activity monitoring platform specifically designed to map earthquake data in real-time across Indonesia.",
     "desc2": "This application serves as an early disaster mitigation solution, making it easier for the public to access earthquake parameters such as magnitude, depth, and coordinates instantly.",
     "desc3_1": "Our flagship features include a location-based (GPS) automatic alarm notification system. Currently, the early warning feature is optimized specifically for the ",
     "desc3_2": " region to ensure more precise data accuracy.",

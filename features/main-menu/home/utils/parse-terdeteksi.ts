@@ -1,10 +1,14 @@
+import { normalizeTerdeteksiWibTime } from "@/utils/terdeteksi-time";
+
 type TerdeteksiRawPayload = {
   eventId: string;
   status: string;
   longitude: number;
   latitude: number;
+  eventTimeMs: number;
   tanggal: string;
   jam: string;
+  waktu: string;
   magnitude: string;
   kedalaman: string;
   wilayah: string;
@@ -12,14 +16,6 @@ type TerdeteksiRawPayload = {
 
 function getText(source: Record<string, unknown>, key: string): string {
   return String(source[key] ?? "").trim();
-}
-
-function splitWaktu(value: string): { tanggal: string; jam: string } {
-  const [tanggal = "", jamRaw = ""] = value.trim().split(/\s+/);
-  return {
-    tanggal,
-    jam: jamRaw.split(".")[0] ?? "",
-  };
 }
 
 export function getLatestTerdeteksiGempa(parsedXml: unknown): unknown | null {
@@ -46,15 +42,18 @@ export function parseTerdeteksiPayload(
   const latitude = parseFloat(getText(g, "lintang"));
   if (isNaN(latitude) || isNaN(longitude)) return null;
 
-  const { tanggal, jam } = splitWaktu(getText(g, "waktu"));
+  const sourceWaktu = getText(g, "waktu");
+  const eventTime = normalizeTerdeteksiWibTime({ waktu: sourceWaktu });
 
   return {
     eventId: getText(g, "eventid"),
     status: getText(g, "status"),
     longitude,
     latitude,
-    tanggal,
-    jam,
+    eventTimeMs: eventTime?.eventTimeMs ?? Number.NEGATIVE_INFINITY,
+    tanggal: eventTime?.tanggal ?? "",
+    jam: eventTime?.jam ?? "",
+    waktu: eventTime?.waktu ?? "",
     magnitude: parseFloat(getText(g, "mag") || "0").toFixed(1),
     kedalaman: `${parseFloat(getText(g, "dalam") || "0").toFixed(1)} km`,
     wilayah: getText(g, "area") || "-",

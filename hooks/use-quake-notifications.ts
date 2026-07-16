@@ -7,6 +7,7 @@ import {
   parseTerdeteksiPayload,
 } from "@/features/main-menu/home/utils/parse-terdeteksi";
 import { notificationEmitter } from "@/services/fcm-event-emitter";
+import { normalizeTerdeteksiWibTime } from "@/utils/terdeteksi-time";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { XMLParser } from "fast-xml-parser";
 import { useEffect, useState } from "react";
@@ -109,6 +110,36 @@ function getLatestTsunamiNotification(notifications: QuakeNotification[]) {
     .sort((a, b) => b.timestamp - a.timestamp)[0];
 }
 
+function normalizeTerdeteksiNotificationTime(
+  notification: QuakeNotification,
+): QuakeNotification {
+  if (notification.type !== "Terdeteksi") return notification;
+
+  const textEventTime = normalizeTerdeteksiWibTime({
+    waktu: `${notification.date} ${notification.time}`.trim(),
+    tanggal: notification.date,
+    jam: notification.time,
+  });
+  const timestampEventTime =
+    textEventTime ??
+    normalizeTerdeteksiWibTime({ eventTimeMs: notification.timestamp });
+
+  if (!timestampEventTime) {
+    return {
+      ...notification,
+      date: "",
+      time: "",
+    };
+  }
+
+  return {
+    ...notification,
+    date: timestampEventTime.tanggal,
+    time: timestampEventTime.jam,
+    timestamp: timestampEventTime.eventTimeMs,
+  };
+}
+
 function resetTsunamiPollingBaseline() {
   tsunamiPollingStartedAt = Date.now();
   hasTsunamiBaselineSnapshot = false;
@@ -182,9 +213,10 @@ async function loadPersistedData(): Promise<void> {
 
     if (rawNotifications) {
       const saved: QuakeNotification[] = JSON.parse(rawNotifications);
+      const normalizedSaved = saved.map(normalizeTerdeteksiNotificationTime);
       const today = getLocalDayKey();
 
-      const todayNotifications = saved.filter((item) => {
+      const todayNotifications = normalizedSaved.filter((item) => {
         return item.date ? item.date.includes(today.split("-")[2]) : true;
       });
 
@@ -415,18 +447,23 @@ async function fetchTerdeteksiNotification() {
   if (alreadyExists) return;
 
   const magnitude = Number.parseFloat(parsed.magnitude) || 0;
-  const date = parsed.tanggal;
-  const time = parsed.jam;
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: parsed.eventTimeMs,
+    waktu: parsed.waktu,
+    tanggal: parsed.tanggal,
+    jam: parsed.jam,
+  });
+  if (!eventTime) return;
 
   pushNotification({
     id: `terdeteksi:${eventId}`,
     type: "Terdeteksi",
     magnitude: parsed.magnitude,
     location: parsed.wilayah || "Lokasi tidak tersedia",
-    date,
-    time,
+    date: eventTime.tanggal,
+    time: eventTime.jam,
     level: getLevel(magnitude),
-    timestamp: parseTimestamp(date, time),
+    timestamp: eventTime.eventTimeMs,
     isRead: false,
   });
 }

@@ -1,4 +1,5 @@
 import type { QuakeNotification } from "@/hooks/use-quake-notifications";
+import { normalizeTerdeteksiWibTime } from "@/utils/terdeteksi-time";
 
 export function getFirstAvailableText(
   ...values: Array<string | null | undefined>
@@ -59,6 +60,15 @@ export function getNotificationSubtitle(
 export function getNotificationTimeLabel(item: QuakeNotification) {
   const date = getFirstAvailableText(item.date);
   const time = getFirstAvailableText(item.time);
+  if (item.type === "Terdeteksi") {
+    const eventTime = normalizeTerdeteksiWibTime({
+      waktu: `${date} ${time}`.trim(),
+      tanggal: date,
+      jam: time,
+    });
+    return eventTime ? `${eventTime.tanggal} \u2022 ${eventTime.jam}` : "";
+  }
+
   return date && time ? `${date} \u2022 ${time}` : "";
 }
 

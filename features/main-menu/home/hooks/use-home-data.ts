@@ -1,6 +1,10 @@
 import { CACHE_KEYS, getCachedData, setCacheData } from "@/utils/cache";
 import type { UserLocation } from "@/features/main-menu/account/session";
 import { haversineDistanceKm } from "@/utils/geo";
+import {
+  ensureTerdeteksiWibSuffix,
+  normalizeTerdeteksiWibTime,
+} from "@/utils/terdeteksi-time";
 import { XMLParser } from "fast-xml-parser";
 import { useCallback, useRef, useState } from "react";
 import type { TsunamiQuake } from "../components/tsunami-card";
@@ -21,6 +25,30 @@ function withCacheBuster(url: string): string {
 }
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
+
+export function normalizeHomeTerdeteksiTime(
+  data: TerdeteksiQuake | null,
+): TerdeteksiQuake | null {
+  if (!data) return null;
+
+  const rawData = data as TerdeteksiQuake & {
+    eventTimeMs?: unknown;
+    waktu?: unknown;
+  };
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: rawData.eventTimeMs,
+    waktu: rawData.waktu,
+    tanggal: data.tanggal,
+    jam: data.jam,
+  });
+
+  return {
+    ...data,
+    tanggal: eventTime?.tanggal ?? data.tanggal,
+    jam: eventTime?.jam ?? ensureTerdeteksiWibSuffix(data.jam),
+  };
+}
+
 async function checkNarasiAvailable(
   narasiUrl: string,
   signal?: AbortSignal,
@@ -38,7 +66,10 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
     () => getCachedData(CACHE_KEYS.DIRASAKAN) ?? null,
   );
   const [terdeteksiData, setTerdeteksiData] = useState<TerdeteksiQuake | null>(
-    () => getCachedData(CACHE_KEYS.TERDETEKSI) ?? null,
+    () =>
+      normalizeHomeTerdeteksiTime(
+        getCachedData<TerdeteksiQuake>(CACHE_KEYS.TERDETEKSI),
+      ),
   );
   const [tsunamiData, setTsunamiData] = useState<TsunamiQuake | null>(
     () => getCachedData(CACHE_KEYS.TSUNAMI) ?? null,
@@ -109,8 +140,8 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         if (isMountedRef.current && !signal?.aborted) {
           setDirasakanData((prev) =>
             prev?.tanggal === data.tanggal &&
-            prev?.jam === data.jam &&
-            prev?.distanceKm === data.distanceKm
+              prev?.jam === data.jam &&
+              prev?.distanceKm === data.distanceKm
               ? prev
               : data,
           );
@@ -153,6 +184,19 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         if (!parsed) return;
 
         const eventId = parsed.eventId.trim();
+        const eventTime = normalizeTerdeteksiWibTime({
+          waktu: parsed.waktu,
+          tanggal: parsed.tanggal,
+          jam: parsed.jam,
+        });
+
+        if (!eventTime) {
+          console.warn("[terdeteksi] normalize gagal, raw waktu:", JSON.stringify(parsed.waktu), "len:", parsed.waktu.length);
+        }
+        
+        const displayTanggal = eventTime?.tanggal ?? parsed.tanggal;
+        const displayJam =
+          eventTime?.jam ?? ensureTerdeteksiWibSuffix(parsed.jam);
 
         const { latitude: uLat, longitude: uLon } = location;
         const latCoord = formatCoord(parsed.latitude);
@@ -165,8 +209,8 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
           latText: `${latCoord.text}°${latCoord.latLabel}`,
           lonText: `${lonCoord.text}°${lonCoord.lonLabel}`,
           wilayah: parsed.wilayah,
-          tanggal: parsed.tanggal,
-          jam: parsed.jam,
+          tanggal: displayTanggal,
+          jam: displayJam,
           status: parsed.status,
           latitude: parsed.latitude,
           longitude: parsed.longitude,
@@ -177,8 +221,8 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         if (isMountedRef.current && !signal?.aborted) {
           setTerdeteksiData((prev) =>
             prev?.tanggal === data.tanggal &&
-            prev?.jam === data.jam &&
-            prev?.distanceKm === data.distanceKm
+              prev?.jam === data.jam &&
+              prev?.distanceKm === data.distanceKm
               ? prev
               : data,
           );
@@ -222,8 +266,8 @@ export function useHomeData(isMountedRef: React.RefObject<boolean>) {
         if (isMountedRef.current && !signal?.aborted) {
           setTsunamiData((prev) =>
             prev?.tanggal === data.tanggal &&
-            prev?.jam === data.jam &&
-            prev?.subject === data.subject
+              prev?.jam === data.jam &&
+              prev?.subject === data.subject
               ? prev
               : data,
           );

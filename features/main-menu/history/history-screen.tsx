@@ -3,47 +3,48 @@ import { ModalHistoricalProcess } from "@/components/ui/modal-historical-process
 import { ModalNarasi } from "@/components/ui/modal-narasi";
 import Skeleton from "@/components/ui/skeleton";
 import { useUserSession } from "@/features/main-menu/account/user-session-context";
+import { normalizeTerdeteksiWibTime } from "@/utils/terdeteksi-time";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    memo,
+    type ReactElement,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Animated,
-  Easing,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    Easing,
+    FlatList,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  GempaDirasakanHistoryContent,
-  GempaTerdeteksiHistoryContent,
-  TsunamiHistoryContent,
+    GempaDirasakanHistoryContent,
+    GempaTerdeteksiHistoryContent,
+    TsunamiHistoryContent,
 } from "./components";
 import { useExternalSelection } from "./hooks/use-external-selection";
 import { useHistoryFetch } from "./hooks/use-history-fetch";
 import { useHistoryFilter } from "./hooks/use-history-filter";
 import styles from "./styles/history-screen";
-import {
-  parseIsoDate,
-  resolveIsoDateRange,
-  serializeFilterMonths,
-} from "./utils/filter";
 import { getDirasakanDisplayLocation } from "./utils/dirasakan-location";
 import {
-  HISTORY_TABS,
-  type HistoryEarthquakeTab,
-  type ListItem,
+    parseIsoDate,
+    resolveIsoDateRange,
+    serializeFilterMonths,
+} from "./utils/filter";
+import {
+    HISTORY_TABS,
+    type HistoryEarthquakeTab,
+    type ListItem,
 } from "./utils/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -187,6 +188,31 @@ function asSingle(value?: string | string[]): string {
 
 function roundCoord(n: number): number {
   return Math.round(n * 1000) / 1000;
+}
+
+function normalizeTerdeteksiListItemTime(item: ListItem): ListItem {
+  const eventTime = normalizeTerdeteksiWibTime({
+    eventTimeMs: item.eventTimeMs,
+    tanggal: item.tanggal,
+    jam: item.jam,
+  });
+
+  if (!eventTime) {
+    return {
+      ...item,
+      tanggal: "",
+      jam: "",
+      waktu: "",
+    };
+  }
+
+  return {
+    ...item,
+    eventTimeMs: eventTime.eventTimeMs,
+    tanggal: eventTime.tanggal,
+    jam: eventTime.jam,
+    waktu: `${eventTime.jam} • ${eventTime.tanggal}`,
+  };
 }
 
 // ─── SkeletonCard ─────────────────────────────────────────────────────────────
@@ -514,6 +540,13 @@ export default function History() {
     filterDateFrom,
     filterDateTo,
   });
+  const displayItems = useMemo(
+    () =>
+      activeTab === "GEMPA TERDETEKSI"
+        ? items.map(normalizeTerdeteksiListItemTime)
+        : items,
+    [activeTab, items],
+  );
 
   // ── Panel animation ───────────────────────────────────────────────────────
 
@@ -956,6 +989,8 @@ export default function History() {
           >
             <GempaDirasakanHistoryContent
               tabBar={tabBar}
+              userLat={userLocation.lat}
+              userLon={userLocation.lon}
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}
@@ -1022,7 +1057,7 @@ export default function History() {
       <HistoryListPanel
         emptyComponent={listEmpty}
         getItemLayout={getItemLayout}
-        items={items}
+        items={displayItems}
         keyExtractor={keyExtractor}
         listLoading={listLoading}
         renderItem={renderItem}

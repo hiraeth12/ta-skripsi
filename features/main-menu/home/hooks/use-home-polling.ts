@@ -1,7 +1,7 @@
+import type { ProfileData } from "@/features/main-menu/account/data/profile";
 import type { UserLocation } from "@/features/main-menu/account/session";
 import { fetchUserSessionData } from "@/features/main-menu/account/session";
 import { useUserSession } from "@/features/main-menu/account/user-session-context";
-import type { ProfileData } from "@/features/main-menu/account/data/profile";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { useCallback, useEffect, useRef } from "react";
@@ -37,11 +37,21 @@ export function useHomePolling({
   // ── Polling interval + AppState ────────────────────────────────────────────
 
   useEffect(() => {
+    if (session.loading) return;
+
     const abort = new AbortController();
+    const locationForCards = session.location ?? userLocationRef.current;
+
+    if (
+      !Number.isFinite(locationForCards.latitude) ||
+      !Number.isFinite(locationForCards.longitude)
+    ) {
+      return;
+    }
 
     async function fetchAll() {
       try {
-        await fetchLatestHomeCards(userLocationRef.current, abort.signal);
+        await fetchLatestHomeCards(locationForCards, abort.signal);
       } catch (e) {
         if (e instanceof Error && e.name !== "AbortError") {
           showNetworkError();
@@ -67,7 +77,7 @@ export function useHomePolling({
       appStateSub.remove();
       abort.abort();
     };
-  }, [fetchLatestHomeCards, showNetworkError, userLocationRef]);
+  }, [fetchLatestHomeCards, session.loading, session.location, showNetworkError, userLocationRef]);
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
 

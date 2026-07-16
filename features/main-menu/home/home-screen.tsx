@@ -4,6 +4,13 @@ import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import PullToRefresh from "@/components/ui/pull-to-refresh";
 import Skeleton from "@/components/ui/skeleton";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
+import {
+  normalizeHomeTerdeteksiTime,
+  useHomeData,
+} from "@/features/main-menu/home/hooks/use-home-data";
+import { useHomePolling } from "@/features/main-menu/home/hooks/use-home-polling";
+import { useUserLocation } from "@/features/main-menu/home/hooks/use-user-location";
 import { CACHE_KEYS, getPersistentCache } from "@/utils/cache";
 import { calculateTimeAgo } from "@/utils/date";
 import { computeStatus } from "@/utils/earthquake";
@@ -26,15 +33,11 @@ import { CardSkeleton } from "./components/card-skeleton";
 import { DirasakanCard } from "./components/dirasakan-card";
 import { InfoModal } from "./components/info-modal";
 import { TerdeteksiCard } from "./components/terdeteksi-card";
+import type { TsunamiQuake } from "./components/tsunami-card";
 import { TsunamiCard } from "./components/tsunami-card";
 import { SCREEN_WIDTH } from "./constants";
-import { useHomeData } from "@/features/main-menu/home/hooks/use-home-data";
-import { useHomePolling } from "@/features/main-menu/home/hooks/use-home-polling";
-import { useUserLocation } from "@/features/main-menu/home/hooks/use-user-location";
 import { styles } from "./styles/homeStyles";
-import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import type { DirasakanQuake, TerdeteksiQuake } from "./types";
-import type { TsunamiQuake } from "./components/tsunami-card";
 
 export default function Home() {
   const router = useRouter();
@@ -94,7 +97,7 @@ export default function Home() {
     setLocationImageLoading,
     userName,
     applyHomeUserData,
-  } = useUserLocation(session.user?.uid, isMountedRef);
+  } = useUserLocation(session.user?.uid, isMountedRef, session.location);
 
   const { handleRefresh } = useHomePolling({
     isMountedRef,
@@ -242,7 +245,9 @@ export default function Home() {
         ]);
       if (!isMounted) return;
       if (!dirasakanData && cachedDirasakan) setDirasakanData(cachedDirasakan);
-      if (!terdeteksiData && cachedTerdeteksi) setTerdeteksiData(cachedTerdeteksi);
+      if (!terdeteksiData && cachedTerdeteksi) {
+        setTerdeteksiData(normalizeHomeTerdeteksiTime(cachedTerdeteksi));
+      }
       if (!tsunamiData && cachedTsunami) setTsunamiData(cachedTsunami);
     }
     hydrateLatestFromStorage();
