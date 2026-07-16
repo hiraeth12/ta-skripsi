@@ -1,5 +1,16 @@
   const EARTH_RADIUS_KM = 6371;
-const GRAVITY_CM_PER_S2 = 980.665;
+  const ROMAN_TO_MMI = new Map([
+    ["I", 1],
+    ["II", 2],
+    ["III", 3],
+    ["IV", 4],
+    ["V", 5],
+    ["VI", 6],
+    ["VII", 7],
+    ["VIII", 8],
+    ["IX", 9],
+    ["X", 10],
+  ]);
 
 function toRad(degrees) {
   return (degrees * Math.PI) / 180;
@@ -7,6 +18,29 @@ function toRad(degrees) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max));
+}
+
+function extractHighestRomanNumeral(value) {
+  if (typeof value !== "string") return null;
+
+  const matches = value
+    .toUpperCase()
+    .match(/\b(X|IX|VIII|VII|VI|V|IV|III|II|I)\b/g);
+  if (!matches) return null;
+
+  let highest = null;
+  for (const match of matches) {
+    const romanValue = ROMAN_TO_MMI.get(match) ?? null;
+    if (romanValue === null) continue;
+    highest = highest === null ? romanValue : Math.max(highest, romanValue);
+  }
+
+  return highest;
+}
+
+function parseOfficialFeltMmi(felt) {
+  const parsed = extractHighestRomanNumeral(felt);
+  return parsed === null ? 3 : parsed;
 }
 
 export function parseCoordinate(value) {
@@ -44,18 +78,22 @@ export function haversineDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 function estimatePgaGal({ magnitude, distanceKm, depthKm }) {
+  // Convert the horizontal distance and depth to hypocentral distance.
   const hypocentralDistanceKm = Math.sqrt(
     distanceKm * distanceKm + depthKm * depthKm,
   );
-  const r = Math.max(hypocentralDistanceKm, 1);
 
-  const a = -1.2;
-  const b = 0.55;
-  const c = 1.55;
-  const d = 0.003;
+  // Fukushima–Tanaka (1990) attenuation in logarithmic form.
+  const log10PgaGal =
+    1.3 +
+    0.41 * magnitude -
+    Math.log10(
+      hypocentralDistanceKm + 0.032 * Math.pow(10, 0.41 * magnitude),
+    ) -
+    0.0034 * hypocentralDistanceKm;
 
-  const log10PgaG = a + b * magnitude - c * Math.log10(r) - d * r;
-  return Math.pow(10, log10PgaG) * GRAVITY_CM_PER_S2;
+  // Convert from log10(PGA) back to PGA in Gal.
+  return Math.pow(10, log10PgaGal);
 }
 
 function pgaGalToMmi(pgaGal) {
@@ -92,6 +130,23 @@ function findRadiusForMmiThreshold({
   return low * 1000;
 }
 
+function getShakeRadiiWithTargetMmi({ magnitude, depthKm, targetMmi }) {
+  const outerRadiusMeters = findRadiusForMmiThreshold({
+    magnitude,
+    depthKm,
+    targetMmi,
+    maxDistanceKm: 900,
+  });
+
+  // The inner ring is only used for animation, so keep it small and stable.
+  const innerRadiusMeters = clamp(7_500, 5_000, outerRadiusMeters);
+
+  return {
+    outerRadiusMeters: clamp(outerRadiusMeters, 0, 900_000),
+    innerRadiusMeters,
+  };
+}
+
 export function getRealisticShakeRadiiMeters(magnitude, depthKm) {
   if (!Number.isFinite(magnitude) || magnitude <= 0) {
     return {
@@ -101,23 +156,34 @@ export function getRealisticShakeRadiiMeters(magnitude, depthKm) {
   }
 
   const safeDepthKm = Math.max(depthKm || 10, 1);
-  const outerRadiusMeters = findRadiusForMmiThreshold({
+
+  return getShakeRadiiWithTargetMmi({
     magnitude,
     depthKm: safeDepthKm,
     targetMmi: 3,
-    maxDistanceKm: 900,
   });
-  const innerRadiusMeters = findRadiusForMmiThreshold({
+}
+
+export function getRealisticShakeRadiiMetersFromFelt(
+  magnitude,
+  depthKm,
+  felt,
+) {
+  if (!Number.isFinite(magnitude) || magnitude <= 0) {
+    return {
+      outerRadiusMeters: 0,
+      innerRadiusMeters: 0,
+    };
+  }
+
+  const safeDepthKm = Math.max(depthKm || 10, 1);
+  const targetMmi = parseOfficialFeltMmi(felt);
+
+  return getShakeRadiiWithTargetMmi({
     magnitude,
     depthKm: safeDepthKm,
-    targetMmi: 5,
-    maxDistanceKm: 500,
+    targetMmi,
   });
-
-  return {
-    outerRadiusMeters: clamp(outerRadiusMeters, 20_000, 900_000),
-    innerRadiusMeters: clamp(innerRadiusMeters, 5_000, outerRadiusMeters),
-  };
 }
 
 export function isUserInsideShakeRadius({

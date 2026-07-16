@@ -1,13 +1,13 @@
 import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { NetworkErrorModal } from "@/components/ui/network-error-modal";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
+import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import { useNetworkError } from "@/hooks/use-network-error";
 import { usePollingWithBackoff } from "@/hooks/use-polling-backoff";
-import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import {
-    getRealisticShakeRadiiMeters,
-    parseDepthKm,
+  getRealisticShakeRadiiMetersFromFelt,
+  parseDepthKm
 } from "@/utils/earthquake-impact";
 import { formatLatText, formatLonText, haversineDistanceKm } from "@/utils/geo";
 import { getShareQuakeLabels, shareQuake } from "@/utils/share";
@@ -19,6 +19,7 @@ import { Animated, Text, TouchableOpacity, View } from "react-native";
 
 import EarthquakeMap from "@/components/ui/earthquake-map";
 import type { MapViewType } from "@/constants/map";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import { checkTextAssetAvailable } from "../utils/text-asset-utils";
 import { styles } from "./styles/gempa-dirasakan-content.styles";
 
@@ -27,10 +28,6 @@ const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const API_URL = process.env.EXPO_PUBLIC_GEMPA_DIRASAKAN_API_URL!;
 const MIN_POLL_MS = 30_000;
 const MAX_POLL_MS = 120_000;
-const REFERENCE_LOCATION = {
-  latitude: -6.9175,
-  longitude: 107.6191,
-};
 
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 
@@ -63,6 +60,7 @@ export default function GempaDirasakan({
   isActive = true,
 }: Props) {
   const { t } = useTranslation();
+  const { location: userLocation } = useUserSession();
   const [latestQuake, setLatestQuake] = useState<LatestQuake | null>(null);
   const [shakeMapUrl, setShakeMapUrl] = useState<string | null>(null);
   const [narasiUrl, setNarasiUrl] = useState<string | null>(null);
@@ -122,7 +120,11 @@ export default function GempaDirasakan({
 
     const depthKm = parseDepthKm(latestQuake.kedalaman) ?? 0;
 
-    const radii = getRealisticShakeRadiiMeters(magnitude, depthKm);
+    const radii = getRealisticShakeRadiiMetersFromFelt(
+      magnitude,
+      depthKm,
+      latestQuake.felt,
+    );
 
     return [
       {
@@ -184,6 +186,12 @@ export default function GempaDirasakan({
         if (isNaN(latitude) || isNaN(longitude))
           return { changed: false, ok: true };
 
+        const userLatitude = userLocation?.latitude ?? NaN;
+        const userLongitude = userLocation?.longitude ?? NaN;
+        if (!Number.isFinite(userLatitude) || !Number.isFinite(userLongitude)) {
+          return { changed: false, ok: true };
+        }
+
         const wasOffline = isOfflineRef.current;
         if (wasOffline) {
           isOfflineRef.current = false;
@@ -204,8 +212,8 @@ export default function GempaDirasakan({
             latitude,
             longitude,
             distanceKm: haversineDistanceKm(
-              REFERENCE_LOCATION.latitude,
-              REFERENCE_LOCATION.longitude,
+              userLatitude,
+              userLongitude,
               latitude,
               longitude,
             ).toFixed(1),
@@ -257,7 +265,7 @@ export default function GempaDirasakan({
         isFetching.current = false;
       }
     },
-    [onLoadingChange, showNetworkError, dismissNetworkError],
+    [dismissNetworkError, onLoadingChange, showNetworkError, userLocation],
   );
 
   usePollingWithBackoff(fetchLatestQuake, {

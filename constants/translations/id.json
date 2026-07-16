@@ -195,7 +195,6 @@
       "minsAgo": " Menit Lalu"
     },
     "status": {
-      "danger": "Bahaya",
       "affected": "Terdampak",
       "safe": "Aman"
     },
@@ -204,11 +203,11 @@
     "statDistance": "JARAK GEMPA",
     "statStatus": "STATUS WILAYAH",
     "titleDirasakan": "Gempa Bumi Terakhir Dirasakan",
-    "descDirasakan": "Displays a list of felt earthquake information disseminated after BMKG receives reports from the public indicating that the earthquake was felt or caused damage.",
+    "descDirasakan": "Merupakan daftar informasi gempabumi dirasakan yang didiseminasikan setelah BMKG menerima laporan kerusakan atau dirasakan dari masyarakat.",
     "titleTerdeteksi": "Gempa Bumi Terakhir Terdeteksi",
-    "descTerdeteksi": "Displays earthquake information disseminated automatically in real time.\n\nEarthquake parameters may be updated after further analysis by BMKG geophysicists as additional seismic waveform data from remote monitoring stations is received.",
+    "descTerdeteksi": "Menampilkan informasi gempabumi yang didiseminasikan secara otomatis dan real time. \nAkan ada pemutakhiran parameter gempa setelah dilakukan analisis oleh ahli geofisika hingga semua data waveform seismik yang terekam dari stasiun remote tiba di BMKG",
     "titleTsunami": "Informasi Tsunami Terakhir",
-    "descTsunami": "Displays the latest tsunami early warning information issued by BMKG.\n\nPD-1: Earthquake Information & Tsunami Potential\nPD-2: Information Update, Estimated Arrival Time & Tsunami Height\nPD-3.1-n: Updated information on areas affected by the tsunami\nPD-4: Tsunami Warning Ended"
+    "descTsunami": "Menampilkan informasi peringatan dini tsunami terbaru dari BMKG.\n\nPD-1 : Info Gempabumi & Potensi Tsunami\nPD-2 : Pemutakhiran Informasi, Waktu Tiba & Ketinggian Tsunami\nPD-3.1-n : Pemutakhiran Informasi Daerah yang telah terdampak tsunami\nPD-4 : Informasi Tsunami Dinyatakan Berakhir"
   },
   "notificationsScreen": {
     "headerTitle": "Notifikasi Terbaru",

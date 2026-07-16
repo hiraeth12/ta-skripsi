@@ -8,43 +8,43 @@ import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import {
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    memo,
+    type ReactElement,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Animated,
-  Easing,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Animated,
+    Easing,
+    FlatList,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  GempaDirasakanHistoryContent,
-  GempaTerdeteksiHistoryContent,
-  TsunamiHistoryContent,
+    GempaDirasakanHistoryContent,
+    GempaTerdeteksiHistoryContent,
+    TsunamiHistoryContent,
 } from "./components";
 import { useExternalSelection } from "./hooks/use-external-selection";
 import { useHistoryFetch } from "./hooks/use-history-fetch";
 import { useHistoryFilter } from "./hooks/use-history-filter";
 import styles from "./styles/history-screen";
-import {
-  parseIsoDate,
-  resolveIsoDateRange,
-  serializeFilterMonths,
-} from "./utils/filter";
 import { getDirasakanDisplayLocation } from "./utils/dirasakan-location";
 import {
-  HISTORY_TABS,
-  type HistoryEarthquakeTab,
-  type ListItem,
+    parseIsoDate,
+    resolveIsoDateRange,
+    serializeFilterMonths,
+} from "./utils/filter";
+import {
+    HISTORY_TABS,
+    type HistoryEarthquakeTab,
+    type ListItem,
 } from "./utils/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -989,6 +989,8 @@ export default function History() {
           >
             <GempaDirasakanHistoryContent
               tabBar={tabBar}
+              userLat={userLocation.lat}
+              userLon={userLocation.lon}
               onLoadingChange={setLoading}
               externalSelection={externalSelection}
               onListSelectionHandled={handleExternalSelectionHandled}

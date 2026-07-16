@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeStatus } from "../utils/earthquake.ts";
 import { getRealisticShakeRadiiMeters } from "../utils/earthquake-impact.js";
+import { computeStatus } from "../utils/earthquake.ts";
 
 const magnitude = 5.2;
 const depthKm = 10;
 const radii = getRealisticShakeRadiiMeters(magnitude, depthKm);
 const outerRadiusKm = radii.outerRadiusMeters / 1000;
-const innerRadiusKm = radii.innerRadiusMeters / 1000;
 
 function statusAt(distanceKm) {
   return computeStatus({
@@ -21,13 +20,8 @@ test("user outside the map outer ring is safe", () => {
   assert.equal(statusAt(outerRadiusKm + 0.1).label, "Aman");
 });
 
-test("user between the inner and outer rings is impacted", () => {
-  const distanceKm = (innerRadiusKm + outerRadiusKm) / 2;
-  assert.equal(statusAt(distanceKm).label, "Terdampak");
-});
-
-test("user inside the inner ring is in danger", () => {
-  assert.equal(statusAt(innerRadiusKm / 2).label, "Bahaya");
+test("user inside the outer radius is impacted", () => {
+  assert.equal(statusAt(Math.max(0, outerRadiusKm - 0.1)).label, "Terdampak");
 });
 
 test("invalid inputs do not produce an impacted status", () => {

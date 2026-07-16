@@ -19,9 +19,9 @@ type QuakeInput = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Menghitung status wilayah berdasarkan magnitudo, kedalaman, dan jarak gempa.
- * Menggunakan radius MMI yang sama dengan outer/inner ring pada peta.
- * @returns { label: "Aman" | "Terdampak" | "Bahaya", color: string }
+ * Menghitung status wilayah berdasarkan apakah pengguna berada di dalam atau
+ * di luar radius notifikasi gempa yang diperkirakan.
+ * @returns { label: "Aman" | "Terdampak", color: string }
  */
 export function computeStatus(
   data: QuakeInput | null,
@@ -44,17 +44,9 @@ export function computeStatus(
     return { label: "-", color: "#1E6F9F" };
   }
 
-  const { outerRadiusMeters, innerRadiusMeters } =
-    getRealisticShakeRadiiMeters(magnitude, depthKm);
+  const { outerRadiusMeters } = getRealisticShakeRadiiMeters(magnitude, depthKm);
   const outerRadiusKm = outerRadiusMeters / 1000;
-  const innerRadiusKm = innerRadiusMeters / 1000;
 
-  if (distanceKm <= innerRadiusKm) {
-    return {
-      label: t ? t("homeScreen.status.danger") : "Bahaya",
-      color: "#F44336",
-    };
-  }
   if (distanceKm <= outerRadiusKm) {
     return {
       label: t ? t("homeScreen.status.affected") : "Terdampak",

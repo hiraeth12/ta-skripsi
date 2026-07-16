@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getRealisticShakeRadiiMeters,
+  getRealisticShakeRadiiMetersFromFelt,
   isUserInsideShakeRadius,
   parseDepthKm,
 } from "../utils/earthquake-impact.js";
@@ -9,6 +10,28 @@ import {
 test("parses depth strings with km suffix", () => {
   assert.equal(parseDepthKm("10 km"), 10);
   assert.equal(parseDepthKm("Kedalaman: 12.5 Km"), 12.5);
+});
+
+test("felt strings map to the highest Roman numeral", () => {
+  const low = getRealisticShakeRadiiMetersFromFelt(5.2, 10, "II Berau");
+  const high = getRealisticShakeRadiiMetersFromFelt(
+    5.2,
+    10,
+    "III-IV Kolaka Timur",
+  );
+
+  assert.ok(high.outerRadiusMeters < low.outerRadiusMeters);
+  assert.equal(
+    getRealisticShakeRadiiMetersFromFelt(5.2, 10, "V-VI").innerRadiusMeters,
+    7500,
+  );
+});
+
+test("invalid felt strings fall back to MMI 3", () => {
+  const fallback = getRealisticShakeRadiiMetersFromFelt(5.2, 10, "Tidak ada felt");
+  const defaultRadii = getRealisticShakeRadiiMeters(5.2, 10);
+
+  assert.deepEqual(fallback, defaultRadii);
 });
 
 test("user at epicenter is inside shake radius", () => {

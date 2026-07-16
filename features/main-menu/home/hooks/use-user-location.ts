@@ -1,17 +1,17 @@
 import { DEFAULT_LOCATION } from "@/constants/map";
 import type { ProfileData } from "@/features/main-menu/account/data/profile";
 import type { UserLocation } from "@/features/main-menu/account/session";
-import { CACHE_KEYS, getCachedData, setCacheData } from "@/utils/cache";
+import { getCachedData, setCacheData } from "@/utils/cache";
 import { findNearestLocation } from "@/utils/geo";
 import { getApp } from "@react-native-firebase/app";
 import { getAuth } from "@react-native-firebase/auth";
 import { getDatabase } from "@react-native-firebase/database";
 import {
-  getDownloadURL,
-  getStorage,
-  ref as storageRef,
+    getDownloadURL,
+    getStorage,
+    ref as storageRef,
 } from "@react-native-firebase/storage";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DB_URL } from "../constants";
 import type { ApplyHomeUserDataOptions } from "../types";
 import { getLocationsData } from "../utils/firebase-location";
@@ -19,14 +19,27 @@ import { getLocationsData } from "../utils/firebase-location";
 export function useUserLocation(
   sessionUserId: string | undefined,
   isMountedRef: React.RefObject<boolean>,
+  initialLocation: UserLocation | null = null,
 ) {
   const [userLocation, setUserLocation] =
-    useState<UserLocation>(DEFAULT_LOCATION);
+    useState<UserLocation>(initialLocation ?? DEFAULT_LOCATION);
   const [locationImageUrl, setLocationImageUrl] = useState<string | null>(null);
   const [locationImageLoading, setLocationImageLoading] = useState(true);
   const [userName, setUserName] = useState("Pengguna");
 
   const userLocationRef = useRef(userLocation);
+
+  useEffect(() => {
+    if (!initialLocation) return;
+    setUserLocation((current) =>
+      current.latitude === initialLocation.latitude &&
+      current.longitude === initialLocation.longitude &&
+      current.name === initialLocation.name
+        ? current
+        : initialLocation,
+    );
+    userLocationRef.current = initialLocation;
+  }, [initialLocation]);
 
   const applyHomeUserData = useCallback(
     async (

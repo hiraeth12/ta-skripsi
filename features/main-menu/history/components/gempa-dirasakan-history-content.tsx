@@ -3,38 +3,39 @@ import { ModalShakeMap } from "@/components/ui/modal-shakemap";
 import { DetailItem, StatItem } from "@/components/ui/quake-card";
 import { getApp } from "@/config/firebase-init";
 import type { MapViewType } from "@/constants/map";
+import { useUserSession } from "@/features/main-menu/account/user-session-context";
 import { checkTextAssetAvailable } from "@/features/main-menu/earthquake/utils/text-asset-utils";
 import { buildNarasiUrl } from "@/features/main-menu/home/utils/coord-utils";
 import { useCardAnimation } from "@/hooks/use-card-animation";
 import {
-    formatLatText,
-    formatLonText,
-    haversineDistanceKm,
-    parseCoordinateText,
+  formatLatText,
+  formatLonText,
+  haversineDistanceKm,
+  parseCoordinateText,
 } from "@/utils/geo";
-import {
-    endAt,
-    get,
-    getDatabase,
-    orderByChild,
-    query,
-    ref,
-    startAt,
-} from "@react-native-firebase/database";
 import { Feather } from "@expo/vector-icons";
+import {
+  endAt,
+  get,
+  getDatabase,
+  orderByChild,
+  query,
+  ref,
+  startAt,
+} from "@react-native-firebase/database";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
 import { dedupeByKey } from "../utils/dedupe";
 import {
-    buildDirasakanDateRangesForIsoRange,
-    buildDirasakanDateRange,
-    getDirasakanEventTimeMs,
-    getNowYearMonth,
-    isDirasakanInDateRange,
-    matchesDirasakanMonth,
-    normalizeFilterMonths,
-    sortDirasakanNewestFirst,
+  buildDirasakanDateRange,
+  buildDirasakanDateRangesForIsoRange,
+  getDirasakanEventTimeMs,
+  getNowYearMonth,
+  isDirasakanInDateRange,
+  matchesDirasakanMonth,
+  normalizeFilterMonths,
+  sortDirasakanNewestFirst,
 } from "../utils/filter";
 import styles from "./styles/gempa-dirasakan-history-content";
 
@@ -43,7 +44,6 @@ import styles from "./styles/gempa-dirasakan-history-content";
 const SHAKEMAP_BASE = "https://bmkg-content-inatews.storage.googleapis.com";
 const DB_PATH = "gempa_dirasakan/items";
 const MAX_POINTS = 20;
-const REFERENCE_LOCATION = { latitude: -6.9175, longitude: 107.6191 };
 const LIST_HIDE_TO_CARD_DELAY_MS = 340;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -89,6 +89,8 @@ export type HistoryListItem = {
 
 type Props = {
   tabBar: React.ReactNode;
+  userLat?: number | null;
+  userLon?: number | null;
   onLoadingChange?: (loading: boolean) => void;
   onListDataChange?: (items: HistoryListItem[]) => void;
   selectedListEventId?: string | null;
@@ -135,17 +137,16 @@ function buildQuakeItem(
   candidate: any,
   index: number,
   haversine: (a: number, b: number, c: number, d: number) => number,
+  userLat: number,
+  userLon: number,
 ): QuakeItem | null {
   const coords = parseQuakeCoords(candidate);
   if (!coords) return null;
   const { latitude, longitude } = coords;
 
-  const distanceKm = haversine(
-    REFERENCE_LOCATION.latitude,
-    REFERENCE_LOCATION.longitude,
-    latitude,
-    longitude,
-  ).toFixed(1);
+  if (!Number.isFinite(userLat) || !Number.isFinite(userLon)) return null;
+
+  const distanceKm = haversine(userLat, userLon, latitude, longitude).toFixed(1);
 
   return {
     eventId: String(
@@ -180,6 +181,8 @@ function buildQuakeItem(
 
 export function GempaDirasakanHistoryContent({
   tabBar,
+  userLat,
+  userLon,
   onLoadingChange,
   onListDataChange,
   selectedListEventId,
@@ -198,6 +201,7 @@ export function GempaDirasakanHistoryContent({
 }: Props) {
   const { t } = useTranslation();
   const now = useMemo(() => new Date(), []);
+  const { location: sessionLocation } = useUserSession();
   const mapChromeLabels = useMemo(
     () => ({
       showFaultLines: t("map.showFaultLines"),
@@ -214,6 +218,8 @@ export function GempaDirasakanHistoryContent({
     }),
     [t],
   );
+  const resolvedUserLat = userLat ?? sessionLocation?.latitude ?? NaN;
+  const resolvedUserLon = userLon ?? sessionLocation?.longitude ?? NaN;
   const fallback = getNowYearMonth(now);
   const effectiveYear = Number.isFinite(filterYear)
     ? filterYear!
@@ -628,7 +634,13 @@ export function GempaDirasakanHistoryContent({
 
       const merged = sortDirasakanNewestFirst(filtered)
         .reduce<QuakeItem[]>((acc, candidate, index) => {
-          const item = buildQuakeItem(candidate, index, haversineDistanceKm);
+          const item = buildQuakeItem(
+            candidate,
+            index,
+            haversineDistanceKm,
+            resolvedUserLat,
+            resolvedUserLon,
+          );
           if (item) acc.push(item);
           return acc;
         }, [])
@@ -695,6 +707,8 @@ export function GempaDirasakanHistoryContent({
     onLoadingChange,
     overrideQuake,
     ranges,
+    resolvedUserLat,
+    resolvedUserLon,
     showCardRef,
   ]);
 
